@@ -25,6 +25,11 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/eth_research"]
 
+[tool.uv]
+# Pin the isolated-build toolchain too, so builds are as frozen as the
+# runtime/dev graph locked in uv.lock.
+build-constraint-dependencies = ["hatchling==1.31.0"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"

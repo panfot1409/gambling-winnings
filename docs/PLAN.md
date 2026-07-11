@@ -102,7 +102,7 @@ Deliverables, each with tests:
 | 9  | Equity-curve metrics: total return, CAGR (recorded start/end), Sharpe, Sortino, max drawdown, notional turnover, fill count | `metrics.py` |
 | 10 | Look-ahead bias regression tests (prefix invariance, future mutation, gap non-capture, split chronology, context leakage) | `tests/test_lookahead.py`, `tests/test_context.py` |
 | 11 | End-to-end example script and usage docs                                   | `examples/`                  |
-| 12 | CI (GitHub Actions, Python 3.12 + 3.13) with a frozen constraints file     | `.github/workflows/ci.yml`   |
+| 12 | CI (GitHub Actions, Python 3.12 + 3.13) installing from a frozen `uv.lock` (lock/pyproject drift fails the build) | `.github/workflows/ci.yml`, `uv.lock` |
 
 Explicitly deferred from Milestone 1: parameter optimization, machine
 learning, plotting, CLI, walk-forward analysis, fractional position

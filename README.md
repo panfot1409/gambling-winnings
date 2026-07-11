@@ -16,14 +16,20 @@ trading algorithms on historical OHLCV data.
 
 ## Installation
 
+With [uv](https://docs.astral.sh/uv/) (recommended — installs the exact
+locked versions from `uv.lock`, the same environment CI verifies):
+
+```bash
+uv sync --locked --all-extras
+```
+
+Or with pip (floating versions within the `pyproject.toml` bounds):
+
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]" -c constraints.txt
+pip install -e ".[dev]"
 ```
-
-(`constraints.txt` pins the verified dependency versions; drop `-c` for a
-floating install.)
 
 ## Quickstart
 
@@ -176,7 +182,14 @@ pytest                    # run the test suite
 ruff format --check .     # formatting
 ruff check .              # lint
 mypy src tests examples   # strict type checking
+uv lock --check           # uv.lock must stay in sync with pyproject.toml
 ```
+
+Dependencies are frozen in `uv.lock` (runtime, dev extras, and
+platform-conditional transitives, hash-pinned across Python 3.12/3.13);
+the build backend is pinned via `[tool.uv] build-constraint-dependencies`.
+CI installs with `uv sync --locked` and fails if the lock and
+`pyproject.toml` disagree.
 
 ## Roadmap
 
