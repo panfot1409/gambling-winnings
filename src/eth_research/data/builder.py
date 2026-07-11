@@ -99,24 +99,35 @@ def _reject_network_sources(path: str | Path) -> None:
         )
 
 
+def _parse_ohlcv_bytes(data: bytes, source: Path) -> pd.DataFrame:
+    """Parse an immutable in-memory snapshot of a CSV/Parquet file.
+
+    Parsing the same bytes that were hashed means the recorded
+    ``raw_file_sha256`` always describes exactly the bytes the dataset was
+    built from — a concurrent change to the file on disk cannot desynchronize
+    hash and content. CSV floats are parsed with round-trip precision so that
+    a CSV and a Parquet container holding the same values yield bit-identical
+    doubles (and therefore the same content fingerprint).
+    """
+    suffix = source.suffix.lower()
+    if suffix == ".csv":
+        return pd.read_csv(io.BytesIO(data), float_precision="round_trip")
+    if suffix in {".parquet", ".pq"}:
+        return pd.read_parquet(io.BytesIO(data))
+    raise DatasetBuildError(
+        f"unsupported data file extension {suffix!r} for {source.name!r}; "
+        "expected .csv, .parquet, or .pq"
+    )
+
+
 def read_raw_ohlcv(path: str | Path) -> pd.DataFrame:
     """Read a local CSV/Parquet file without validating or modifying it.
 
-    CSV floats are parsed with round-trip precision so that a CSV and a
-    Parquet container holding the same values yield bit-identical doubles
-    (and therefore the same content fingerprint).
+    The file is read into memory once and parsed from that snapshot.
     """
     _reject_network_sources(path)
     file = Path(path)
-    suffix = file.suffix.lower()
-    if suffix == ".csv":
-        return pd.read_csv(file, float_precision="round_trip")
-    if suffix in {".parquet", ".pq"}:
-        return pd.read_parquet(file)
-    raise DatasetBuildError(
-        f"unsupported data file extension {suffix!r} for {file.name!r}; "
-        "expected .csv, .parquet, or .pq"
-    )
+    return _parse_ohlcv_bytes(file.read_bytes(), file)
 
 
 def audit_ohlcv_file(
@@ -156,8 +167,10 @@ def build_canonical_dataset(
     """
     _reject_network_sources(source_path)
     source = Path(source_path)
-    raw_sha256 = sha256_file(source)
-    raw = read_raw_ohlcv(source)
+    # One immutable snapshot: the bytes that are hashed ARE the bytes parsed.
+    raw_bytes = source.read_bytes()
+    raw_sha256 = sha256_bytes(raw_bytes)
+    raw = _parse_ohlcv_bytes(raw_bytes, source)
 
     report = audit_frame(
         raw,
@@ -210,6 +223,15 @@ def build_canonical_dataset(
         assume_utc=assume_utc,
         allow_extra_columns=allow_extra_columns,
     )
+
+    # Belt and braces on top of the snapshot: if the on-disk source no longer
+    # matches the hashed bytes, someone changed it mid-build — refuse to
+    # publish rather than ship provenance for a file that no longer exists.
+    if sha256_file(source) != raw_sha256:
+        raise DatasetBuildError(
+            f"source file {source.name!r} changed during the build; "
+            "nothing was written — re-run against the settled file"
+        )
 
     directory.mkdir(parents=True, exist_ok=True)
     parquet_buffer = io.BytesIO()

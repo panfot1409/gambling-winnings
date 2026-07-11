@@ -338,3 +338,33 @@ def test_build_flags_are_recorded_in_manifest_and_report(
     assert result.quality_report.allow_extra_columns is True
     loaded = load_canonical_dataset(result.manifest_path)
     assert loaded.quality_report.assume_utc is True
+
+
+def test_source_change_during_build_is_detected(
+    tmp_path: Path, canonical: pd.DataFrame, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The raw hash must describe the parsed bytes: a mid-build change aborts."""
+    import eth_research.data.builder as builder_module
+    from eth_research.data.quality import audit_frame as real_audit
+
+    source = write_csv(canonical, tmp_path / "raw.csv")
+
+    def mutating_audit(*args: object, **kwargs: object) -> object:
+        # Simulate a concurrent writer touching the source mid-build.
+        with source.open("ab") as handle:
+            handle.write(b"\n# concurrent append\n")
+        return real_audit(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(builder_module, "audit_frame", mutating_audit)
+    out = tmp_path / "out"
+    with pytest.raises(DatasetBuildError, match="changed during the build"):
+        build_canonical_dataset(source, IDENTITY, out)
+    assert not out.exists()  # nothing was published
+
+
+def test_snapshot_parse_ignores_later_disk_state(tmp_path: Path, canonical: pd.DataFrame) -> None:
+    """audit/read paths parse one in-memory snapshot, not the live file."""
+    source = write_csv(canonical, tmp_path / "raw.csv")
+    result = build_canonical_dataset(source, IDENTITY, tmp_path / "out")
+    # The manifest hash describes exactly the bytes that were parsed.
+    assert result.manifest.raw_file_sha256 == sha256_bytes(source.read_bytes())
