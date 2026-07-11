@@ -8,7 +8,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from eth_research.data.quality import QualityReport, QualityThresholds, audit_frame
+from eth_research.data.quality import (
+    QualityFinding,
+    QualityReport,
+    QualityThresholds,
+    audit_frame,
+)
 from eth_research.data.synthetic import make_synthetic_ohlcv
 
 DAY = pd.Timedelta("1D")
@@ -306,3 +311,144 @@ def test_report_parsing_rejects_malformed_findings() -> None:
     ]
     with pytest.raises(ValueError, match="severity must be"):
         QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+
+def make_finding(**overrides: object) -> QualityFinding:
+    values: dict[str, object] = {
+        "code": "some_code",
+        "severity": "warning",
+        "count": 1,
+        "description": "a description",
+        "first_examples": ("example",),
+    }
+    values.update(overrides)
+    return QualityFinding(**values)  # type: ignore[arg-type]
+
+
+def test_boolean_finding_counts_rejected_despite_numeric_equality() -> None:
+    # A clean report has 0 error findings: False == 0 must NOT be accepted.
+    clean = audit(raw_frame())
+    payload = json.loads(clean.to_json_bytes())
+    payload["error_finding_count"] = False
+    with pytest.raises(ValueError, match="bool is rejected"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+    # One warning finding: True == 1 must NOT be accepted either.
+    warm = raw_frame(10)
+    warm.loc[4, "volume"] = 0.0
+    report = audit(warm)
+    assert [f.severity for f in report.findings] == ["warning"]
+    payload = json.loads(report.to_json_bytes())
+    payload["warning_finding_count"] = True
+    with pytest.raises(ValueError, match="bool is rejected"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+
+@pytest.mark.parametrize("bad_count", [1.0, "1", None, -1])
+def test_non_integer_finding_counts_rejected(bad_count: object) -> None:
+    payload = json.loads(audit(raw_frame()).to_json_bytes())
+    payload["error_finding_count"] = bad_count
+    with pytest.raises(ValueError, match="error_finding_count must be"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+
+def test_boolean_thresholds_rejected_on_direct_construction() -> None:
+    with pytest.raises(ValueError, match="bool is rejected"):
+        QualityThresholds(extreme_return=True)
+    with pytest.raises(ValueError, match="bool is rejected"):
+        QualityThresholds(extreme_range=False)
+
+
+def test_integer_thresholds_normalize_to_float() -> None:
+    limits = QualityThresholds(extreme_return=1, extreme_range=2)
+    assert isinstance(limits.extreme_return, float)
+    assert limits == QualityThresholds(extreme_return=1.0, extreme_range=2.0)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "match"),
+    [
+        ({"code": ""}, "finding code"),
+        ({"code": 42}, "finding code must be a string"),
+        ({"severity": "fatal"}, "severity must be 'error' or 'warning'"),
+        ({"count": True}, "bool is rejected"),
+        ({"count": 0}, "positive integer"),
+        ({"count": 1.5}, "must be an integer"),
+        ({"description": "   "}, "finding description"),
+        ({"first_examples": ("a", "b", "c", "d")}, "at most 3"),
+        ({"first_examples": ("a", 5)}, "finding example must be a string"),
+        ({"first_examples": ["a"]}, "must be a tuple"),
+    ],
+)
+def test_malformed_directly_constructed_findings_rejected(
+    overrides: dict[str, object], match: str
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        make_finding(**overrides)
+
+
+def test_more_than_three_examples_rejected_when_parsed() -> None:
+    warm = raw_frame(10)
+    warm.loc[4, "volume"] = 0.0
+    payload = json.loads(audit(warm).to_json_bytes())
+    payload["findings"][0]["first_examples"] = ["a", "b", "c", "d"]
+    with pytest.raises(ValueError, match="at most 3"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+
+def test_non_canonical_finding_order_rejected() -> None:
+    frame = raw_frame(10)
+    frame.loc[[1, 2], "volume"] = 0.0  # yields zero_volume_candles + zero_volume_run
+    report = audit(frame)
+    assert len(report.findings) == 2
+
+    # Parsed path: swap the order in JSON.
+    payload = json.loads(report.to_json_bytes())
+    payload["findings"].reverse()
+    with pytest.raises(ValueError, match="canonical order"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+    # Constructed path: same rule, same error.
+    swapped = (report.findings[1], report.findings[0])
+    with pytest.raises(ValueError, match="canonical order"):
+        QualityReport(
+            schema_version=report.schema_version,
+            row_count=report.row_count,
+            expected_interval=report.expected_interval,
+            thresholds=report.thresholds,
+            assume_utc=report.assume_utc,
+            allow_extra_columns=report.allow_extra_columns,
+            findings=swapped,
+        )
+
+
+def test_duplicate_finding_keys_rejected() -> None:
+    finding = make_finding()
+    with pytest.raises(ValueError, match="canonical order"):
+        QualityReport(
+            schema_version=1,
+            row_count=1,
+            expected_interval=DAY,
+            thresholds=QualityThresholds(),
+            assume_utc=False,
+            allow_extra_columns=False,
+            findings=(finding, finding),
+        )
+
+
+def test_every_constructed_report_round_trips_to_identical_bytes() -> None:
+    clean = raw_frame()
+
+    warnings_only = raw_frame(10)
+    warnings_only.loc[[1, 2, 3], "volume"] = 0.0
+
+    with_errors = raw_frame()
+    with_errors.loc[1, "volume"] = -1.0
+    with_errors.loc[2, "close"] = np.nan
+
+    for frame in (clean, warnings_only, with_errors):
+        report = audit(frame, assume_utc=False, allow_extra_columns=True)
+        data = report.to_json_bytes()
+        parsed = QualityReport.from_json_bytes(data)
+        assert parsed == report
+        assert parsed.to_json_bytes() == data

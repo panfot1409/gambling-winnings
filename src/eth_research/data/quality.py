@@ -26,7 +26,12 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
-from eth_research.data.provenance import require_bool, require_int, require_nonempty_str
+from eth_research.data.provenance import (
+    require_bool,
+    require_int,
+    require_nonempty_str,
+    require_str,
+)
 from eth_research.data.schema import OHLCV_COLUMNS, PRICE_COLUMNS, TIMESTAMP_COLUMN
 
 QUALITY_REPORT_SCHEMA_VERSION: int = 1
@@ -38,7 +43,12 @@ _MAX_EXAMPLES: int = 3
 
 @dataclass(frozen=True)
 class QualityThresholds:
-    """Outlier thresholds — diagnostics only, never permission to modify data."""
+    """Outlier thresholds — diagnostics only, never permission to modify data.
+
+    Values must be real, finite, non-bool numbers > 0; accepted integers are
+    normalized to ``float`` so constructed and parsed instances compare and
+    serialize identically.
+    """
 
     extreme_return: float = 0.25
     """Flag candles where ``|close/previous close - 1|`` exceeds this."""
@@ -46,23 +56,45 @@ class QualityThresholds:
     """Flag candles where ``(high - low) / open`` exceeds this."""
 
     def __post_init__(self) -> None:
-        for label, value in (
-            ("extreme_return", self.extreme_return),
-            ("extreme_range", self.extreme_range),
-        ):
+        for label in ("extreme_return", "extreme_range"):
+            value = getattr(self, label)
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise ValueError(f"{label} must be a real number (bool is rejected), got {value!r}")
             if not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{label} must be positive and finite, got {value}")
+            object.__setattr__(self, label, float(value))
 
 
 @dataclass(frozen=True)
 class QualityFinding:
-    """One audited problem: exact count plus the first examples."""
+    """One audited problem: exact count plus the first examples.
+
+    Validated on construction — the same invariants apply whether the
+    finding is produced by the audit or parsed back from JSON.
+    """
 
     code: str
     severity: Severity
     count: int
     description: str
     first_examples: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        require_nonempty_str("finding code", self.code)
+        if self.severity not in ("error", "warning"):
+            raise ValueError(
+                f"finding severity must be 'error' or 'warning', got {self.severity!r}"
+            )
+        if require_int("finding count", self.count) < 1:
+            raise ValueError(f"finding count must be a positive integer, got {self.count}")
+        require_nonempty_str("finding description", self.description)
+        if not isinstance(self.first_examples, tuple) or len(self.first_examples) > _MAX_EXAMPLES:
+            raise ValueError(
+                f"first_examples must be a tuple of at most {_MAX_EXAMPLES} strings, "
+                f"got {self.first_examples!r}"
+            )
+        for example in self.first_examples:
+            require_str("finding example", example)
 
 
 _REPORT_KEYS: frozenset[str] = frozenset(
@@ -89,8 +121,13 @@ class QualityReport:
 
     Records the two build flags that shaped the audit so the manifest can
     bind the evidence to the exact audit configuration. Every field is
-    validated in ``__post_init__`` — the shared path for constructed and
-    parsed reports.
+    validated in ``__post_init__`` — the single shared path for constructed
+    and parsed reports.
+
+    Canonical finding order is part of the format: findings must be sorted
+    by ``(severity, code)`` with no duplicate pairs ("error" sorts before
+    "warning"). Reports that are constructed or parsed in any other order
+    are rejected.
     """
 
     schema_version: int
@@ -122,9 +159,19 @@ class QualityReport:
             raise ValueError("thresholds must be a QualityThresholds instance")
         require_bool("assume_utc", self.assume_utc)
         require_bool("allow_extra_columns", self.allow_extra_columns)
+        if not isinstance(self.findings, tuple):
+            raise ValueError("findings must be a tuple of QualityFinding instances")
+        previous_key: tuple[str, str] | None = None
         for finding in self.findings:
             if not isinstance(finding, QualityFinding):
                 raise ValueError("findings must be QualityFinding instances")
+            key = (finding.severity, finding.code)
+            if previous_key is not None and key <= previous_key:
+                raise ValueError(
+                    "findings must be in canonical order: sorted by (severity, code) "
+                    f"with no duplicates; {key!r} follows {previous_key!r}"
+                )
+            previous_key = key
 
     @property
     def error_count(self) -> int:
@@ -196,18 +243,21 @@ class QualityReport:
         except ValueError as exc:
             raise ValueError(f"expected_interval is unparseable: {interval_text!r}") from exc
 
+        # Declared counts must be well-typed BEFORE any comparison: Python's
+        # False == 0 and True == 1 would otherwise let booleans slip through.
+        declared_counts: dict[str, int] = {}
+        for label in ("error_finding_count", "warning_finding_count"):
+            declared = require_int(label, payload[label])
+            if declared < 0:
+                raise ValueError(f"{label} must be >= 0, got {declared}")
+            declared_counts[label] = declared
+
         thresholds_payload = payload["thresholds"]
         if not isinstance(thresholds_payload, dict) or set(thresholds_payload) != {
             "extreme_return",
             "extreme_range",
         }:
             raise ValueError("thresholds must contain exactly extreme_return and extreme_range")
-        limits: dict[str, float] = {}
-        for label in ("extreme_return", "extreme_range"):
-            value = thresholds_payload[label]
-            if isinstance(value, bool) or not isinstance(value, int | float):
-                raise ValueError(f"thresholds.{label} must be a number, got {value!r}")
-            limits[label] = float(value)
 
         findings_payload = payload["findings"]
         if not isinstance(findings_payload, list):
@@ -218,21 +268,17 @@ class QualityReport:
                 raise ValueError(
                     f"finding entries must have exactly the keys {sorted(_FINDING_KEYS)}"
                 )
-            severity = entry["severity"]
-            if severity not in ("error", "warning"):
-                raise ValueError(f"finding severity must be 'error' or 'warning', got {severity!r}")
-            count = entry["count"]
-            if isinstance(count, bool) or not isinstance(count, int) or count < 1:
-                raise ValueError(f"finding count must be a positive integer, got {count!r}")
             examples = entry["first_examples"]
-            if not isinstance(examples, list) or not all(isinstance(e, str) for e in examples):
+            if not isinstance(examples, list):
                 raise ValueError("finding first_examples must be a list of strings")
+            # Field invariants live in QualityFinding.__post_init__ — the
+            # same path that validates audit-constructed findings.
             findings.append(
                 QualityFinding(
-                    code=require_nonempty_str("finding code", entry["code"]),
-                    severity=severity,
-                    count=count,
-                    description=require_nonempty_str("finding description", entry["description"]),
+                    code=entry["code"],
+                    severity=entry["severity"],
+                    count=entry["count"],
+                    description=entry["description"],
                     first_examples=tuple(examples),
                 )
             )
@@ -241,16 +287,19 @@ class QualityReport:
             schema_version=payload["schema_version"],
             row_count=payload["row_count"],
             expected_interval=interval,
-            thresholds=QualityThresholds(**limits),
+            thresholds=QualityThresholds(
+                extreme_return=thresholds_payload["extreme_return"],
+                extreme_range=thresholds_payload["extreme_range"],
+            ),
             assume_utc=payload["assume_utc"],
             allow_extra_columns=payload["allow_extra_columns"],
             findings=tuple(findings),
         )
         error_findings = sum(1 for f in report.findings if f.severity == "error")
         warning_findings = sum(1 for f in report.findings if f.severity == "warning")
-        if payload["error_finding_count"] != error_findings:
+        if declared_counts["error_finding_count"] != error_findings:
             raise ValueError("error_finding_count does not match the findings list")
-        if payload["warning_finding_count"] != warning_findings:
+        if declared_counts["warning_finding_count"] != warning_findings:
             raise ValueError("warning_finding_count does not match the findings list")
         return report
 
