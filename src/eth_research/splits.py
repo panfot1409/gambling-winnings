@@ -3,6 +3,12 @@
 Random shuffling leaks future information into training data, so splits are
 strictly ordered in time: every training row precedes every validation row,
 which precedes every test row.
+
+Warm-up context: evaluating a segment may use observations that immediately
+precede it, purely as indicator warm-up — validation may see trailing train
+rows, test may see trailing train+validation rows. Context rows never
+contribute P&L or metrics (the engine enforces this); they only let
+indicators be live from the segment's first bar.
 """
 
 from __future__ import annotations
@@ -19,6 +25,28 @@ class DataSplits:
     train: pd.DataFrame
     validation: pd.DataFrame
     test: pd.DataFrame
+
+    def validation_context(self, bars: int) -> pd.DataFrame:
+        """Trailing train rows to pass as warm-up context for validation runs."""
+        return _trailing(self.train, bars, "train")
+
+    def test_context(self, bars: int) -> pd.DataFrame:
+        """Trailing train+validation rows to pass as warm-up context for test runs."""
+        combined = pd.concat([self.train, self.validation])
+        return _trailing(combined, bars, "train+validation")
+
+    def boundaries(self) -> dict[str, tuple[pd.Timestamp, pd.Timestamp]]:
+        """First and last timestamp of each segment, for exact reporting."""
+        segments = (("train", self.train), ("validation", self.validation), ("test", self.test))
+        return {name: (segment.index[0], segment.index[-1]) for name, segment in segments}
+
+
+def _trailing(frame: pd.DataFrame, bars: int, label: str) -> pd.DataFrame:
+    if bars < 1:
+        raise ValueError(f"bars must be >= 1, got {bars}")
+    if bars > len(frame):
+        raise ValueError(f"requested {bars} context row(s) but {label} has only {len(frame)}")
+    return frame.iloc[-bars:].copy()
 
 
 def chronological_split(

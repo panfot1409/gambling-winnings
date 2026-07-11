@@ -4,8 +4,10 @@ Causal event order for each evaluated bar ``t`` (timestamps are candle
 **open times**):
 
 1. At ``open[t]`` the engine executes the target decided strictly from data
-   through ``close[t-1]`` — for the very first evaluated bar, the
-   strategy's ex-ante ``initial_target``, which uses no observed data.
+   through ``close[t-1]``. For the very first evaluated bar this is the
+   signal from the final warm-up context close when ``context`` is
+   supplied, otherwise the strategy's ex-ante ``initial_target``, which
+   uses no observed data.
 2. Buys fill at ``open[t] * (1 + slippage_rate)``; sells fill at
    ``open[t] * (1 - slippage_rate)``. The fee is
    ``fill_price * quantity * fee_rate`` (absolute fill notional times the
@@ -24,6 +26,14 @@ no borrowing, no shorting, no fractional target weights (targets are
 binary ``{0, 1}`` in Milestone 1). Buys convert the entire cash balance
 into ETH net of fee; sells convert the entire ETH position back to cash.
 Every executed trade is recorded in an immutable fill ledger.
+
+Warm-up context: ``run_backtest(..., context=rows)`` lets a strategy see
+observations that immediately precede the evaluated window (e.g. trailing
+train rows when evaluating validation) purely as indicator warm-up.
+Context rows contribute **no P&L, no equity marks, and no metrics** —
+accounting starts with ``initial_cash`` at the first evaluated open. The
+context must end exactly one candle interval before the evaluation starts;
+gaps, overlaps, and out-of-order context are rejected.
 
 Terminal policy: the final position is **marked to market at the last
 close and never force-liquidated**; the hypothetical value of selling at
@@ -155,6 +165,7 @@ def run_backtest(
     costs: CostModel | None = None,
     *,
     initial_cash: float = 10_000.0,
+    context: pd.DataFrame | None = None,
 ) -> BacktestResult:
     """Run ``strategy`` over ``data`` with exact long/cash accounting.
 
@@ -162,23 +173,38 @@ def run_backtest(
     interval, UTC, sorted). ``costs`` defaults to :class:`CostModel`'s
     non-zero rates. ``initial_cash`` is the cash committed at the open of
     the first evaluated bar.
+
+    ``context`` (optional) supplies observations that immediately precede
+    ``data`` for indicator warm-up only: signals are computed over
+    ``context + data``, but P&L, equity, and the ledger cover ``data``
+    exclusively. A signal from the final context close executes at the
+    first evaluation open, with costs charged. The combined frame must
+    itself pass strict validation, so a context that overlaps, gaps, or
+    postdates the evaluation window is rejected.
     """
     cost_model = costs if costs is not None else CostModel()
     if not math.isfinite(initial_cash) or initial_cash <= 0:
         raise ValueError(f"initial_cash must be positive and finite, got {initial_cash}")
-    df = validate_ohlcv(data)
-    if len(df) < 2:
-        raise ValueError(f"backtest needs at least 2 bars, got {len(df)}")
+    eval_df = validate_ohlcv(data)
+    if len(eval_df) < 2:
+        raise ValueError(f"backtest needs at least 2 bars, got {len(eval_df)}")
     if strategy.initial_target not in (0, 1):
         raise ValueError(
             f"strategy {strategy.name!r} has initial_target "
             f"{strategy.initial_target}; it must be 0 or 1"
         )
 
-    signal = strategy.target_positions(df)
-    _check_signal(signal, df.index, strategy)
+    if context is not None and len(context) > 0:
+        context_df = validate_ohlcv(context)
+        full = validate_ohlcv(pd.concat([context_df, eval_df]))
+    else:
+        full = eval_df
+    context_bars = len(full) - len(eval_df)
 
-    return _simulate(df, strategy, signal, cost_model, initial_cash, context_bars=0)
+    signal = strategy.target_positions(full)
+    _check_signal(signal, full.index, strategy)
+
+    return _simulate(eval_df, strategy, signal, cost_model, initial_cash, context_bars=context_bars)
 
 
 def _simulate(
@@ -204,9 +230,14 @@ def _simulate(
     equity_by_bar: list[float] = []
 
     for t in range(n):
-        # Target decided from information through close[t-1] only; the very
-        # first open uses the strategy's ex-ante initial_target.
-        target = float(strategy.initial_target) if t == 0 else float(targets[t - 1])
+        # Target decided from information through close[t-1] only (context
+        # included); the very first open in information time uses the
+        # strategy's ex-ante initial_target.
+        full_position = context_bars + t
+        if full_position == 0:
+            target = float(strategy.initial_target)
+        else:
+            target = float(targets[full_position - 1])
         open_price = float(opens[t])
 
         if target == 1.0 and quantity == 0.0:
