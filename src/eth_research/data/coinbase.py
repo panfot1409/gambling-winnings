@@ -34,6 +34,7 @@ mid-derivation aborts with nothing published.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
@@ -499,7 +500,12 @@ def _require_json_int(label: str, value: object) -> int:
 def _require_json_number(label: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"{label} must be a JSON number (bool is rejected), got {value!r}")
-    return float(value)
+    number = float(value)
+    # json.loads("1e999") overflows to infinity without hitting the
+    # NaN/Infinity literal hook, so finiteness must be checked here.
+    if not math.isfinite(number):
+        raise ValueError(f"{label} must be finite, got {number!r}")
+    return number
 
 
 def parse_candles_chunk(

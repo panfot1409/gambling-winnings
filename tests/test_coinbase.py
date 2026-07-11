@@ -146,6 +146,21 @@ class TestParseCandlesChunk:
         with pytest.raises(AcquisitionError, match="non-finite JSON constant"):
             parse_candles_chunk(raw, **window("1970-01-02", "1970-01-03"))
 
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            b"[[86400, 1e999, 111.0, 100.0, 105.0, 10.0]]",
+            b"[[86400, 95.0, 111.0, 100.0, 105.0, 1e999]]",
+            b"[[86400, 95.0, 111.0, -1e999, 105.0, 10.0]]",
+        ],
+    )
+    def test_exponent_overflow_to_infinity_is_rejected(self, raw: bytes) -> None:
+        # json.loads("1e999") silently overflows to float infinity without
+        # triggering the NaN/Infinity literal rejection, so the number
+        # validator must check finiteness itself.
+        with pytest.raises(AcquisitionError, match="must be finite"):
+            parse_candles_chunk(raw, **window("1970-01-02", "1970-01-03"))
+
     def test_unaligned_epoch_is_rejected(self) -> None:
         row: list[Any] = make_row("2024-01-01")
         row[0] += 1
