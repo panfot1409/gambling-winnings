@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv 0.8.17 (pinned)
+        run: |
+          curl -LsSf https://astral.sh/uv/0.8.17/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Verify uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Sync locked environment (runtime + dev extras)
+        run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
+      - name: Lint
+        run: uv run --no-sync ruff check .
+      - name: Format check
+        run: uv run --no-sync ruff format --check .
+      - name: Type check (strict, including examples)
+        run: uv run --no-sync mypy src tests examples
+      - name: Tests
+        run: uv run --no-sync pytest
