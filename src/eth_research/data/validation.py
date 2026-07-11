@@ -82,6 +82,20 @@ def require_aware_timestamp(label: str, value: object) -> pd.Timestamp:
     return value
 
 
+def require_utc_timestamp(label: str, value: object) -> pd.Timestamp:
+    """A timezone-aware timestamp whose offset is exactly UTC (zero).
+
+    A merely timezone-aware value in some other zone (e.g. ``-05:00``) is
+    rejected — acquisition times must be recorded in UTC, not an arbitrary
+    local zone that happens to carry an offset.
+    """
+    ts = require_aware_timestamp(label, value)
+    offset = ts.utcoffset()
+    if offset is None or offset.total_seconds() != 0:
+        raise ValueError(f"{label} must be in UTC (zero offset), got {ts}")
+    return ts
+
+
 def epoch_nanoseconds(value: pd.Timestamp) -> int:
     """Exact epoch nanoseconds of a timezone-aware timestamp."""
     return int(value.as_unit("ns").value)

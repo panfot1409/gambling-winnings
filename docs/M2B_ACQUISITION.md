@@ -100,6 +100,10 @@ while window < OVERALL_END:
         f"-o {name} && date -u +'{name} retrieved_at=%Y-%m-%dT%H:%M:%SZ' "
         f">> retrieval_log.txt && sleep 1"
     )
+    # start/last are exactly the canonical UTC request strings the adapter
+    # requires: requested_start == window start, requested_end == window
+    # end minus one day (both YYYY-MM-DDTHH:MM:SSZ). retrieved_at must be
+    # UTC (the `date -u` above), not a local-zone timestamp.
     index += 1
     window = window_end
 EOF
@@ -202,6 +206,14 @@ print(build.manifest.content_fingerprint, build.manifest.row_count)
 for finding in build.quality_report.findings:
     print(finding.severity, finding.code, finding.count, finding.first_examples)
 loaded = load_canonical_dataset(build.manifest_path)   # verification-on-read
+
+# Semantic acquisition check: the derived CSV must re-derive byte-for-byte
+# from the raw chunks (not merely match independently recorded hashes).
+from eth_research.data.coinbase import verify_acquisition_evidence
+
+verify_acquisition_evidence(
+    evidence, chunk_dir="data/raw/coinbase", derived_csv="data/derived/coinbase-eth-usd-1d.csv"
+)
 ```
 
 Requirements: zero error-severity findings (any missing candle already

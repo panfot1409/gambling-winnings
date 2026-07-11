@@ -29,7 +29,11 @@ from typing import Any
 import pandas as pd
 
 from eth_research._json import StrictJSONError, strict_json_loads
-from eth_research.data.coinbase import AcquisitionEvidence
+from eth_research.data.coinbase import (
+    AcquisitionError,
+    AcquisitionEvidence,
+    verify_acquisition_evidence,
+)
 from eth_research.data.provenance import (
     DatasetManifest,
     require_hex64,
@@ -251,6 +255,8 @@ def verify_dataset_lock(
     *,
     manifest_path: str | Path,
     acquisition_evidence_path: str | Path,
+    raw_chunk_dir: str | Path | None = None,
+    derived_csv: str | Path | None = None,
 ) -> tuple[DatasetManifest, AcquisitionEvidence]:
     """Re-hash and cross-check the lock against the local artifacts it pins.
 
@@ -258,6 +264,11 @@ def verify_dataset_lock(
     shared identity/hash/bound field, and the chain link between them
     (the manifest's raw file must be exactly the evidence's derived file).
     Returns the parsed manifest and evidence on success.
+
+    When both ``raw_chunk_dir`` and ``derived_csv`` are supplied, the full
+    semantic acquisition verification is also run — proving the derived
+    CSV re-derives byte-for-byte from the raw chunks
+    (:func:`eth_research.data.coinbase.verify_acquisition_evidence`).
     """
     manifest_file = Path(manifest_path)
     if not manifest_file.exists():
@@ -323,4 +334,11 @@ def verify_dataset_lock(
         float(evidence.granularity_seconds),
         lock.candle_interval.total_seconds(),
     )
+
+    if raw_chunk_dir is not None and derived_csv is not None:
+        try:
+            verify_acquisition_evidence(evidence, chunk_dir=raw_chunk_dir, derived_csv=derived_csv)
+        except AcquisitionError as exc:
+            raise DatasetLockError(f"semantic acquisition verification failed: {exc}") from exc
+
     return manifest, evidence

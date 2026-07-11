@@ -58,10 +58,10 @@ from eth_research.data.provenance import (
 from eth_research.data.validation import (
     epoch_nanoseconds,
     parse_timestamp_field,
-    require_aware_timestamp,
     require_day_aligned_utc,
     require_nonnegative_int,
     require_positive_int,
+    require_utc_timestamp,
 )
 
 ACQUISITION_SCHEMA_VERSION: int = 1
@@ -156,6 +156,45 @@ class ParsedChunk:
     """Total rows in the raw response body, before any filtering."""
 
 
+_REQUEST_TIME_FORMAT: str = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def canonical_utc_request(ts: pd.Timestamp) -> str:
+    """The canonical Coinbase request string for a UTC timestamp.
+
+    The Coinbase ``start``/``end`` query parameters are inclusive bucket
+    opens formatted as ``YYYY-MM-DDTHH:MM:SSZ``.
+    """
+    return require_utc_timestamp("request timestamp", ts).strftime(_REQUEST_TIME_FORMAT)
+
+
+def _require_request_param(label: str, text: object, expected: pd.Timestamp) -> str:
+    """The request string must be exactly the canonical UTC form of ``expected``."""
+    value = require_nonempty_str(label, text)
+    canonical = canonical_utc_request(expected)
+    if value != canonical:
+        raise ValueError(
+            f"{label} must be the canonical UTC request string {canonical!r} for the "
+            f"declared window, got {value!r}"
+        )
+    return value
+
+
+def _bind_request_metadata(
+    *,
+    window_start: pd.Timestamp,
+    window_end: pd.Timestamp,
+    requested_start: object,
+    requested_end: object,
+    retrieved_at: object,
+) -> None:
+    """Coinbase request params are inclusive opens: start == window_start,
+    end == window_end - 1 day (the last bucket in the half-open window)."""
+    _require_request_param("requested_start", requested_start, window_start)
+    _require_request_param("requested_end", requested_end, window_end - _DAY)
+    require_utc_timestamp("retrieved_at", retrieved_at)
+
+
 def _check_window(window_start: pd.Timestamp, window_end: pd.Timestamp) -> None:
     require_day_aligned_utc("window_start", window_start)
     require_day_aligned_utc("window_end", window_end)
@@ -192,9 +231,13 @@ class ChunkRequest:
                 "this adapter reads already-downloaded local files only"
             )
         _check_window(self.window_start, self.window_end)
-        require_nonempty_str("requested_start", self.requested_start)
-        require_nonempty_str("requested_end", self.requested_end)
-        require_aware_timestamp("retrieved_at", self.retrieved_at)
+        _bind_request_metadata(
+            window_start=self.window_start,
+            window_end=self.window_end,
+            requested_start=self.requested_start,
+            requested_end=self.requested_end,
+            retrieved_at=self.retrieved_at,
+        )
 
 
 @dataclass(frozen=True)
@@ -215,9 +258,13 @@ class AcquisitionChunk:
         require_safe_basename("filename", self.filename)
         require_hex64("sha256", self.sha256)
         _check_window(self.window_start, self.window_end)
-        require_nonempty_str("requested_start", self.requested_start)
-        require_nonempty_str("requested_end", self.requested_end)
-        require_aware_timestamp("retrieved_at", self.retrieved_at)
+        _bind_request_metadata(
+            window_start=self.window_start,
+            window_end=self.window_end,
+            requested_start=self.requested_start,
+            requested_end=self.requested_end,
+            retrieved_at=self.retrieved_at,
+        )
         row_count = require_positive_int("row_count", self.row_count)
         before = require_nonnegative_int("rows_before_window", self.rows_before_window)
         contributed = row_count - before
@@ -798,22 +845,61 @@ def verify_acquisition_evidence(
     chunk_dir: str | Path,
     derived_csv: str | Path,
 ) -> None:
-    """Re-hash every referenced file and cross-check the derived CSV.
+    """Prove the derived CSV was actually derived from the raw chunks.
 
-    Detects raw responses or derived output modified after the evidence
-    was created. Raises :class:`AcquisitionError` on any mismatch.
+    This is a *semantic* verification, not independent per-file hashing:
+    every raw chunk is re-read into an immutable snapshot, its recorded
+    SHA-256 is checked, it is re-parsed against the evidence-declared
+    window (with ``row_count`` and ``rows_before_window`` cross-checked
+    exactly), the chunks are recombined in declared order, daily
+    continuity is re-run, and the deterministic CSV bytes are
+    reconstructed and required to equal the supplied derived CSV
+    **byte for byte** — so a raw candle cannot be changed (even with its
+    recorded SHA updated) while leaving the CSV untouched. Raw sources are
+    finally re-hashed to detect mutation during verification. Raises
+    :class:`AcquisitionError` on any mismatch.
     """
     directory = Path(chunk_dir)
+    snapshots: list[tuple[AcquisitionChunk, bytes]] = []
     for chunk in evidence.chunks:
         path = directory / chunk.filename
         if not path.exists():
             raise AcquisitionError(f"raw response {chunk.filename!r} not found in {directory}")
-        actual = sha256_file(path)
-        if actual != chunk.sha256:
+        # One immutable snapshot: the bytes hashed ARE the bytes re-parsed.
+        raw = path.read_bytes()
+        if sha256_bytes(raw) != chunk.sha256:
             raise AcquisitionError(
                 f"raw response {chunk.filename!r} does not match its recorded SHA-256 — "
                 "the file was modified after evidence creation"
             )
+        snapshots.append((chunk, raw))
+
+    combined: list[DailyCandle] = []
+    for chunk, raw in snapshots:
+        try:
+            parsed = parse_candles_chunk(
+                raw, window_start=chunk.window_start, window_end=chunk.window_end
+            )
+        except AcquisitionError as exc:
+            raise AcquisitionError(f"chunk {chunk.filename!r} no longer parses: {exc}") from exc
+        if parsed.row_count != chunk.row_count:
+            raise AcquisitionError(
+                f"chunk {chunk.filename!r} re-parses to {parsed.row_count} rows but evidence "
+                f"records {chunk.row_count}"
+            )
+        if parsed.rows_before_window != chunk.rows_before_window:
+            raise AcquisitionError(
+                f"chunk {chunk.filename!r} re-parses to {parsed.rows_before_window} pre-window "
+                f"rows but evidence records {chunk.rows_before_window}"
+            )
+        combined.extend(parsed.candles)
+
+    start_s = epoch_nanoseconds(evidence.overall_start) // 10**9
+    end_s = epoch_nanoseconds(evidence.overall_end) // 10**9
+    _check_daily_continuity(combined, start_s=start_s, end_s=end_s)
+
+    reconstructed = _derived_csv_bytes(combined)
+
     derived_path = Path(derived_csv)
     if derived_path.name != evidence.derived_filename:
         raise AcquisitionError(
@@ -828,24 +914,26 @@ def verify_acquisition_evidence(
             f"derived OHLCV file {derived_path.name!r} does not match its recorded SHA-256 — "
             "the file was modified after evidence creation"
         )
-    lines = derived_bytes.decode("ascii").splitlines()
-    if not lines or lines[0] != _CSV_HEADER:
-        raise AcquisitionError("derived OHLCV file does not start with the expected CSV header")
-    data_lines = lines[1:]
-    if len(data_lines) != evidence.derived_row_count:
+    if reconstructed != derived_bytes:
         raise AcquisitionError(
-            f"derived OHLCV file has {len(data_lines)} rows but evidence records "
+            f"derived OHLCV file {derived_path.name!r} does not re-derive byte-for-byte from "
+            "the raw chunks — the CSV and the raw responses disagree"
+        )
+    # The reconstructed bytes prove content; the recorded scalars must agree.
+    if len(combined) != evidence.derived_row_count:
+        raise AcquisitionError(
+            f"re-derived row count {len(combined)} disagrees with evidence "
             f"{evidence.derived_row_count}"
         )
-    first_text = data_lines[0].split(",", 1)[0]
-    last_text = data_lines[-1].split(",", 1)[0]
-    if first_text != evidence.first_open_time.isoformat():
-        raise AcquisitionError(
-            f"derived first open time {first_text!r} disagrees with evidence "
-            f"{evidence.first_open_time.isoformat()!r}"
-        )
-    if last_text != evidence.last_open_time.isoformat():
-        raise AcquisitionError(
-            f"derived last open time {last_text!r} disagrees with evidence "
-            f"{evidence.last_open_time.isoformat()!r}"
-        )
+    if pd.Timestamp(combined[0].open_time_s, unit="s", tz="UTC") != evidence.first_open_time:
+        raise AcquisitionError("re-derived first open time disagrees with evidence")
+    if pd.Timestamp(combined[-1].open_time_s, unit="s", tz="UTC") != evidence.last_open_time:
+        raise AcquisitionError("re-derived last open time disagrees with evidence")
+
+    # Detect a raw source mutated during verification (between snapshot and now).
+    for chunk, _ in snapshots:
+        if sha256_file(directory / chunk.filename) != chunk.sha256:
+            raise AcquisitionError(
+                f"raw response {chunk.filename!r} changed during verification; "
+                "re-run against settled files"
+            )

@@ -15,6 +15,7 @@ from eth_research.data.builder import BuildResult, build_canonical_dataset
 from eth_research.data.coinbase import (
     AcquisitionEvidence,
     ChunkRequest,
+    canonical_utc_request,
     derive_daily_ohlcv,
     write_acquisition_evidence,
 )
@@ -153,8 +154,8 @@ def build_coinbase_pipeline(
                 path=path,
                 window_start=window_start,
                 window_end=window_end,
-                requested_start=window_start.isoformat(),
-                requested_end=(window_end - pd.Timedelta(days=1)).isoformat(),
+                requested_start=canonical_utc_request(window_start),
+                requested_end=canonical_utc_request(window_end - pd.Timedelta(days=1)),
                 retrieved_at=pd.Timestamp("2026-07-11T12:00:00+00:00"),
             )
         )

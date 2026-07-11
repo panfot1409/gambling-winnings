@@ -18,12 +18,14 @@ from eth_research.data.coinbase import (
     AcquisitionEvidence,
     ChunkRequest,
     DailyCandle,
+    canonical_utc_request,
     derive_daily_ohlcv,
     load_acquisition_evidence,
     parse_candles_chunk,
     verify_acquisition_evidence,
     write_acquisition_evidence,
 )
+from eth_research.data.provenance import sha256_bytes, sha256_file
 from eth_research.data.schema import validate_ohlcv
 
 RETRIEVED = pd.Timestamp("2026-07-11T12:34:56+00:00")
@@ -247,8 +249,8 @@ class TestChunkRequest:
                 path=Path("chunk.json"),
                 window_start=day("2024-01-01"),
                 window_end=day("2024-01-03"),
-                requested_start="x",
-                requested_end="y",
+                requested_start=canonical_utc_request(day("2024-01-01")),
+                requested_end=canonical_utc_request(day("2024-01-02")),
                 retrieved_at=pd.Timestamp("2026-07-11"),
             )
 
@@ -266,8 +268,8 @@ def write_chunks(
                 path=path,
                 window_start=day(start),
                 window_end=day(end),
-                requested_start=f"{start}T00:00:00Z",
-                requested_end=f"{end}T00:00:00Z",
+                requested_start=canonical_utc_request(day(start)),
+                requested_end=canonical_utc_request(day(end) - pd.Timedelta(days=1)),
                 retrieved_at=RETRIEVED,
             )
         )
@@ -666,6 +668,79 @@ class TestAcquisitionEvidence:
         evidence, _, _ = make_evidence(tmp_path)
         with pytest.raises(ValueError, match="first window starts at"):
             dataclasses.replace(evidence, chunks=tuple(reversed(evidence.chunks)))
+
+
+class TestSemanticVerification:
+    def test_raw_change_with_updated_hash_but_unchanged_csv_is_detected(
+        self, tmp_path: Path
+    ) -> None:
+        # R1 attack: change a raw candle value, update its recorded SHA in the
+        # evidence, and leave the derived CSV (and its recorded hash)
+        # untouched. Per-file hashing alone accepts this; semantic
+        # re-derivation must reject it.
+        evidence, chunk_dir, derived = make_evidence(tmp_path)
+        target = chunk_dir / evidence.chunks[0].filename
+        tampered_raw = target.read_bytes().replace(b"100.0", b"123.0", 1)
+        assert tampered_raw != target.read_bytes()
+        target.write_bytes(tampered_raw)
+        tampered_chunk = dataclasses.replace(evidence.chunks[0], sha256=sha256_bytes(tampered_raw))
+        forged = dataclasses.replace(evidence, chunks=(tampered_chunk, *evidence.chunks[1:]))
+        with pytest.raises(AcquisitionError, match=r"does not re-derive byte-for-byte"):
+            verify_acquisition_evidence(forged, chunk_dir=chunk_dir, derived_csv=derived)
+
+    def test_clean_semantic_verification_passes(self, tmp_path: Path) -> None:
+        evidence, chunk_dir, derived = make_evidence(tmp_path)
+        verify_acquisition_evidence(evidence, chunk_dir=chunk_dir, derived_csv=derived)
+
+    def test_source_mutation_during_verification_is_detected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        evidence, chunk_dir, derived = make_evidence(tmp_path)
+        calls = {"n": 0}
+
+        def drifting(path: Any) -> str:
+            calls["n"] += 1
+            # The final re-hash loop uses sha256_file: first chunk honest,
+            # a later one drifts, simulating mutation during verification.
+            return sha256_file(path) if calls["n"] == 1 else "0" * 64
+
+        monkeypatch.setattr(coinbase, "sha256_file", drifting)
+        with pytest.raises(AcquisitionError, match="changed during verification"):
+            verify_acquisition_evidence(evidence, chunk_dir=chunk_dir, derived_csv=derived)
+
+
+class TestRequestMetadataBinding:
+    def test_requested_start_must_equal_window_start(self, tmp_path: Path) -> None:
+        evidence, _, _ = make_evidence(tmp_path)
+        with pytest.raises(ValueError, match="canonical UTC request"):
+            dataclasses.replace(evidence.chunks[0], requested_start="whenever")
+
+    def test_requested_end_must_be_window_end_minus_one_day(self, tmp_path: Path) -> None:
+        evidence, _, _ = make_evidence(tmp_path)
+        chunk = evidence.chunks[0]
+        # window_end itself (not window_end - 1 day) must be rejected.
+        wrong = chunk.window_end.strftime("%Y-%m-%dT%H:%M:%SZ")
+        with pytest.raises(ValueError, match="canonical UTC request"):
+            dataclasses.replace(chunk, requested_end=wrong)
+
+    def test_non_utc_retrieved_at_is_rejected(self, tmp_path: Path) -> None:
+        evidence, _, _ = make_evidence(tmp_path)
+        eastern = pd.Timestamp("2026-07-11T12:00:00-05:00")
+        with pytest.raises(ValueError, match="UTC"):
+            dataclasses.replace(evidence.chunks[0], retrieved_at=eastern)
+
+    def test_chunk_request_binds_metadata_too(self, tmp_path: Path) -> None:
+        path = tmp_path / "c.json"
+        path.write_bytes(chunk_bytes([make_row("2024-01-01")]))
+        with pytest.raises(ValueError, match="canonical UTC request"):
+            ChunkRequest(
+                path=path,
+                window_start=day("2024-01-01"),
+                window_end=day("2024-01-02"),
+                requested_start="2024-01-01T00:00:00Z",
+                requested_end="2024-01-02T00:00:00Z",  # should be 2024-01-01 (end - 1 day)
+                retrieved_at=RETRIEVED,
+            )
 
 
 class TestVerifyAcquisitionEvidence:
