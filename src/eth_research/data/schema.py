@@ -15,8 +15,13 @@ Validation is strict and never repairs data:
 
 * unsorted rows are **rejected, never sorted**;
 * timezone-naive timestamps are **rejected** unless ``assume_utc=True`` is
-  passed explicitly; timezone-aware timestamps are converted to UTC, which
+  passed explicitly — including single naive values mixed among
+  timezone-aware ones (detected element by element); timezone-aware
+  timestamps, uniform or with varying offsets, are converted to UTC, which
   is unambiguous;
+* columns other than the OHLCV set are **rejected** unless
+  ``allow_extra_columns=True`` is passed explicitly, in which case they are
+  dropped from the result;
 * the candle interval must be regular: pass ``expected_interval`` to check
   against a known interval, or leave it ``None`` to infer it, which
   succeeds only when every consecutive interval agrees. Missing candles
@@ -28,6 +33,8 @@ numbers are rejected here — convert them via the loader's
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -77,21 +84,68 @@ def _extract_index(frame: pd.DataFrame, *, assume_utc: bool) -> pd.DatetimeIndex
         if pd.api.types.is_datetime64_any_dtype(raw):
             return _ensure_utc(pd.DatetimeIndex(raw), assume_utc=assume_utc)
         try:
-            parsed = pd.to_datetime(raw, format="ISO8601")
-        except (ValueError, TypeError) as exc:
-            # Mixed offsets parse only with utc=True; they are unambiguous.
-            try:
-                parsed = pd.to_datetime(raw, format="ISO8601", utc=True)
-            except (ValueError, TypeError):
-                raise SchemaError(
-                    [f"cannot parse column {TIMESTAMP_COLUMN!r} as ISO-8601 datetimes: {exc}"]
-                ) from exc
-        return _ensure_utc(pd.DatetimeIndex(parsed), assume_utc=assume_utc)
+            parsed = pd.DatetimeIndex(pd.to_datetime(raw, format="ISO8601"))
+        except (ValueError, TypeError):
+            # The vectorized parser refuses columns that mix offsets or mix
+            # naive and aware values. Classify element by element so naive
+            # values are always detected and malformed rows are reported.
+            return _parse_elementwise(raw, assume_utc=assume_utc)
+        return _ensure_utc(parsed, assume_utc=assume_utc)
     if isinstance(frame.index, pd.DatetimeIndex):
         return _ensure_utc(frame.index, assume_utc=assume_utc)
     raise SchemaError(
         [f"no {TIMESTAMP_COLUMN!r} column found and the index is not a DatetimeIndex"]
     )
+
+
+def _parse_elementwise(raw: pd.Series[Any], *, assume_utc: bool) -> pd.DatetimeIndex:
+    """Element-level timestamp classification for mixed or malformed columns.
+
+    Varying timezone offsets are allowed (each offset is unambiguous) and
+    normalize to UTC. A single timezone-naive element anywhere in the column
+    is rejected unless ``assume_utc=True``, which localizes naive values to
+    UTC while converting aware values. Malformed values are reported with
+    their row positions.
+    """
+    parsed: list[pd.Timestamp | None] = []
+    naive_positions: list[int] = []
+    malformed: list[str] = []
+    for position, value in enumerate(raw):
+        if pd.isna(value):
+            parsed.append(None)
+            continue
+        try:
+            converted: Any = pd.to_datetime(value, format="ISO8601")
+        except (ValueError, TypeError):
+            malformed.append(f"row {position}: {value!r}")
+            continue
+        if pd.isna(converted):
+            parsed.append(None)
+            continue
+        timestamp = pd.Timestamp(converted)
+        if timestamp.tz is None:
+            naive_positions.append(position)
+            parsed.append(timestamp.tz_localize("UTC"))
+        else:
+            parsed.append(timestamp.tz_convert("UTC"))
+
+    problems: list[str] = []
+    if malformed:
+        shown = "; ".join(malformed[:3]) + ("; ..." if len(malformed) > 3 else "")
+        problems.append(
+            f"cannot parse {len(malformed)} timestamp(s) as ISO-8601 datetimes: {shown}"
+        )
+    if naive_positions and not assume_utc:
+        rows = ", ".join(str(p) for p in naive_positions[:3])
+        rows += ", ..." if len(naive_positions) > 3 else ""
+        problems.append(
+            f"{len(naive_positions)} timezone-naive timestamp(s) at row(s) {rows}; provide "
+            "timezone-aware timestamps, or pass assume_utc=True to interpret naive values "
+            "as UTC explicitly"
+        )
+    if problems:
+        raise SchemaError(problems)
+    return pd.DatetimeIndex(parsed)
 
 
 def _check_interval(
@@ -130,6 +184,7 @@ def validate_ohlcv(
     *,
     expected_interval: str | pd.Timedelta | None = None,
     assume_utc: bool = False,
+    allow_extra_columns: bool = False,
 ) -> pd.DataFrame:
     """Validate ``frame`` against the strict OHLCV schema; return canonical form.
 
@@ -138,14 +193,18 @@ def validate_ohlcv(
     frame:
         Raw data with a ``timestamp`` column (ISO-8601 strings or datetimes)
         or a ``DatetimeIndex``. Timestamps are candle **open times**.
-        Columns other than the OHLCV set are dropped from the result.
     expected_interval:
         The required candle interval (e.g. ``"1D"``, ``pd.Timedelta("1h")``).
         When ``None``, the interval is inferred, which succeeds only if every
         consecutive interval agrees.
     assume_utc:
         Explicit opt-in to interpret timezone-naive timestamps as UTC.
-        Without it, naive timestamps are rejected.
+        Without it, naive timestamps are rejected — even single naive values
+        mixed among timezone-aware ones.
+    allow_extra_columns:
+        Explicit opt-in to drop columns outside the OHLCV set. Without it,
+        unexpected columns are rejected by name so instrument metadata (for
+        example a ``symbol`` column) cannot silently disappear.
 
     Returns
     -------
@@ -171,6 +230,14 @@ def validate_ohlcv(
     missing = [column for column in OHLCV_COLUMNS if column not in body.columns]
     if missing:
         raise SchemaError([f"missing required column(s): {missing}"])
+    extras = [str(column) for column in body.columns if column not in OHLCV_COLUMNS]
+    if extras and not allow_extra_columns:
+        raise SchemaError(
+            [
+                f"unexpected column(s): {extras}; select the OHLCV columns explicitly, or "
+                "pass allow_extra_columns=True to drop them"
+            ]
+        )
     if len(body) == 0:
         raise SchemaError(["frame is empty"])
     missing_timestamps = int(pd.isna(index).sum())

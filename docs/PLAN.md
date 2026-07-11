@@ -116,6 +116,8 @@ weights.
   "test set touched once" bookkeeping. Still no automated optimizers.
 - Fractional position weights with exact rebalancing accounting (removes
   the Milestone 1 binary-target restriction).
+- Dataset provenance and multi-symbol support (e.g. a validated `symbol`
+  column); Milestone 1 rejects unexpected columns outright.
 - Data-quality report: outlier bars, zero-volume runs, cross-file
   consistency (hard gap/ordering rejection already ships in Milestone 1).
 - Richer cost model: bid/ask spread term and a simple volume-participation

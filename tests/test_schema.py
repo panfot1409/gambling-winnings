@@ -139,11 +139,68 @@ def test_frame_interval_of_validated_frame() -> None:
     assert frame_interval(validate_ohlcv(raw_frame())) == pd.Timedelta("1D")
 
 
-def test_extra_columns_are_dropped() -> None:
-    frame = raw_frame()
-    frame["trades"] = 42
+def _frame_with_timestamps(values: list[str]) -> pd.DataFrame:
+    """A valid frame whose timestamp column is replaced by literal strings."""
+    frame = raw_frame(len(values))
+    return frame.assign(timestamp=values)
+
+
+def test_mixed_naive_and_utc_aware_rejected_without_opt_in() -> None:
+    frame = _frame_with_timestamps(["2024-01-01T00:00:00+00:00", "2024-01-02T00:00:00"])
+    with pytest.raises(
+        SchemaError, match=r"timezone-naive timestamp\(s\) at row\(s\) 1"
+    ) as excinfo:
+        validate_ohlcv(frame)
+    assert "assume_utc=True" in str(excinfo.value)
+
+
+def test_mixed_naive_and_non_utc_aware_rejected_without_opt_in() -> None:
+    frame = _frame_with_timestamps(["2024-01-01T02:00:00+02:00", "2024-01-02T00:00:00"])
+    with pytest.raises(SchemaError, match=r"timezone-naive timestamp\(s\) at row\(s\) 1"):
+        validate_ohlcv(frame)
+
+
+def test_mixed_naive_and_aware_normalize_deterministically_with_opt_in() -> None:
+    # aware 2024-01-01T02:00+02:00 == 2024-01-01T00:00Z; naive -> localized UTC.
+    frame = _frame_with_timestamps(["2024-01-01T02:00:00+02:00", "2024-01-02T00:00:00"])
+    validated = validate_ohlcv(frame, assume_utc=True)
+    expected = pd.DatetimeIndex(
+        ["2024-01-01T00:00:00+00:00", "2024-01-02T00:00:00+00:00"], name="timestamp"
+    ).as_unit("ns")
+    pd.testing.assert_index_equal(validated.index, expected)
+
+
+def test_variable_aware_offsets_accepted_without_opt_in() -> None:
+    # +02:00 and -05:00 offsets are unambiguous; exactly one day apart in UTC.
+    frame = _frame_with_timestamps(["2024-01-01T02:00:00+02:00", "2024-01-01T19:00:00-05:00"])
     validated = validate_ohlcv(frame)
+    expected = pd.DatetimeIndex(
+        ["2024-01-01T00:00:00+00:00", "2024-01-02T00:00:00+00:00"], name="timestamp"
+    ).as_unit("ns")
+    pd.testing.assert_index_equal(validated.index, expected)
+
+
+def test_malformed_timestamp_reports_row_information() -> None:
+    frame = _frame_with_timestamps(["2024-01-01T00:00:00+00:00", "not-a-date"])
+    with pytest.raises(SchemaError, match="row 1: 'not-a-date'"):
+        validate_ohlcv(frame)
+
+
+def test_unexpected_columns_rejected_by_default() -> None:
+    frame = raw_frame()
+    frame["symbol"] = "ETH-USD"
+    with pytest.raises(SchemaError, match=r"unexpected column\(s\): \['symbol'\]"):
+        validate_ohlcv(frame)
+
+
+def test_extra_columns_dropped_only_with_explicit_opt_in() -> None:
+    frame = raw_frame()
+    frame["symbol"] = "ETH-USD"
+    frame["trades"] = 42
+    validated = validate_ohlcv(frame, allow_extra_columns=True)
+    assert "symbol" not in validated.columns
     assert "trades" not in validated.columns
+    pd.testing.assert_frame_equal(validated, validate_ohlcv(raw_frame()))
 
 
 def test_missing_column_rejected() -> None:

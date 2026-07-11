@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from eth_research.data.load import load_ohlcv
-from eth_research.data.schema import SchemaError
+from eth_research.data.schema import SchemaError, validate_ohlcv
 from eth_research.data.synthetic import make_synthetic_ohlcv
 
 
@@ -83,6 +83,50 @@ def test_expected_interval_passthrough(tmp_path: Path, canonical: pd.DataFrame) 
     pd.testing.assert_frame_equal(loaded, canonical, check_freq=False)
     with pytest.raises(SchemaError, match="expected 0 days 01:00:00"):
         load_ohlcv(path, expected_interval="1h")
+
+
+def test_loader_and_validator_agree_on_mixed_timestamps(tmp_path: Path) -> None:
+    """The loader must apply exactly the direct validator's timestamp rules."""
+    path = tmp_path / "eth.csv"
+    path.write_text(
+        "timestamp,open,high,low,close,volume\n"
+        "2024-01-01T00:00:00+00:00,100,103,97,101,10\n"
+        "2024-01-02T00:00:00,101,104,98,102,10\n"  # naive row
+    )
+    raw = pd.read_csv(path)
+
+    with pytest.raises(SchemaError, match=r"timezone-naive timestamp\(s\) at row\(s\) 1"):
+        load_ohlcv(path)
+    with pytest.raises(SchemaError, match=r"timezone-naive timestamp\(s\) at row\(s\) 1"):
+        validate_ohlcv(raw)
+
+    loaded = load_ohlcv(path, assume_utc=True)
+    validated = validate_ohlcv(raw, assume_utc=True)
+    pd.testing.assert_frame_equal(loaded, validated)
+    assert str(loaded.index.dtype) == "datetime64[ns, UTC]"
+
+
+def test_loader_accepts_variable_aware_offsets(tmp_path: Path) -> None:
+    path = tmp_path / "eth.csv"
+    path.write_text(
+        "timestamp,open,high,low,close,volume\n"
+        "2024-01-01T02:00:00+02:00,100,103,97,101,10\n"
+        "2024-01-01T19:00:00-05:00,101,104,98,102,10\n"
+    )
+    loaded = load_ohlcv(path)
+    expected = pd.DatetimeIndex(
+        ["2024-01-01T00:00:00+00:00", "2024-01-02T00:00:00+00:00"], name="timestamp"
+    ).as_unit("ns")
+    pd.testing.assert_index_equal(loaded.index, expected)
+
+
+def test_loader_rejects_unexpected_columns(tmp_path: Path, canonical: pd.DataFrame) -> None:
+    path = tmp_path / "eth.csv"
+    canonical.reset_index().assign(symbol="ETH-USD").to_csv(path, index=False)
+    with pytest.raises(SchemaError, match=r"unexpected column\(s\): \['symbol'\]"):
+        load_ohlcv(path)
+    loaded = load_ohlcv(path, allow_extra_columns=True)
+    pd.testing.assert_frame_equal(loaded, canonical, check_freq=False)
 
 
 def test_unsupported_extension_rejected(tmp_path: Path) -> None:

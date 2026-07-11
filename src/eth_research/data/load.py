@@ -18,6 +18,7 @@ def load_ohlcv(
     timestamp_unit: TimestampUnit | None = None,
     assume_utc: bool = False,
     expected_interval: str | pd.Timedelta | None = None,
+    allow_extra_columns: bool = False,
 ) -> pd.DataFrame:
     """Load one OHLCV history from a ``.csv``/``.parquet`` file and validate it.
 
@@ -33,10 +34,14 @@ def load_ohlcv(
         required for them.
     assume_utc:
         Explicit opt-in to interpret timezone-naive textual timestamps as
-        UTC; without it, naive timestamps are rejected.
+        UTC; without it, naive timestamps are rejected — even single naive
+        values mixed among timezone-aware ones.
     expected_interval:
         Required candle interval (e.g. ``"1D"``); when ``None`` the interval
         is inferred and must be identical between every consecutive candle.
+    allow_extra_columns:
+        Explicit opt-in to drop columns outside the OHLCV set; without it,
+        unexpected columns are rejected by name.
 
     Returns
     -------
@@ -57,4 +62,9 @@ def load_ohlcv(
         )
     if timestamp_unit is not None and TIMESTAMP_COLUMN in raw.columns:
         raw[TIMESTAMP_COLUMN] = pd.to_datetime(raw[TIMESTAMP_COLUMN], unit=timestamp_unit, utc=True)
-    return validate_ohlcv(raw, expected_interval=expected_interval, assume_utc=assume_utc)
+    return validate_ohlcv(
+        raw,
+        expected_interval=expected_interval,
+        assume_utc=assume_utc,
+        allow_extra_columns=allow_extra_columns,
+    )

@@ -103,8 +103,13 @@ Validation is strict and never repairs data:
 
 - unsorted rows are **rejected, never sorted**;
 - timezone-naive timestamps are rejected unless you opt in explicitly with
-  `assume_utc=True`; epoch timestamps (`timestamp_unit="ms"`, …) are
-  unambiguous UTC and need no opt-in;
+  `assume_utc=True` — including single naive values mixed among
+  timezone-aware ones (checked element by element); varying UTC offsets are
+  unambiguous and normalize to UTC; epoch timestamps
+  (`timestamp_unit="ms"`, …) are unambiguous UTC and need no opt-in;
+- columns outside the OHLCV set are **rejected by name** (so instrument
+  metadata such as a `symbol` column cannot silently disappear); pass
+  `allow_extra_columns=True` to drop them explicitly;
 - the candle interval must be regular — pass `expected_interval="1D"` to
   check against a known interval, or let it be inferred, which succeeds
   only when every spacing agrees; **missing candles and gaps are rejected,
