@@ -183,6 +183,46 @@ report = audit_ohlcv_file("data/raw/ethusd.csv", expected_interval=identity.inte
   `overwrite=True`. No network access: acquiring real ETH data is
   Milestone 2B.
 
+## Real-data benchmarks (Milestone 2B — infrastructure)
+
+Milestone 2B turns one real Coinbase Exchange ETH-USD daily history into
+a locked, pre-registered benchmark with one-time test-set access:
+
+- **Offline acquisition adapter** (`eth_research.data.coinbase`): parses
+  already-downloaded candle responses (no networking in the package;
+  acquisition is one-time manual `curl` per
+  [docs/M2B_ACQUISITION.md](docs/M2B_ACQUISITION.md)), enforces the
+  documented `[time, low, high, open, close, volume]` format, strictly
+  monotonic rows, half-open request windows with counted pre-start
+  exclusions, and a gap-free daily series — missing candles abort, and
+  nothing is ever filled or repaired. Output is a deterministic CSV plus
+  byte-reproducible acquisition evidence.
+- **Dataset lock** (`research/m2b/dataset_lock.json`): a committable
+  metadata+hash pin chaining acquisition evidence → derived file →
+  canonical dataset → audit report; never market rows, never paths.
+- **Frozen protocol** (`eth_research.protocol`): schema v1 admits exactly
+  one value for every non-dataset choice — 60/20/20 chronological floor
+  split, buy-and-hold and SMA(20, 50) only, 10 bps fee + 5 bps slippage,
+  10,000 USD per independent segment (curves are never stitched), 50-bar
+  SMA warm-up, the pinned metric set — so `protocol.json` can only bind a
+  dataset, not tune anything.
+- **One-time test discipline** (`eth_research.ledger`,
+  `eth_research.evaluation`): the test segment runs only through a
+  guarded evaluator — refused by default, explicit confirmation token,
+  full provenance re-verification, `started` written to the append-only
+  ledger before any test signal exists, completion/failure recorded
+  honestly, and any access (including a crash) permanently consumes the
+  one-time evaluation. Train/validation run freely and are reconciled
+  exactly against the engine's accounting; results serialize
+  deterministically (undefined ratios as JSON `null`) and the Markdown
+  report is generated only from the validated JSON model.
+
+Status: the real dataset, `dataset_lock.json`, `protocol.json`, and
+`reports/m2b/` are **pending** — this environment cannot reach the
+Coinbase endpoints, and synthetic data is never substituted for a real
+benchmark. The committed test-access ledger is empty (pristine). See
+[research/m2b/README.md](research/m2b/README.md).
+
 ## Conventions
 
 - **Timestamps are candle open times**, UTC (`datetime64[ns, UTC]`); a
@@ -229,14 +269,23 @@ src/eth_research/
         provenance.py  # dataset identity, manifest, content fingerprint
         quality.py     # offline data-quality audit (reports, never repairs)
         builder.py     # audited canonical dataset builder + verification
+        coinbase.py    # offline Coinbase response adapter + acquisition evidence
+        lock.py        # committable dataset lock: metadata and hashes only
+        validation.py  # shared strict JSON validators
     splits.py       # chronological splits + warm-up context helpers
     strategies/     # Strategy interface, buy-and-hold, SMA crossover
     backtest.py     # bar-by-bar portfolio engine: open fills, fees, ledger
     metrics.py      # equity-curve metrics: return, CAGR, Sharpe, Sortino, drawdown
+    protocol.py     # frozen benchmark protocol + deterministic result models
+    ledger.py       # append-only one-time test-access ledger
+    evaluation.py   # guarded benchmark evaluator + report generation
+research/m2b/       # committable provenance records + pristine test ledger
 tests/              # unit, hand-calculated ledger, and look-ahead regression tests
 examples/           # runnable end-to-end example
 docs/PLAN.md        # milestone plan
 docs/M2A_PLAN.md    # Milestone 2A implementation plan
+docs/M2B_PLAN.md    # Milestone 2B implementation plan
+docs/M2B_ACQUISITION.md # manual real-data acquisition procedure (pending)
 docs/REMEDIATION.md # Milestone 1 correctness remediation record
 ```
 
