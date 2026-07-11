@@ -54,6 +54,8 @@ src/eth_research/
         coinbase.py    # offline Coinbase response adapter + acquisition evidence (M2B)
         lock.py        # committable dataset lock: metadata and hashes only (M2B)
         validation.py  # shared strict JSON validators (M2B)
+    _json.py           # one strict JSON decoder (dup-key + non-finite rejection) (M2B)
+    gitcheck.py        # read-only git checks binding the test run to HEAD (M2B)
     splits.py          # chronological splits + warm-up context helpers
     strategies/
         base.py        # Strategy interface + timing contract
@@ -167,6 +169,22 @@ Delivered (version 0.3.0):
   exact reconciliation against the engine's accounting, deterministic
   JSON results, and Markdown rendered only from the validated model
   (`evaluation.py`).
+
+Independent executable red-teaming (post-review) hardened the trust
+boundaries further: one strict JSON decoder rejects duplicate keys and
+non-finite numbers across every provenance format; acquisition
+verification now proves the derived CSV re-derives byte-for-byte from
+the raw chunks (not just matching independent hashes) and binds request
+metadata; acquisition publication is a single transaction (CSV +
+evidence, evidence last); result metrics enforce internal identities
+(total return, turnover, CAGR, drawdown, fills) and a package-version
+chain; and the one-time test evaluator now binds to the repository's
+real `HEAD` with a clean tracked tree, reads only the canonical tracked
+ledger, and reloads/re-verifies the dataset itself rather than trusting
+a caller-supplied object. The git binding is documented as a
+single-repository, single-researcher operational control (it cannot
+attest a remote, GitHub CI status, concurrent clones, or history
+rewrites).
 
 Release administration debt: the **remote `v0.2.0` annotated tag is
 pending due to an environment ref-write restriction** (tag pushes and

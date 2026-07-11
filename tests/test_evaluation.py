@@ -316,7 +316,7 @@ class GitPipeline:
 
 def make_git_pipeline(root: Path) -> GitPipeline:
     repo = root / "repo"
-    repo.mkdir()
+    repo.mkdir(parents=True)
     _git(repo, "init", "-q")
     _git(repo, "config", "user.email", "test@example.com")
     _git(repo, "config", "user.name", "Test Researcher")
@@ -672,3 +672,50 @@ class TestTrainValidationFromManifest:
         forged = _dc.replace(good, frame=broken_frame)
         with pytest.raises(EvaluationError, match="does not recompute to its manifest"):
             evaluate_train_validation(forged, make_protocol(coinbase_pipeline))
+
+
+class TestActiveRedTeam:
+    """Extra adversarial cases from the required red-team pass."""
+
+    @pytest.mark.parametrize("target", ["protocol_path", "lock_path", "evidence_path"])
+    def test_dirty_tracked_input_is_rejected(self, git_pipeline: GitPipeline, target: str) -> None:
+        path: Path = getattr(git_pipeline, target)
+        path.write_bytes(path.read_bytes() + b"\n")  # tracked modification
+        with pytest.raises(EvaluationError, match="tracked working tree is not clean"):
+            run_git(git_pipeline, head_auth(git_pipeline))
+        assert read_ledger(git_pipeline.ledger_path) == ()
+
+    def test_failure_recording_completed_leaves_started_consumed(
+        self, git_pipeline: GitPipeline, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A failure appending the 'completed' event (after the report is
+        # published) leaves a consumed 'started' access — never a silent rerun.
+        real_append = append_event
+
+        def failing(path: Any, event: Any) -> None:
+            if event.event == "completed":
+                raise OSError("ledger append failed")
+            real_append(path, event)
+
+        monkeypatch.setattr(evaluation, "append_event", failing)
+        with pytest.raises(OSError, match="ledger append failed"):
+            run_git(git_pipeline, head_auth(git_pipeline))
+        events = read_ledger(git_pipeline.ledger_path)
+        assert [event.event for event in events] == ["started"]  # access consumed
+        assert (git_pipeline.output_dir / "benchmark_results.json").exists()
+
+    def test_second_repository_root_is_an_independent_ledger_documented_limitation(
+        self, tmp_path: Path
+    ) -> None:
+        # The per-repo control cannot stop a second clone from evaluating the
+        # same protocol against its own pristine ledger. This is the honest,
+        # documented single-repository limitation — asserted here, not hidden.
+        from eth_research import gitcheck
+
+        assert "single-repository" in (gitcheck.__doc__ or "")
+        repo_a = make_git_pipeline(tmp_path / "a")
+        repo_b = make_git_pipeline(tmp_path / "b")
+        run_git(repo_a, make_authorization(code_commit_sha=repo_a.head))
+        run_git(repo_b, make_authorization(code_commit_sha=repo_b.head))
+        assert len(read_ledger(repo_a.ledger_path)) == 2
+        assert len(read_ledger(repo_b.ledger_path)) == 2

@@ -276,9 +276,11 @@ src/eth_research/
     strategies/     # Strategy interface, buy-and-hold, SMA crossover
     backtest.py     # bar-by-bar portfolio engine: open fills, fees, ledger
     metrics.py      # equity-curve metrics: return, CAGR, Sharpe, Sortino, drawdown
+    _json.py        # one strict JSON decoder (dup-key + non-finite rejection)
     protocol.py     # frozen benchmark protocol + deterministic result models
     ledger.py       # append-only one-time test-access ledger
     evaluation.py   # guarded benchmark evaluator + report generation
+    gitcheck.py     # read-only git checks binding the test run to HEAD
 research/m2b/       # committable provenance records + pristine test ledger
 tests/              # unit, hand-calculated ledger, and look-ahead regression tests
 examples/           # runnable end-to-end example
