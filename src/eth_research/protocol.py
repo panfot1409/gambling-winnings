@@ -20,7 +20,6 @@ byte-identical.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -38,6 +37,9 @@ from eth_research.data.provenance import (
 from eth_research.data.validation import (
     parse_timestamp_field,
     require_aware_timestamp,
+    require_commit_sha,
+    require_evaluation_id,
+    require_fingerprint,
     require_finite_float,
     require_nonnegative_int,
     require_positive_int,
@@ -85,10 +87,6 @@ REQUIRED_METRICS: tuple[str, ...] = (
 SEGMENT_NAMES: tuple[str, ...] = ("train", "validation", "test")
 RESULT_STRATEGY_NAMES: tuple[str, ...] = ("buy_and_hold", "sma_20_50")
 """Engine-reported strategy names, in canonical result order."""
-
-_FINGERPRINT_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
-_COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-_EVALUATION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{7,63}$")
 
 _PROTOCOL_KEYS: frozenset[str] = frozenset(
     {
@@ -208,13 +206,6 @@ def _require_exact_str(label: str, value: object, expected: str) -> str:
     return text
 
 
-def _require_fingerprint(label: str, value: object) -> str:
-    text = require_str(label, value)
-    if not _FINGERPRINT_RE.match(text):
-        raise ValueError(f"{label} must match sha256:<64 lowercase hex>, got {text!r}")
-    return text
-
-
 @dataclass(frozen=True)
 class StrategySpec:
     """One pinned strategy entry; schema v1 allows exactly two shapes."""
@@ -313,7 +304,7 @@ class BenchmarkProtocol:
                 f"this package reads version {PROTOCOL_SCHEMA_VERSION}"
             )
         require_nonempty_str("package_version", self.package_version)
-        _require_fingerprint("dataset_content_fingerprint", self.dataset_content_fingerprint)
+        require_fingerprint("dataset_content_fingerprint", self.dataset_content_fingerprint)
         require_hex64("dataset_manifest_sha256", self.dataset_manifest_sha256)
         require_hex64("dataset_lock_sha256", self.dataset_lock_sha256)
         require_hex64("acquisition_evidence_sha256", self.acquisition_evidence_sha256)
@@ -739,7 +730,7 @@ class BenchmarkResults:
             raise ValueError(
                 f"candle_interval must be a positive Timedelta, got {self.candle_interval!r}"
             )
-        _require_fingerprint("dataset_content_fingerprint", self.dataset_content_fingerprint)
+        require_fingerprint("dataset_content_fingerprint", self.dataset_content_fingerprint)
         for label in (
             "dataset_manifest_sha256",
             "dataset_lock_sha256",
@@ -748,11 +739,7 @@ class BenchmarkResults:
             "protocol_sha256",
         ):
             require_hex64(label, getattr(self, label))
-        commit = require_str("pre_registered_commit_sha", self.pre_registered_commit_sha)
-        if not _COMMIT_SHA_RE.match(commit):
-            raise ValueError(
-                f"pre_registered_commit_sha must be 40 lowercase hex characters, got {commit!r}"
-            )
+        require_commit_sha("pre_registered_commit_sha", self.pre_registered_commit_sha)
         row_count = require_positive_int("dataset_row_count", self.dataset_row_count)
         require_aware_timestamp("dataset_first_open_time", self.dataset_first_open_time)
         require_aware_timestamp("dataset_last_open_time", self.dataset_last_open_time)
@@ -838,11 +825,7 @@ class BenchmarkResults:
 
         has_test = "test" in evaluated
         if has_test:
-            identifier = require_str("test_evaluation_id", self.test_evaluation_id)
-            if not _EVALUATION_ID_RE.match(identifier):
-                raise ValueError(
-                    f"test_evaluation_id must match ^[a-z0-9][a-z0-9-]{{7,63}}$, got {identifier!r}"
-                )
+            require_evaluation_id("test_evaluation_id", self.test_evaluation_id)
         elif self.test_evaluation_id is not None:
             raise ValueError("test_evaluation_id must be null when no test segment was evaluated")
 

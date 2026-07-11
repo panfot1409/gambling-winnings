@@ -40,12 +40,11 @@ from eth_research.data.provenance import (
 from eth_research.data.validation import (
     parse_timestamp_field,
     require_aware_timestamp,
+    require_fingerprint,
     require_positive_int,
 )
 
 LOCK_SCHEMA_VERSION: int = 1
-
-_FINGERPRINT_PREFIX: str = "sha256:"
 
 _LOCK_KEYS: frozenset[str] = frozenset(
     {
@@ -120,12 +119,7 @@ class DatasetLock:
             raise ValueError(
                 f"candle_interval must be a positive Timedelta, got {self.candle_interval!r}"
             )
-        fingerprint = require_str("content_fingerprint", self.content_fingerprint)
-        if not fingerprint.startswith(_FINGERPRINT_PREFIX):
-            raise ValueError(
-                f"content_fingerprint must start with {_FINGERPRINT_PREFIX!r}, got {fingerprint!r}"
-            )
-        require_hex64("content_fingerprint digest", fingerprint[len(_FINGERPRINT_PREFIX) :])
+        require_fingerprint("content_fingerprint", self.content_fingerprint)
         for label in (
             "manifest_sha256",
             "quality_report_sha256",

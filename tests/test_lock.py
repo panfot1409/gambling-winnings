@@ -84,7 +84,7 @@ class TestDatasetLockModel:
         self, coinbase_pipeline: CoinbasePipeline
     ) -> None:
         payload = self._payload(make_lock(coinbase_pipeline), content_fingerprint="0" * 64)
-        with pytest.raises(ValueError, match="must start with 'sha256:'"):
+        with pytest.raises(ValueError, match="must match sha256:"):
             self._parse(payload)
 
     def test_short_hash_is_rejected(self, coinbase_pipeline: CoinbasePipeline) -> None:
