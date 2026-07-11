@@ -125,6 +125,52 @@ Validation is strict and never repairs data:
 Data files live in the git-ignored `data/` directory — market data is never
 committed.
 
+## Canonical datasets (Milestone 2A)
+
+Before real market data enters the research loop, a raw local file is frozen
+into an audited, fingerprinted canonical dataset — fully offline:
+
+```python
+import pandas as pd
+from eth_research.data import (
+    DatasetIdentity,
+    audit_ohlcv_file,
+    build_canonical_dataset,
+    load_canonical_dataset,
+)
+
+identity = DatasetIdentity(
+    quote_asset="USD",
+    symbol="ETHUSD",
+    venue="examplevenue",
+    interval=pd.Timedelta("1D"),
+    source="manually exported OHLCV CSV, obtained 2026-07-10",
+)
+result = build_canonical_dataset("data/raw/ethusd.csv", identity, "data/datasets")
+# -> data/datasets/examplevenue-ethusd-86400s.canonical.parquet
+#                                            .manifest.json
+#                                            .quality.json
+
+dataset = load_canonical_dataset(result.manifest_path)  # verifies on read
+report = audit_ohlcv_file("data/raw/ethusd.csv", expected_interval=identity.interval)
+```
+
+- The **quality audit** reports — and never repairs — duplicates, ordering
+  problems, missing candles, missing/non-finite/non-positive values, OHLC
+  violations, zero-volume candles and runs, and outlier returns/ranges,
+  each with exact counts and first examples. Any integrity error refuses
+  the build; the raw file is never modified, sorted, filled, or clipped.
+- The **manifest** records what the data claims to be (ETH spot only:
+  exact symbol, venue, candle interval, UTC open-time convention, source
+  description), the raw-file SHA-256, and a container-independent content
+  fingerprint (`ohlcv-fp-v1/sha256` — equivalent CSV and Parquet inputs
+  fingerprint identically). `load_canonical_dataset` re-verifies the
+  fingerprint, row count, and time bounds, so tampering with either the
+  data or the manifest is detected.
+- Writes are atomic, and existing artifacts are never overwritten without
+  an explicit `overwrite=True`. No network access: acquiring real ETH data
+  is Milestone 2B.
+
 ## Conventions
 
 - **Timestamps are candle open times**, UTC (`datetime64[ns, UTC]`); a
@@ -164,7 +210,13 @@ committed.
 
 ```
 src/eth_research/
-    data/           # strict OHLCV schema, CSV/Parquet loaders, synthetic generator
+    data/
+        schema.py      # strict OHLCV schema -> canonical frame format
+        load.py        # CSV/Parquet -> validated frame
+        synthetic.py   # deterministic synthetic OHLCV for tests/examples
+        provenance.py  # dataset identity, manifest, content fingerprint
+        quality.py     # offline data-quality audit (reports, never repairs)
+        builder.py     # audited canonical dataset builder + verification
     splits.py       # chronological splits + warm-up context helpers
     strategies/     # Strategy interface, buy-and-hold, SMA crossover
     backtest.py     # bar-by-bar portfolio engine: open fills, fees, ledger
@@ -172,6 +224,7 @@ src/eth_research/
 tests/              # unit, hand-calculated ledger, and look-ahead regression tests
 examples/           # runnable end-to-end example
 docs/PLAN.md        # milestone plan
+docs/M2A_PLAN.md    # Milestone 2A implementation plan
 docs/REMEDIATION.md # Milestone 1 correctness remediation record
 ```
 
