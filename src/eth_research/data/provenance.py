@@ -2,11 +2,15 @@
 
 A canonical dataset carries two complementary hashes:
 
-* ``raw_file_sha256`` — SHA-256 of the exact source file bytes, tying the
-  dataset to the file it was built from;
+* ``raw_file_sha256`` — SHA-256 of the exact source bytes that were parsed,
+  tying the dataset to the file it was built from;
 * ``content_fingerprint`` — SHA-256 over a canonical serialization of the
   validated candle values, independent of the container format: equivalent
   CSV and Parquet sources produce the same fingerprint.
+
+The manifest also binds the audit evidence: the quality report's filename
+and exact SHA-256, plus the two build flags (``assume_utc``,
+``allow_extra_columns``) that shaped the audit and validation.
 
 Fingerprint algorithm ``ohlcv-fp-v1/sha256``: the SHA-256 digest of the
 header line ``b"eth-research ohlcv-fp-v1\\n"`` followed, for every candle in
@@ -19,8 +23,10 @@ zero to zero — a bit-exact, locale-independent encoding of IEEE-754 doubles.
 
 Manifests serialize deterministically (sorted keys, two-space indent,
 trailing newline, no build timestamp), so rebuilding the same input yields
-byte-identical manifest files. Parsing is strict: unknown or missing keys
-and unsupported schema versions are rejected.
+byte-identical manifest files. Validation is a single shared path: the
+``DatasetManifest`` constructor validates every field, and strict JSON
+parsing feeds it raw values without ever repairing types — a manifest that
+constructs is a manifest that parses, and vice versa.
 """
 
 from __future__ import annotations
@@ -43,6 +49,84 @@ TIMESTAMP_CONVENTION: str = "candle open time, UTC"
 
 _FINGERPRINT_HEADER: bytes = b"eth-research ohlcv-fp-v1\n"
 _HASH_CHUNK_BYTES: int = 1 << 20
+_HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+_FINGERPRINT_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+_MANIFEST_KEYS: frozenset[str] = frozenset(
+    {
+        "manifest_schema_version",
+        "package_version",
+        "base_asset",
+        "quote_asset",
+        "symbol",
+        "venue",
+        "market_type",
+        "candle_interval",
+        "timestamp_convention",
+        "source",
+        "raw_filename",
+        "raw_file_sha256",
+        "fingerprint_algorithm",
+        "content_fingerprint",
+        "row_count",
+        "first_open_time",
+        "last_open_time",
+        "canonical_filename",
+        "quality_report_filename",
+        "quality_report_sha256",
+        "assume_utc",
+        "allow_extra_columns",
+    }
+)
+
+
+def require_str(label: str, value: object) -> str:
+    """The value must be exactly a JSON/Python string — no type repair."""
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be a string, got {type(value).__name__}")
+    return value
+
+
+def require_nonempty_str(label: str, value: object) -> str:
+    text = require_str(label, value)
+    if not text.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+    return text
+
+
+def require_int(label: str, value: object) -> int:
+    """The value must be an integer; bool is explicitly rejected."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{label} must be an integer (bool is rejected), got {value!r}")
+    return value
+
+
+def require_bool(label: str, value: object) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{label} must be a boolean, got {type(value).__name__}")
+    return value
+
+
+def require_hex64(label: str, value: object) -> str:
+    text = require_str(label, value)
+    if not _HEX64_RE.match(text):
+        raise ValueError(f"{label} must be exactly 64 lowercase hex characters, got {text!r}")
+    return text
+
+
+def require_safe_basename(label: str, value: object) -> str:
+    """A bare file name: no separators, traversal, absolute paths, or NULs."""
+    text = require_nonempty_str(label, value)
+    if (
+        "/" in text
+        or "\\" in text
+        or ".." in text
+        or "\x00" in text
+        or text != Path(text).name
+        or Path(text).is_absolute()
+    ):
+        raise ValueError(f"{label} must be a safe file basename, got {text!r}")
+    return text
 
 
 @dataclass(frozen=True)
@@ -68,9 +152,12 @@ class DatasetIdentity:
         if self.market_type != "spot":
             raise ValueError(f"market_type must be 'spot', got {self.market_type!r}")
         for label in ("quote_asset", "symbol", "venue", "source"):
-            if not str(getattr(self, label)).strip():
-                raise ValueError(f"{label} must be a non-empty string")
-        if not isinstance(self.interval, pd.Timedelta) or self.interval <= pd.Timedelta(0):
+            require_nonempty_str(label, getattr(self, label))
+        if (
+            not isinstance(self.interval, pd.Timedelta)
+            or pd.isna(self.interval)
+            or self.interval <= pd.Timedelta(0)
+        ):
             raise ValueError(f"interval must be a positive Timedelta, got {self.interval!r}")
 
     @property
@@ -83,7 +170,11 @@ class DatasetIdentity:
 
 @dataclass(frozen=True)
 class DatasetManifest:
-    """Versioned provenance record for one canonical dataset."""
+    """Versioned provenance record for one canonical dataset.
+
+    Every field is validated in ``__post_init__`` — the single shared
+    validation path for constructed and parsed manifests alike.
+    """
 
     manifest_schema_version: int
     package_version: str
@@ -103,6 +194,78 @@ class DatasetManifest:
     first_open_time: pd.Timestamp
     last_open_time: pd.Timestamp
     canonical_filename: str
+    quality_report_filename: str
+    quality_report_sha256: str
+    assume_utc: bool
+    allow_extra_columns: bool
+
+    def __post_init__(self) -> None:
+        version = require_int("manifest_schema_version", self.manifest_schema_version)
+        if version != MANIFEST_SCHEMA_VERSION:
+            raise ValueError(
+                f"unsupported manifest schema version {version!r}; "
+                f"this package reads version {MANIFEST_SCHEMA_VERSION}"
+            )
+        require_nonempty_str("package_version", self.package_version)
+        if self.base_asset != "ETH":
+            raise ValueError(f"base_asset must be 'ETH', got {self.base_asset!r}")
+        if self.market_type != "spot":
+            raise ValueError(f"market_type must be 'spot', got {self.market_type!r}")
+        if self.timestamp_convention != TIMESTAMP_CONVENTION:
+            raise ValueError(
+                f"timestamp_convention must be {TIMESTAMP_CONVENTION!r}, "
+                f"got {self.timestamp_convention!r}"
+            )
+        for label in ("quote_asset", "symbol", "venue", "source"):
+            require_nonempty_str(label, getattr(self, label))
+        if (
+            not isinstance(self.candle_interval, pd.Timedelta)
+            or pd.isna(self.candle_interval)
+            or self.candle_interval <= pd.Timedelta(0)
+        ):
+            raise ValueError(
+                f"candle_interval must be a positive Timedelta, got {self.candle_interval!r}"
+            )
+        row_count = require_int("row_count", self.row_count)
+        if row_count < 1:
+            raise ValueError(f"row_count must be a positive integer, got {row_count}")
+        for label, value in (
+            ("first_open_time", self.first_open_time),
+            ("last_open_time", self.last_open_time),
+        ):
+            if not isinstance(value, pd.Timestamp) or pd.isna(value):
+                raise ValueError(f"{label} must be a valid timestamp, got {value!r}")
+            if value.tz is None:
+                raise ValueError(f"{label} must be timezone-aware")
+        if self.first_open_time > self.last_open_time:
+            raise ValueError(
+                f"first_open_time {self.first_open_time} must not be after "
+                f"last_open_time {self.last_open_time}"
+            )
+        expected_last = self.first_open_time + (row_count - 1) * self.candle_interval
+        if self.last_open_time != expected_last:
+            raise ValueError(
+                "last_open_time is inconsistent with first_open_time + "
+                f"(row_count - 1) * candle_interval: expected {expected_last}, "
+                f"got {self.last_open_time}"
+            )
+        require_hex64("raw_file_sha256", self.raw_file_sha256)
+        require_hex64("quality_report_sha256", self.quality_report_sha256)
+        fingerprint = require_str("content_fingerprint", self.content_fingerprint)
+        if not _FINGERPRINT_RE.match(fingerprint):
+            raise ValueError(
+                f"content_fingerprint must match sha256:<64 lowercase hex>, got {fingerprint!r}"
+            )
+        if self.fingerprint_algorithm != FINGERPRINT_ALGORITHM:
+            raise ValueError(
+                f"unsupported fingerprint algorithm {self.fingerprint_algorithm!r}; "
+                f"this package computes {FINGERPRINT_ALGORITHM!r}"
+            )
+        require_safe_basename("raw_filename", self.raw_filename)
+        require_safe_basename("canonical_filename", self.canonical_filename)
+        require_safe_basename("quality_report_filename", self.quality_report_filename)
+        require_bool("assume_utc", self.assume_utc)
+        require_bool("allow_extra_columns", self.allow_extra_columns)
 
     def to_json_bytes(self) -> bytes:
         """Deterministic serialization: sorted keys, indent 2, trailing newline."""
@@ -125,6 +288,10 @@ class DatasetManifest:
             "first_open_time": self.first_open_time.isoformat(),
             "last_open_time": self.last_open_time.isoformat(),
             "canonical_filename": self.canonical_filename,
+            "quality_report_filename": self.quality_report_filename,
+            "quality_report_sha256": self.quality_report_sha256,
+            "assume_utc": self.assume_utc,
+            "allow_extra_columns": self.allow_extra_columns,
         }
         return (json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False) + "\n").encode(
             "utf-8"
@@ -132,7 +299,12 @@ class DatasetManifest:
 
     @classmethod
     def from_json_bytes(cls, raw: bytes) -> DatasetManifest:
-        """Strict parse: unknown/missing keys or a wrong schema version fail."""
+        """Strict parse feeding the shared constructor validation.
+
+        JSON types are required exactly as serialized — nothing is repaired
+        with ``str(...)`` or numeric coercion. Unknown keys, missing keys,
+        and every invalid field are rejected.
+        """
         try:
             payload: Any = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -140,71 +312,51 @@ class DatasetManifest:
         if not isinstance(payload, dict):
             raise ValueError("manifest JSON must be an object")
 
-        expected_keys = {
-            "manifest_schema_version",
-            "package_version",
-            "base_asset",
-            "quote_asset",
-            "symbol",
-            "venue",
-            "market_type",
-            "candle_interval",
-            "timestamp_convention",
-            "source",
-            "raw_filename",
-            "raw_file_sha256",
-            "fingerprint_algorithm",
-            "content_fingerprint",
-            "row_count",
-            "first_open_time",
-            "last_open_time",
-            "canonical_filename",
-        }
         keys = set(payload)
-        if keys != expected_keys:
-            unknown = sorted(keys - expected_keys)
-            missing = sorted(expected_keys - keys)
+        if keys != _MANIFEST_KEYS:
+            unknown = sorted(keys - _MANIFEST_KEYS)
+            missing = sorted(_MANIFEST_KEYS - keys)
             raise ValueError(
                 f"manifest keys do not match schema: unknown={unknown}, missing={missing}"
             )
 
-        version = payload["manifest_schema_version"]
-        if version != MANIFEST_SCHEMA_VERSION:
-            raise ValueError(
-                f"unsupported manifest schema version {version!r}; "
-                f"this package reads version {MANIFEST_SCHEMA_VERSION}"
-            )
-        row_count = payload["row_count"]
-        if not isinstance(row_count, int) or row_count < 1:
-            raise ValueError(f"row_count must be a positive integer, got {row_count!r}")
+        interval_text = require_str("candle_interval", payload["candle_interval"])
         try:
-            interval = pd.Timedelta(str(payload["candle_interval"]))
-            first = pd.Timestamp(str(payload["first_open_time"]))
-            last = pd.Timestamp(str(payload["last_open_time"]))
+            interval = pd.Timedelta(interval_text)
         except ValueError as exc:
-            raise ValueError(f"manifest has unparseable interval or timestamps: {exc}") from exc
-        if first.tz is None or last.tz is None:
-            raise ValueError("manifest open times must be timezone-aware")
+            raise ValueError(f"candle_interval is unparseable: {interval_text!r}") from exc
+
+        timestamps: dict[str, pd.Timestamp] = {}
+        for label in ("first_open_time", "last_open_time"):
+            text = require_str(label, payload[label])
+            try:
+                timestamps[label] = pd.Timestamp(text)
+            except ValueError as exc:
+                raise ValueError(f"{label} is unparseable: {text!r}") from exc
 
         return cls(
-            manifest_schema_version=MANIFEST_SCHEMA_VERSION,
-            package_version=str(payload["package_version"]),
-            base_asset=str(payload["base_asset"]),
-            quote_asset=str(payload["quote_asset"]),
-            symbol=str(payload["symbol"]),
-            venue=str(payload["venue"]),
-            market_type=str(payload["market_type"]),
+            manifest_schema_version=payload["manifest_schema_version"],
+            package_version=payload["package_version"],
+            base_asset=payload["base_asset"],
+            quote_asset=payload["quote_asset"],
+            symbol=payload["symbol"],
+            venue=payload["venue"],
+            market_type=payload["market_type"],
             candle_interval=interval,
-            timestamp_convention=str(payload["timestamp_convention"]),
-            source=str(payload["source"]),
-            raw_filename=str(payload["raw_filename"]),
-            raw_file_sha256=str(payload["raw_file_sha256"]),
-            fingerprint_algorithm=str(payload["fingerprint_algorithm"]),
-            content_fingerprint=str(payload["content_fingerprint"]),
-            row_count=row_count,
-            first_open_time=first.tz_convert("UTC"),
-            last_open_time=last.tz_convert("UTC"),
-            canonical_filename=str(payload["canonical_filename"]),
+            timestamp_convention=payload["timestamp_convention"],
+            source=payload["source"],
+            raw_filename=payload["raw_filename"],
+            raw_file_sha256=payload["raw_file_sha256"],
+            fingerprint_algorithm=payload["fingerprint_algorithm"],
+            content_fingerprint=payload["content_fingerprint"],
+            row_count=payload["row_count"],
+            first_open_time=timestamps["first_open_time"],
+            last_open_time=timestamps["last_open_time"],
+            canonical_filename=payload["canonical_filename"],
+            quality_report_filename=payload["quality_report_filename"],
+            quality_report_sha256=payload["quality_report_sha256"],
+            assume_utc=payload["assume_utc"],
+            allow_extra_columns=payload["allow_extra_columns"],
         )
 
 
@@ -215,6 +367,10 @@ def build_manifest(
     raw_filename: str,
     raw_file_sha256: str,
     canonical_filename: str,
+    quality_report_filename: str,
+    quality_report_sha256: str,
+    assume_utc: bool,
+    allow_extra_columns: bool,
 ) -> DatasetManifest:
     """Compose the manifest for a validated canonical frame."""
     return DatasetManifest(
@@ -236,6 +392,10 @@ def build_manifest(
         first_open_time=canonical.index[0],
         last_open_time=canonical.index[-1],
         canonical_filename=canonical_filename,
+        quality_report_filename=quality_report_filename,
+        quality_report_sha256=quality_report_sha256,
+        assume_utc=assume_utc,
+        allow_extra_columns=allow_extra_columns,
     )
 
 
@@ -262,6 +422,11 @@ def content_fingerprint(canonical: pd.DataFrame) -> str:
         values = "|".join((float(column[position]) + 0.0).hex() for column in columns)
         hasher.update(f"{int(epoch_ns[position])}|{values}\n".encode("ascii"))
     return "sha256:" + hasher.hexdigest()
+
+
+def sha256_bytes(data: bytes) -> str:
+    """SHA-256 hex digest of an in-memory byte snapshot."""
+    return hashlib.sha256(data).hexdigest()
 
 
 def sha256_file(path: str | Path) -> str:

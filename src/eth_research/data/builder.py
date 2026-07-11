@@ -43,11 +43,11 @@ from pathlib import Path
 import pandas as pd
 
 from eth_research.data.provenance import (
-    FINGERPRINT_ALGORITHM,
     DatasetIdentity,
     DatasetManifest,
     build_manifest,
     content_fingerprint,
+    sha256_bytes,
     sha256_file,
 )
 from eth_research.data.quality import QualityReport, QualityThresholds, audit_frame
@@ -194,19 +194,24 @@ def build_canonical_dataset(
             "Pass overwrite=True to replace them explicitly."
         )
 
+    quality_bytes = report.to_json_bytes()
     manifest = build_manifest(
         canonical,
         identity,
         raw_filename=source.name,
         raw_file_sha256=raw_sha256,
         canonical_filename=canonical_path.name,
+        quality_report_filename=quality_path.name,
+        quality_report_sha256=sha256_bytes(quality_bytes),
+        assume_utc=assume_utc,
+        allow_extra_columns=allow_extra_columns,
     )
 
     directory.mkdir(parents=True, exist_ok=True)
     parquet_buffer = io.BytesIO()
     canonical.to_parquet(parquet_buffer)
     _write_atomic(canonical_path, parquet_buffer.getvalue())
-    _write_atomic(quality_path, report.to_json_bytes())
+    _write_atomic(quality_path, quality_bytes)
     _write_atomic(manifest_path, manifest.to_json_bytes())
 
     return BuildResult(
@@ -230,12 +235,6 @@ def load_canonical_dataset(manifest_path: str | Path) -> LoadedDataset:
         manifest = DatasetManifest.from_json_bytes(path.read_bytes())
     except ValueError as exc:
         raise DatasetVerificationError(f"invalid manifest {path.name!r}: {exc}") from exc
-
-    if manifest.fingerprint_algorithm != FINGERPRINT_ALGORITHM:
-        raise DatasetVerificationError(
-            f"unsupported fingerprint algorithm {manifest.fingerprint_algorithm!r}; "
-            f"this package computes {FINGERPRINT_ALGORITHM!r}"
-        )
 
     canonical_path = path.parent / manifest.canonical_filename
     if not canonical_path.exists():

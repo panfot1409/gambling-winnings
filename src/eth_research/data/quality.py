@@ -26,6 +26,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
+from eth_research.data.provenance import require_bool, require_int, require_nonempty_str
 from eth_research.data.schema import OHLCV_COLUMNS, PRICE_COLUMNS, TIMESTAMP_COLUMN
 
 QUALITY_REPORT_SCHEMA_VERSION: int = 1
@@ -64,15 +65,66 @@ class QualityFinding:
     first_examples: tuple[str, ...]
 
 
+_REPORT_KEYS: frozenset[str] = frozenset(
+    {
+        "schema_version",
+        "row_count",
+        "expected_interval",
+        "thresholds",
+        "assume_utc",
+        "allow_extra_columns",
+        "error_finding_count",
+        "warning_finding_count",
+        "findings",
+    }
+)
+_FINDING_KEYS: frozenset[str] = frozenset(
+    {"code", "severity", "count", "description", "first_examples"}
+)
+
+
 @dataclass(frozen=True)
 class QualityReport:
-    """Immutable result of auditing one raw OHLCV frame."""
+    """Immutable result of auditing one raw OHLCV frame.
+
+    Records the two build flags that shaped the audit so the manifest can
+    bind the evidence to the exact audit configuration. Every field is
+    validated in ``__post_init__`` — the shared path for constructed and
+    parsed reports.
+    """
 
     schema_version: int
     row_count: int
     expected_interval: pd.Timedelta
     thresholds: QualityThresholds
+    assume_utc: bool
+    allow_extra_columns: bool
     findings: tuple[QualityFinding, ...]
+
+    def __post_init__(self) -> None:
+        version = require_int("schema_version", self.schema_version)
+        if version != QUALITY_REPORT_SCHEMA_VERSION:
+            raise ValueError(
+                f"unsupported quality report schema version {version!r}; "
+                f"this package reads version {QUALITY_REPORT_SCHEMA_VERSION}"
+            )
+        if require_int("row_count", self.row_count) < 0:
+            raise ValueError(f"row_count must be non-negative, got {self.row_count}")
+        if (
+            not isinstance(self.expected_interval, pd.Timedelta)
+            or pd.isna(self.expected_interval)
+            or self.expected_interval <= pd.Timedelta(0)
+        ):
+            raise ValueError(
+                f"expected_interval must be a positive Timedelta, got {self.expected_interval!r}"
+            )
+        if not isinstance(self.thresholds, QualityThresholds):
+            raise ValueError("thresholds must be a QualityThresholds instance")
+        require_bool("assume_utc", self.assume_utc)
+        require_bool("allow_extra_columns", self.allow_extra_columns)
+        for finding in self.findings:
+            if not isinstance(finding, QualityFinding):
+                raise ValueError("findings must be QualityFinding instances")
 
     @property
     def error_count(self) -> int:
@@ -100,6 +152,8 @@ class QualityReport:
                 "extreme_return": self.thresholds.extreme_return,
                 "extreme_range": self.thresholds.extreme_range,
             },
+            "assume_utc": self.assume_utc,
+            "allow_extra_columns": self.allow_extra_columns,
             "error_finding_count": len(self.error_codes),
             "warning_finding_count": sum(1 for f in self.findings if f.severity == "warning"),
             "findings": [
@@ -116,6 +170,89 @@ class QualityReport:
         return (json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False) + "\n").encode(
             "utf-8"
         )
+
+    @classmethod
+    def from_json_bytes(cls, raw: bytes) -> QualityReport:
+        """Strict parse: exact keys, exact JSON types, no repair."""
+        try:
+            payload: Any = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"quality report is not valid JSON: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("quality report JSON must be an object")
+        keys = set(payload)
+        if keys != _REPORT_KEYS:
+            unknown = sorted(keys - _REPORT_KEYS)
+            missing = sorted(_REPORT_KEYS - keys)
+            raise ValueError(
+                f"quality report keys do not match schema: unknown={unknown}, missing={missing}"
+            )
+
+        interval_text = payload["expected_interval"]
+        if not isinstance(interval_text, str):
+            raise ValueError("expected_interval must be a string")
+        try:
+            interval = pd.Timedelta(interval_text)
+        except ValueError as exc:
+            raise ValueError(f"expected_interval is unparseable: {interval_text!r}") from exc
+
+        thresholds_payload = payload["thresholds"]
+        if not isinstance(thresholds_payload, dict) or set(thresholds_payload) != {
+            "extreme_return",
+            "extreme_range",
+        }:
+            raise ValueError("thresholds must contain exactly extreme_return and extreme_range")
+        limits: dict[str, float] = {}
+        for label in ("extreme_return", "extreme_range"):
+            value = thresholds_payload[label]
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise ValueError(f"thresholds.{label} must be a number, got {value!r}")
+            limits[label] = float(value)
+
+        findings_payload = payload["findings"]
+        if not isinstance(findings_payload, list):
+            raise ValueError("findings must be a list")
+        findings: list[QualityFinding] = []
+        for entry in findings_payload:
+            if not isinstance(entry, dict) or set(entry) != _FINDING_KEYS:
+                raise ValueError(
+                    f"finding entries must have exactly the keys {sorted(_FINDING_KEYS)}"
+                )
+            severity = entry["severity"]
+            if severity not in ("error", "warning"):
+                raise ValueError(f"finding severity must be 'error' or 'warning', got {severity!r}")
+            count = entry["count"]
+            if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+                raise ValueError(f"finding count must be a positive integer, got {count!r}")
+            examples = entry["first_examples"]
+            if not isinstance(examples, list) or not all(isinstance(e, str) for e in examples):
+                raise ValueError("finding first_examples must be a list of strings")
+            findings.append(
+                QualityFinding(
+                    code=require_nonempty_str("finding code", entry["code"]),
+                    severity=severity,
+                    count=count,
+                    description=require_nonempty_str("finding description", entry["description"]),
+                    first_examples=tuple(examples),
+                )
+            )
+
+        report = cls(
+            schema_version=payload["schema_version"],
+            row_count=payload["row_count"],
+            expected_interval=interval,
+            thresholds=QualityThresholds(**limits),
+            assume_utc=payload["assume_utc"],
+            allow_extra_columns=payload["allow_extra_columns"],
+            findings=tuple(findings),
+        )
+        error_findings = sum(1 for f in report.findings if f.severity == "error")
+        warning_findings = sum(1 for f in report.findings if f.severity == "warning")
+        if payload["error_finding_count"] != error_findings:
+            raise ValueError("error_finding_count does not match the findings list")
+        if payload["warning_finding_count"] != warning_findings:
+            raise ValueError("warning_finding_count does not match the findings list")
+        return report
 
 
 def _examples(items: list[str]) -> tuple[str, ...]:
@@ -143,6 +280,18 @@ def audit_frame(
     limits = thresholds if thresholds is not None else QualityThresholds()
     findings: list[QualityFinding] = []
 
+    def finish() -> QualityReport:
+        ordered = tuple(sorted(findings, key=lambda finding: (finding.severity, finding.code)))
+        return QualityReport(
+            schema_version=QUALITY_REPORT_SCHEMA_VERSION,
+            row_count=len(raw),
+            expected_interval=expected_interval,
+            thresholds=limits,
+            assume_utc=assume_utc,
+            allow_extra_columns=allow_extra_columns,
+            findings=ordered,
+        )
+
     duplicated_names = [str(c) for c in raw.columns[raw.columns.duplicated()]]
     if duplicated_names:
         findings.append(
@@ -154,7 +303,7 @@ def audit_frame(
                 first_examples=_examples(sorted(set(duplicated_names))),
             )
         )
-        return _finish(raw, expected_interval, limits, findings)
+        return finish()
 
     findings.extend(_column_findings(raw, allow_extra_columns=allow_extra_columns))
     timestamps = _timestamp_findings(raw, findings, assume_utc=assume_utc)
@@ -167,23 +316,7 @@ def audit_frame(
         if not any(finding.severity == "error" for finding in findings):
             _outlier_findings(values, timestamps, limits, findings)
 
-    return _finish(raw, expected_interval, limits, findings)
-
-
-def _finish(
-    raw: pd.DataFrame,
-    expected_interval: pd.Timedelta,
-    limits: QualityThresholds,
-    findings: list[QualityFinding],
-) -> QualityReport:
-    ordered = tuple(sorted(findings, key=lambda finding: (finding.severity, finding.code)))
-    return QualityReport(
-        schema_version=QUALITY_REPORT_SCHEMA_VERSION,
-        row_count=len(raw),
-        expected_interval=expected_interval,
-        thresholds=limits,
-        findings=ordered,
-    )
+    return finish()
 
 
 def _column_findings(raw: pd.DataFrame, *, allow_extra_columns: bool) -> list[QualityFinding]:
