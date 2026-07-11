@@ -734,19 +734,9 @@ def derive_daily_ohlcv(
 
     csv_bytes = _derived_csv_bytes(combined)
 
-    # Belt and braces: refuse to publish evidence for files that changed
-    # between the snapshot hash and now.
-    for request, _, digest in snapshots:
-        if sha256_file(request.path) != digest:
-            raise AcquisitionError(
-                f"raw response {request.path.name!r} changed during derivation; "
-                "nothing was written — re-run against settled files"
-            )
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    write_atomic(output_path, csv_bytes)
-
-    return AcquisitionEvidence(
+    # Assemble and validate the evidence record *before* touching the
+    # filesystem: a failure here must leave nothing behind.
+    evidence = AcquisitionEvidence(
         acquisition_schema_version=ACQUISITION_SCHEMA_VERSION,
         package_version=__version__,
         venue=COINBASE_VENUE,
@@ -767,6 +757,19 @@ def derive_daily_ohlcv(
         first_open_time=pd.Timestamp(combined[0].open_time_s, unit="s", tz="UTC"),
         last_open_time=pd.Timestamp(combined[-1].open_time_s, unit="s", tz="UTC"),
     )
+
+    # Belt and braces: refuse to publish evidence for files that changed
+    # between the snapshot hash and now.
+    for request, _, digest in snapshots:
+        if sha256_file(request.path) != digest:
+            raise AcquisitionError(
+                f"raw response {request.path.name!r} changed during derivation; "
+                "nothing was written — re-run against settled files"
+            )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_atomic(output_path, csv_bytes)
+    return evidence
 
 
 def write_acquisition_evidence(

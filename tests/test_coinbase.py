@@ -451,6 +451,28 @@ class TestDeriveDailyOhlcv:
         )
         assert list(tmp_path.glob("*.tmp")) == []
 
+    def test_internal_failure_after_hashing_leaves_no_output_behind(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Red-team: a failure while assembling the evidence record must not
+        # leave a freshly written CSV behind as partial publication state.
+        requests = standard_requests(tmp_path)
+        output = tmp_path / "derived.csv"
+
+        def exploding(**kwargs: Any) -> Any:
+            raise RuntimeError("simulated evidence construction failure")
+
+        monkeypatch.setattr(coinbase, "AcquisitionEvidence", exploding)
+        with pytest.raises(RuntimeError, match="simulated evidence construction"):
+            derive_daily_ohlcv(
+                requests,
+                overall_start=day("2024-01-01"),
+                overall_end=day("2024-01-07"),
+                output_csv=output,
+            )
+        assert not output.exists()
+        assert list(tmp_path.glob("*.tmp")) == []
+
     def test_source_mutation_during_derivation_aborts_before_writing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
