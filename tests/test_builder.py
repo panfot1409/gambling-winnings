@@ -368,3 +368,90 @@ def test_snapshot_parse_ignores_later_disk_state(tmp_path: Path, canonical: pd.D
     result = build_canonical_dataset(source, IDENTITY, tmp_path / "out")
     # The manifest hash describes exactly the bytes that were parsed.
     assert result.manifest.raw_file_sha256 == sha256_bytes(source.read_bytes())
+
+
+def one_shot_write_failure(target_suffix: str) -> object:
+    """A _write_atomic wrapper that fails once for the matching artifact."""
+    import eth_research.data.builder as builder_module
+
+    real_write = builder_module._write_atomic
+    fired = {"done": False}
+
+    def wrapper(path: Path, data: bytes) -> None:
+        if not fired["done"] and path.name.endswith(target_suffix):
+            fired["done"] = True
+            raise OSError(f"injected failure writing {path.name}")
+        real_write(path, data)
+
+    return wrapper
+
+
+ARTIFACT_SUFFIXES = [".canonical.parquet", ".quality.json", ".manifest.json"]
+
+
+@pytest.mark.parametrize("suffix", ARTIFACT_SUFFIXES)
+def test_publication_failure_leaves_no_artifacts_on_fresh_build(
+    tmp_path: Path,
+    canonical: pd.DataFrame,
+    monkeypatch: pytest.MonkeyPatch,
+    suffix: str,
+) -> None:
+    import eth_research.data.builder as builder_module
+
+    source = write_csv(canonical, tmp_path / "raw.csv")
+    out = tmp_path / "out"
+    monkeypatch.setattr(builder_module, "_write_atomic", one_shot_write_failure(suffix))
+    with pytest.raises(DatasetBuildError, match="publication failed and was rolled back"):
+        build_canonical_dataset(source, IDENTITY, out)
+    assert list(out.iterdir()) == []  # no finals, no temps, no backups
+
+
+@pytest.mark.parametrize("suffix", ARTIFACT_SUFFIXES)
+def test_publication_failure_preserves_previous_dataset_on_overwrite(
+    tmp_path: Path,
+    canonical: pd.DataFrame,
+    monkeypatch: pytest.MonkeyPatch,
+    suffix: str,
+) -> None:
+    import eth_research.data.builder as builder_module
+
+    out = tmp_path / "out"
+    first = build_canonical_dataset(write_csv(canonical, tmp_path / "raw.csv"), IDENTITY, out)
+    before = {p.name: p.read_bytes() for p in out.iterdir()}
+
+    # A different input, so every artifact's bytes would change.
+    tweaked = canonical.copy()
+    closes = tweaked["close"].to_numpy(dtype=float, copy=True)
+    closes[3] *= 1.001
+    tweaked["close"] = closes
+    volumes = tweaked["volume"].to_numpy(dtype=float, copy=True)
+    volumes[5] = 0.0
+    tweaked["volume"] = volumes
+    source2 = write_csv(tweaked, tmp_path / "raw2.csv")
+
+    monkeypatch.setattr(builder_module, "_write_atomic", one_shot_write_failure(suffix))
+    with pytest.raises(DatasetBuildError, match="publication failed and was rolled back"):
+        build_canonical_dataset(source2, IDENTITY, out, overwrite=True)
+
+    after = {p.name: p.read_bytes() for p in out.iterdir()}
+    assert after == before  # previous dataset byte-identical, nothing extra
+    loaded = load_canonical_dataset(first.manifest_path)  # and still verifiable
+    assert loaded.manifest == first.manifest
+
+
+def test_successful_overwrite_replaces_all_three_artifacts(
+    tmp_path: Path, canonical: pd.DataFrame
+) -> None:
+    out = tmp_path / "out"
+    build_canonical_dataset(write_csv(canonical, tmp_path / "raw.csv"), IDENTITY, out)
+
+    tweaked = canonical.copy()
+    closes = tweaked["close"].to_numpy(dtype=float, copy=True)
+    closes[3] *= 1.001
+    tweaked["close"] = closes
+    source2 = write_csv(tweaked, tmp_path / "raw2.csv")
+    second = build_canonical_dataset(source2, IDENTITY, out, overwrite=True)
+
+    loaded = load_canonical_dataset(second.manifest_path)
+    assert loaded.manifest.raw_filename == "raw2.csv"
+    assert len(list(out.iterdir())) == 3

@@ -18,9 +18,13 @@ Guarantees:
   transformation is the documented canonicalization: UTC/ns timestamps,
   float64 columns, and — only with ``allow_extra_columns=True`` —
   dropping columns outside the OHLCV set);
-* writes are atomic (temp file in the target directory, fsync, then
-  ``os.replace``); existing artifacts are never overwritten unless
-  ``overwrite=True`` is passed explicitly;
+* publication is transactional: all artifact bytes are precomputed, each
+  file is written atomically (temp file, fsync, ``os.replace``), and a
+  failure mid-publication rolls back — a fresh build leaves no final
+  artifacts, an overwrite leaves the previous complete dataset
+  byte-identical and verifiable, and no temporary or backup files remain;
+  existing artifacts are never overwritten unless ``overwrite=True`` is
+  passed explicitly;
 * no network access: URL-like sources are rejected outright. Generated
   artifacts belong under the git-ignored ``data/`` directory and are
   never committed.
@@ -40,6 +44,7 @@ import contextlib
 import io
 import os
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -224,6 +229,12 @@ def build_canonical_dataset(
         allow_extra_columns=allow_extra_columns,
     )
 
+    # Precompute every artifact byte blob before touching the filesystem.
+    parquet_buffer = io.BytesIO()
+    canonical.to_parquet(parquet_buffer)
+    parquet_bytes = parquet_buffer.getvalue()
+    manifest_bytes = manifest.to_json_bytes()
+
     # Belt and braces on top of the snapshot: if the on-disk source no longer
     # matches the hashed bytes, someone changed it mid-build — refuse to
     # publish rather than ship provenance for a file that no longer exists.
@@ -234,11 +245,13 @@ def build_canonical_dataset(
         )
 
     directory.mkdir(parents=True, exist_ok=True)
-    parquet_buffer = io.BytesIO()
-    canonical.to_parquet(parquet_buffer)
-    _write_atomic(canonical_path, parquet_buffer.getvalue())
-    _write_atomic(quality_path, quality_bytes)
-    _write_atomic(manifest_path, manifest.to_json_bytes())
+    _publish_atomically(
+        [
+            (canonical_path, parquet_bytes),
+            (quality_path, quality_bytes),
+            (manifest_path, manifest_bytes),  # manifest last: completeness marker
+        ]
+    )
 
     return BuildResult(
         canonical_path=canonical_path,
@@ -330,6 +343,37 @@ def _verify_quality_report(directory: Path, manifest: DatasetManifest) -> Qualit
                 f"{manifest_value!r}, quality report says {report_value!r}"
             )
     return report
+
+
+def _publish_atomically(artifacts: Sequence[tuple[Path, bytes]]) -> None:
+    """All-or-nothing publication of precomputed artifact bytes.
+
+    Each artifact is written atomically, in order (the manifest goes last as
+    the completeness marker). If any write fails, artifacts already
+    published in this batch are rolled back — restored to their previous
+    bytes when overwriting an existing dataset, removed when newly created.
+    Prior state is held in memory, so no temporary or backup files remain
+    either way.
+    """
+    previous: dict[Path, bytes | None] = {
+        path: (path.read_bytes() if path.exists() else None) for path, _ in artifacts
+    }
+    published: list[Path] = []
+    try:
+        for path, data in artifacts:
+            _write_atomic(path, data)
+            published.append(path)
+    except BaseException as exc:
+        for path in reversed(published):
+            original = previous[path]
+            with contextlib.suppress(OSError):
+                if original is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    _write_atomic(path, original)
+        raise DatasetBuildError(
+            f"publication failed and was rolled back; no partial dataset remains ({exc})"
+        ) from exc
 
 
 def _write_atomic(path: Path, data: bytes) -> None:
