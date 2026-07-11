@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from eth_research.data.builder import BuildResult, build_canonical_dataset
+from eth_research.data.coinbase import (
+    AcquisitionEvidence,
+    ChunkRequest,
+    derive_daily_ohlcv,
+    write_acquisition_evidence,
+)
+from eth_research.data.provenance import DatasetIdentity, sha256_file
 from eth_research.data.synthetic import make_synthetic_ohlcv
 
 
@@ -58,3 +69,95 @@ def frame_from_closes() -> Callable[[Sequence[float]], pd.DataFrame]:
         return _build_frame(opens, closes)
 
     return build
+
+
+@dataclass(frozen=True)
+class CoinbasePipeline:
+    """A synthetic end-to-end fixture: chunks -> derived CSV -> canonical dataset.
+
+    Everything here is deterministic synthetic data explicitly labelled as
+    such in the dataset identity's ``source``; it exists so the Milestone 2B
+    provenance/evaluation chain can be exercised without any real market
+    data.
+    """
+
+    chunk_dir: Path
+    derived_csv: Path
+    evidence: AcquisitionEvidence
+    evidence_path: Path
+    build: BuildResult
+    identity: DatasetIdentity
+
+    @property
+    def manifest_sha256(self) -> str:
+        return sha256_file(self.build.manifest_path)
+
+    @property
+    def evidence_sha256(self) -> str:
+        return sha256_file(self.evidence_path)
+
+
+def _synthetic_coinbase_rows(start: pd.Timestamp, days: int) -> list[list[float | int]]:
+    """Deterministic plausible daily candles in Coinbase field order (ascending)."""
+    rows: list[list[float | int]] = []
+    for i in range(days):
+        open_ = 100.0 + (i % 17) - (i % 5)
+        close = open_ + ((i % 3) - 1) * 2.0
+        high = max(open_, close) + 1.5
+        low = min(open_, close) - 1.25
+        volume = 10.0 + (i % 7)
+        time_s = int(start.as_unit("ns").value) // 10**9 + i * 86_400
+        rows.append([time_s, low, high, open_, close, volume])
+    return rows
+
+
+@pytest.fixture
+def coinbase_pipeline(tmp_path: Path) -> CoinbasePipeline:
+    """120 synthetic days frozen through the full acquisition -> M2A chain."""
+    start = pd.Timestamp("2024-01-01", tz="UTC")
+    total_days = 120
+    chunk_days = 60
+    chunk_dir = tmp_path / "raw"
+    chunk_dir.mkdir()
+    requests: list[ChunkRequest] = []
+    for position in range(0, total_days, chunk_days):
+        window_start = start + pd.Timedelta(days=position)
+        window_end = window_start + pd.Timedelta(days=chunk_days)
+        rows = _synthetic_coinbase_rows(window_start, chunk_days)
+        path = chunk_dir / f"chunk_{position:03d}.json"
+        path.write_bytes(json.dumps(rows).encode("ascii"))
+        requests.append(
+            ChunkRequest(
+                path=path,
+                window_start=window_start,
+                window_end=window_end,
+                requested_start=window_start.isoformat(),
+                requested_end=(window_end - pd.Timedelta(days=1)).isoformat(),
+                retrieved_at=pd.Timestamp("2026-07-11T12:00:00+00:00"),
+            )
+        )
+    derived_csv = tmp_path / "synthetic-eth-usd-daily.csv"
+    evidence = derive_daily_ohlcv(
+        requests,
+        overall_start=start,
+        overall_end=start + pd.Timedelta(days=total_days),
+        output_csv=derived_csv,
+    )
+    evidence_path = tmp_path / "acquisition_evidence.json"
+    write_acquisition_evidence(evidence, evidence_path)
+    identity = DatasetIdentity(
+        quote_asset="USD",
+        symbol="ETH-USD",
+        venue="coinbase-exchange",
+        interval=pd.Timedelta(days=1),
+        source="synthetic fixture — deterministic fake candles, not real market data",
+    )
+    build = build_canonical_dataset(derived_csv, identity, tmp_path / "datasets")
+    return CoinbasePipeline(
+        chunk_dir=chunk_dir,
+        derived_csv=derived_csv,
+        evidence=evidence,
+        evidence_path=evidence_path,
+        build=build,
+        identity=identity,
+    )
