@@ -1,6 +1,7 @@
 # Implementation Plan — ETH Trading Algorithm Research
 
-_Last updated: 2026-07-11_
+_Last updated: 2026-07-11 (revised after the Milestone 1 correctness
+remediation — see [REMEDIATION.md](REMEDIATION.md))_
 
 ## 1. Purpose
 
@@ -21,15 +22,17 @@ The following are deliberately **out of scope** at every milestone:
 - No order routing or execution infrastructure.
 
 The package must never gain a code path that can move money. The backtest
-engine enforces the no-leverage constraint by rejecting positions outside
-`[0, 1]`.
+engine enforces the constraint structurally: targets must be exactly binary
+`{0, 1}` (cash / fully long), cash can never go materially negative, and
+ETH quantity can never go negative — no borrowing, no hidden leverage.
 
 ## 3. Guiding principles
 
 1. **No look-ahead.** A signal at bar `t` may use bars `≤ t` only; the
-   engine executes it on bar `t + 1`. Regression tests enforce this.
-2. **Costs are first-class.** Every backtest applies fees and slippage by
-   default; frictionless runs must be requested explicitly.
+   engine executes it at the open of bar `t + 1`. Regression tests enforce
+   this, including that the `close[t] -> open[t+1]` gap cannot be captured.
+2. **Costs are first-class.** Every backtest applies fees and directional
+   slippage by default; frictionless runs must be requested explicitly.
 3. **Chronological evaluation.** Train → validation → test, ordered in time,
    never shuffled. The test set is reserved for final evaluations.
 4. **Reproducibility.** Deterministic seeds, typed code, pure functions,
@@ -42,30 +45,45 @@ engine enforces the no-leverage constraint by rejecting positions outside
 ```
 src/eth_research/
     data/
-        schema.py      # validated OHLCV schema -> canonical frame format
+        schema.py      # strict OHLCV schema -> canonical frame format
         load.py        # CSV / Parquet -> validated frame
         synthetic.py   # deterministic synthetic OHLCV for tests/examples
-    splits.py          # chronological train/validation/test splits
+    splits.py          # chronological splits + warm-up context helpers
     strategies/
         base.py        # Strategy interface + timing contract
         buy_and_hold.py
         moving_average.py
-    backtest.py        # vectorized engine: execution lag, fees, slippage
-    metrics.py         # return/risk metrics + performance summary
+    backtest.py        # bar-by-bar portfolio engine: open fills, fees, ledger
+    metrics.py         # equity-curve metrics + performance summary
 ```
 
 Data flow: `load → validate → split → strategy signals → backtest → metrics`.
 
 ### Conventions
 
-- Timestamps are timezone-aware **UTC**; each row is a completed bar and the
-  index is unique and strictly increasing.
-- Returns are **close-to-close** simple returns.
-- Positions are fractions of equity in `[0, 1]` (0 = cash, 1 = fully long).
-- Costs are proportional: `(fee_rate + slippage_rate) × |Δposition|`,
-  charged in the bar where the trade settles.
-- Annualization uses **365.25 days** per year (crypto trades continuously;
-  252-day equity conventions do not apply).
+- Timestamps are candle **open times**, timezone-aware **UTC**
+  (`datetime64[ns, UTC]`); the index is unique, strictly increasing, and
+  regularly spaced. Validation rejects unsorted data (never sorts), rejects
+  naive timestamps unless `assume_utc=True`, and rejects missing candles
+  and irregular gaps (never fills them).
+- Execution: the target decided from data through `close[t-1]` fills at
+  `open[t]` — buys at `open[t] * (1 + slippage_rate)`, sells at
+  `open[t] * (1 - slippage_rate)`, fee = fill notional × `fee_rate`.
+  Equity is marked at `close[t]` as `cash + quantity × close[t]`.
+- Accounting is exact long/cash bookkeeping with an immutable fill ledger.
+  Targets are binary `{0, 1}` in Milestone 1 — no fractional weights until
+  fractional rebalancing is implemented exactly.
+- Buy-and-hold enters **ex ante at the first available open** (tested).
+- Warm-up context: validation may see trailing train rows and test may see
+  trailing train/validation rows for indicator warm-up only — zero P&L.
+- Terminal positions are marked to market at the last close, never
+  force-liquidated; a hypothetical liquidation value is reported.
+- Metrics derive from the reconciled equity curve; CAGR uses the recorded
+  start/end times; Sharpe/Sortino annualize only from the validated regular
+  interval or an explicit setting. Annualization uses **365.25 days** per
+  year (crypto trades continuously; 252-day equity conventions do not
+  apply). Turnover = traded notional / initial cash; trade count =
+  executed fills.
 
 ## 5. Milestone 1 — Foundations (this milestone)
 
@@ -74,19 +92,21 @@ Deliverables, each with tests:
 | #  | Deliverable                                                                | Where                        |
 |----|----------------------------------------------------------------------------|------------------------------|
 | 1  | Scaffolding: Python 3.12+, src layout, pytest, ruff, mypy (strict)         | `pyproject.toml`             |
-| 2  | Validated OHLCV schema: UTC index, positive prices, OHLC consistency, aggregated error reporting | `data/schema.py` |
-| 3  | Historical data loading from CSV and Parquet (incl. epoch timestamps)      | `data/load.py`               |
+| 2  | Strict OHLCV schema: candle-open timestamps, UTC, no silent sorting, regular-interval/gap rejection, aggregated error reporting | `data/schema.py` |
+| 3  | Historical data loading from CSV and Parquet (incl. unambiguous epoch timestamps) | `data/load.py`         |
 | 4  | Deterministic synthetic OHLCV generator (keeps market data out of the repo) | `data/synthetic.py`         |
-| 5  | Chronological train/validation/test splits                                 | `splits.py`                  |
-| 6  | Buy-and-hold benchmark                                                      | `strategies/buy_and_hold.py` |
+| 5  | Chronological train/validation/test splits + warm-up context helpers       | `splits.py`                  |
+| 6  | Buy-and-hold benchmark with explicit ex-ante first-open entry              | `strategies/buy_and_hold.py` |
 | 7  | Simple moving-average (SMA) crossover strategy, fixed parameters           | `strategies/moving_average.py` |
-| 8  | Vectorized backtester: one-bar execution lag, fees, slippage, no-leverage guard | `backtest.py`           |
-| 9  | Metrics: total return, CAGR, Sharpe, Sortino, max drawdown, turnover, trade count | `metrics.py`          |
-| 10 | Look-ahead bias regression tests (prefix invariance, future perturbation, execution lag, split chronology) | `tests/test_lookahead.py` |
+| 8  | Bar-by-bar portfolio engine: next-open fills, directional slippage, fee on notional, cash/ETH ledger, no-leverage invariants | `backtest.py` |
+| 9  | Equity-curve metrics: total return, CAGR (recorded start/end), Sharpe, Sortino, max drawdown, notional turnover, fill count | `metrics.py` |
+| 10 | Look-ahead bias regression tests (prefix invariance, future mutation, gap non-capture, split chronology, context leakage) | `tests/test_lookahead.py`, `tests/test_context.py` |
 | 11 | End-to-end example script and usage docs                                   | `examples/`                  |
+| 12 | CI (GitHub Actions, Python 3.12 + 3.13) with a frozen constraints file     | `.github/workflows/ci.yml`   |
 
 Explicitly deferred from Milestone 1: parameter optimization, machine
-learning, plotting, CLI, CI, walk-forward analysis.
+learning, plotting, CLI, walk-forward analysis, fractional position
+weights.
 
 ## 6. Milestone 2 — Evaluation hardening
 
@@ -94,14 +114,14 @@ learning, plotting, CLI, CI, walk-forward analysis.
   static split.
 - Parameter grid evaluation restricted to train/validation, with explicit
   "test set touched once" bookkeeping. Still no automated optimizers.
-- Warm-up carry-in: give strategies trailing history before a segment so
-  indicators are live from the segment's first bar.
-- Data-quality report: gaps, duplicate/irregular spacing, outlier bars,
-  zero-volume runs.
+- Fractional position weights with exact rebalancing accounting (removes
+  the Milestone 1 binary-target restriction).
+- Data-quality report: outlier bars, zero-volume runs, cross-file
+  consistency (hard gap/ordering rejection already ships in Milestone 1).
 - Richer cost model: bid/ask spread term and a simple volume-participation
   impact term.
 - Additional baselines: momentum, mean reversion, volatility targeting.
-- CI (GitHub Actions): ruff + mypy + pytest on push; coverage threshold.
+- Coverage threshold in CI.
 - Small CLI entry point (`eth-research backtest ...`).
 
 ## 7. Milestone 3 — Statistical robustness
@@ -124,16 +144,21 @@ Only after Milestones 2–3 are in place:
 ## 9. Testing strategy
 
 - **Unit tests** per module, including aggregated schema error reporting.
-- **Oracle tests**: the vectorized engine is checked bar-by-bar against a
-  hand-written Python loop on small handcrafted price paths.
+- **Hand-calculated ledger tests**: fills, fees, cash, and equity are
+  checked against numbers worked out by hand from the documented rules on
+  clean price paths — not against a second implementation of the same
+  formulas.
 - **Look-ahead guards**:
-  - prefix invariance — signals on `data[:t]` equal signals on full data;
-  - future perturbation — changing bars after `t` cannot change signals at
-    or before `t`;
-  - execution lag — a "perfect foresight" strategy that knows each bar's
-    return as it closes must still lose on an alternating series, because
-    the engine defers execution by one bar;
-  - splits are chronologically ordered, disjoint, and complete.
+  - prefix invariance — signals and engine results on `data[:t]` equal the
+    first `t` results on full data, bit for bit;
+  - future mutation — rewriting bars after `t` cannot change signals,
+    fills, or equity at or before `t`;
+  - execution timing — a "perfect foresight" strategy that knows each
+    bar's direction at its close captures at most one intrabar move
+    (fills happen at the next open), and an overnight gap after a signal
+    can never be captured;
+  - splits are chronologically ordered, disjoint, and complete; warm-up
+    context affects signals only, never P&L.
 - **Determinism**: synthetic data generation is seed-stable.
 
 ## 10. Quality gates

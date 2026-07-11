@@ -1,7 +1,10 @@
 """End-to-end example: buy-and-hold benchmark vs an SMA crossover on ETH data.
 
 Runs on a local CSV/Parquet OHLCV file when a path is given, otherwise on a
-deterministic synthetic series so the example works fully offline.
+deterministic synthetic series so the example works fully offline. When
+evaluating the validation or test segment, trailing rows from the preceding
+segments are passed to the engine as indicator warm-up context (signals
+only — they contribute no P&L).
 
 Usage:
     python examples/run_sma_backtest.py
@@ -11,6 +14,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+
+import pandas as pd
 
 from eth_research.backtest import CostModel, run_backtest
 from eth_research.data.load import load_ohlcv
@@ -67,6 +72,13 @@ def main() -> None:
         help="chronological segment to evaluate on (default: validation)",
     )
     parser.add_argument(
+        "--warmup-bars",
+        type=int,
+        default=None,
+        help="preceding rows passed as indicator warm-up context "
+        "(default: the slow SMA window; 0 disables)",
+    )
+    parser.add_argument(
         "--assume-utc",
         action="store_true",
         help="interpret timezone-naive file timestamps as UTC (explicit opt-in)",
@@ -80,20 +92,40 @@ def main() -> None:
         data = make_synthetic_ohlcv(n_periods=730, seed=42)
         source = "synthetic demo data (730 daily bars, seed 42)"
 
-    segment = data if args.segment == "full" else getattr(chronological_split(data), args.segment)
+    context: pd.DataFrame | None = None
+    if args.segment == "full":
+        segment = data
+    else:
+        splits = chronological_split(data)
+        print("Split boundaries (candle open times):")
+        for name, (first, last) in splits.boundaries().items():
+            print(f"  {name:<10} {first} .. {last}")
+        print()
+        segment = getattr(splits, args.segment)
+        warmup = args.slow if args.warmup_bars is None else args.warmup_bars
+        if warmup > 0:
+            if args.segment == "validation":
+                context = splits.validation_context(min(warmup, len(splits.train)))
+            elif args.segment == "test":
+                preceding = len(splits.train) + len(splits.validation)
+                context = splits.test_context(min(warmup, preceding))
 
     costs = CostModel(fee_rate=args.fee_bps / 10_000, slippage_rate=args.slippage_bps / 10_000)
 
     print(f"Data:    {source}")
     print(f"Segment: {args.segment} ({len(segment)} bars)")
+    print(f"Context: {0 if context is None else len(context)} warm-up bars (signals only, no P&L)")
     print(f"Costs:   {args.fee_bps:.1f} bps fee + {args.slippage_bps:.1f} bps slippage per fill")
+    print("Terminal positions are marked to market at the last close, not liquidated.")
     print()
 
     for strategy in (
         BuyAndHold(),
         MovingAverageCrossover(fast_window=args.fast, slow_window=args.slow),
     ):
-        result = run_backtest(segment, strategy, costs, initial_cash=args.initial_cash)
+        result = run_backtest(
+            segment, strategy, costs, initial_cash=args.initial_cash, context=context
+        )
         print_summary(summarize(result))
 
 
