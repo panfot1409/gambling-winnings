@@ -9,6 +9,17 @@ from eth_research.data.builder import (
     build_canonical_dataset,
     load_canonical_dataset,
 )
+from eth_research.data.coinbase import (
+    AcquisitionChunk,
+    AcquisitionError,
+    AcquisitionEvidence,
+    ChunkRequest,
+    derive_daily_ohlcv,
+    load_acquisition_evidence,
+    parse_candles_chunk,
+    verify_acquisition_evidence,
+    write_acquisition_evidence,
+)
 from eth_research.data.load import load_ohlcv
 from eth_research.data.provenance import (
     DatasetIdentity,
@@ -31,7 +42,11 @@ __all__ = [
     "OHLCV_COLUMNS",
     "PRICE_COLUMNS",
     "TIMESTAMP_COLUMN",
+    "AcquisitionChunk",
+    "AcquisitionError",
+    "AcquisitionEvidence",
     "BuildResult",
+    "ChunkRequest",
     "DatasetBuildError",
     "DatasetIdentity",
     "DatasetManifest",
@@ -44,10 +59,15 @@ __all__ = [
     "audit_ohlcv_file",
     "build_canonical_dataset",
     "content_fingerprint",
+    "derive_daily_ohlcv",
     "frame_interval",
+    "load_acquisition_evidence",
     "load_canonical_dataset",
     "load_ohlcv",
     "make_synthetic_ohlcv",
+    "parse_candles_chunk",
     "sha256_file",
     "validate_ohlcv",
+    "verify_acquisition_evidence",
+    "write_acquisition_evidence",
 ]
