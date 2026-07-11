@@ -26,6 +26,7 @@ from typing import Any
 
 import pandas as pd
 
+from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.lock import DatasetLock
 from eth_research.data.provenance import (
     require_hex64,
@@ -174,14 +175,10 @@ class ProtocolError(RuntimeError):
     """A protocol or result record is invalid or disagrees with its dataset."""
 
 
-def _reject_nonfinite_constant(text: str) -> float:
-    raise ValueError(f"non-finite JSON constant {text!r} is rejected")
-
-
 def _loads_strict(raw: bytes, what: str) -> Any:
     try:
-        return json.loads(raw.decode("utf-8"), parse_constant=_reject_nonfinite_constant)
-    except (UnicodeDecodeError, ValueError) as exc:
+        return strict_json_loads(raw)
+    except StrictJSONError as exc:
         raise ValueError(f"{what} is not valid JSON: {exc}") from exc
 
 

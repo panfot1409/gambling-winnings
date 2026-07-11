@@ -41,6 +41,7 @@ from typing import Any, Literal
 import pandas as pd
 
 from eth_research import __version__
+from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.schema import OHLCV_COLUMNS
 
 MANIFEST_SCHEMA_VERSION: int = 1
@@ -306,8 +307,8 @@ class DatasetManifest:
         and every invalid field are rejected.
         """
         try:
-            payload: Any = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            payload: Any = strict_json_loads(raw)
+        except StrictJSONError as exc:
             raise ValueError(f"manifest is not valid JSON: {exc}") from exc
         if not isinstance(payload, dict):
             raise ValueError("manifest JSON must be an object")

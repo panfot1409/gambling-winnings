@@ -155,10 +155,11 @@ class TestParseCandlesChunk:
         ],
     )
     def test_exponent_overflow_to_infinity_is_rejected(self, raw: bytes) -> None:
-        # json.loads("1e999") silently overflows to float infinity without
-        # triggering the NaN/Infinity literal rejection, so the number
-        # validator must check finiteness itself.
-        with pytest.raises(AcquisitionError, match="must be finite"):
+        # json.loads("1e999") silently overflows to float infinity. The strict
+        # decoder now rejects it at decode time; the field-level finiteness
+        # check remains as defense in depth. Either layer's message contains
+        # "finite".
+        with pytest.raises(AcquisitionError, match="finite"):
             parse_candles_chunk(raw, **window("1970-01-02", "1970-01-03"))
 
     def test_unaligned_epoch_is_rejected(self) -> None:

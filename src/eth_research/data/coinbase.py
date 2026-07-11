@@ -44,6 +44,7 @@ import pandas as pd
 
 from eth_research import __version__
 from eth_research._atomic import write_atomic
+from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.provenance import (
     require_bool,
     require_hex64,
@@ -419,8 +420,8 @@ class AcquisitionEvidence:
     def from_json_bytes(cls, raw: bytes) -> AcquisitionEvidence:
         """Strict parse feeding the shared constructor validation."""
         try:
-            payload: Any = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            payload: Any = strict_json_loads(raw)
+        except StrictJSONError as exc:
             raise ValueError(f"acquisition evidence is not valid JSON: {exc}") from exc
         if not isinstance(payload, dict):
             raise ValueError("acquisition evidence JSON must be an object")
@@ -487,10 +488,6 @@ def _check_tiling(
         )
 
 
-def _reject_nonfinite_constant(text: str) -> float:
-    raise ValueError(f"non-finite JSON constant {text!r} is rejected")
-
-
 def _require_json_int(label: str, value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{label} must be a JSON integer (bool is rejected), got {value!r}")
@@ -525,8 +522,8 @@ def parse_candles_chunk(
     """
     _check_window(window_start, window_end)
     try:
-        payload: Any = json.loads(raw.decode("utf-8"), parse_constant=_reject_nonfinite_constant)
-    except (UnicodeDecodeError, ValueError) as exc:
+        payload: Any = strict_json_loads(raw)
+    except StrictJSONError as exc:
         raise AcquisitionError(f"chunk is not valid JSON: {exc}") from exc
 
     if isinstance(payload, dict):

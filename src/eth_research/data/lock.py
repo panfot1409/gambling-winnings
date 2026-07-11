@@ -28,6 +28,7 @@ from typing import Any
 
 import pandas as pd
 
+from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.coinbase import AcquisitionEvidence
 from eth_research.data.provenance import (
     DatasetManifest,
@@ -165,8 +166,8 @@ class DatasetLock:
     def from_json_bytes(cls, raw: bytes) -> DatasetLock:
         """Strict parse feeding the shared constructor validation."""
         try:
-            payload: Any = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            payload: Any = strict_json_loads(raw)
+        except StrictJSONError as exc:
             raise ValueError(f"dataset lock is not valid JSON: {exc}") from exc
         if not isinstance(payload, dict):
             raise ValueError("dataset lock JSON must be an object")

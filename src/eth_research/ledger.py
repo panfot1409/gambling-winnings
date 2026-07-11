@@ -30,6 +30,7 @@ from typing import Any
 
 import pandas as pd
 
+from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.provenance import (
     require_hex64,
     require_int,
@@ -163,8 +164,8 @@ class LedgerEvent:
     def from_json_line(cls, line: bytes) -> LedgerEvent:
         """Strict parse of one ledger line feeding the shared constructor."""
         try:
-            payload: Any = json.loads(line.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            payload: Any = strict_json_loads(line)
+        except StrictJSONError as exc:
             raise ValueError(f"ledger line is not valid JSON: {exc}") from exc
         if not isinstance(payload, dict):
             raise ValueError("ledger line must be a JSON object")
