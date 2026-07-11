@@ -6,6 +6,7 @@ from eth_research.data.schema import (
     PRICE_COLUMNS,
     TIMESTAMP_COLUMN,
     SchemaError,
+    frame_interval,
     validate_ohlcv,
 )
 from eth_research.data.synthetic import make_synthetic_ohlcv
@@ -15,6 +16,7 @@ __all__ = [
     "PRICE_COLUMNS",
     "TIMESTAMP_COLUMN",
     "SchemaError",
+    "frame_interval",
     "load_ohlcv",
     "make_synthetic_ohlcv",
     "validate_ohlcv",

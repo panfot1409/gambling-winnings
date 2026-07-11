@@ -1,4 +1,4 @@
-"""Tests for OHLCV schema validation."""
+"""Tests for strict OHLCV schema validation."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from eth_research.data.schema import OHLCV_COLUMNS, SchemaError, validate_ohlcv
+from eth_research.data.schema import OHLCV_COLUMNS, SchemaError, frame_interval, validate_ohlcv
 
 
 def raw_frame(n: int = 6) -> pd.DataFrame:
-    """A well-formed raw frame with a ``timestamp`` column."""
+    """A well-formed raw frame with a timezone-aware ``timestamp`` column."""
     timestamps = pd.date_range("2024-01-01", periods=n, freq="1D", tz="UTC")
     open_ = np.linspace(100.0, 105.0, n) if n > 0 else np.array([], dtype=float)
     close = open_ + 0.5
@@ -52,11 +52,91 @@ def test_accepts_datetime_index_instead_of_column() -> None:
     pd.testing.assert_frame_equal(from_index, from_column)
 
 
-def test_naive_timestamps_are_assumed_utc() -> None:
+def test_naive_timestamps_rejected_by_default() -> None:
     frame = raw_frame()
     frame["timestamp"] = frame["timestamp"].dt.tz_localize(None)
+    with pytest.raises(SchemaError, match="timezone-naive"):
+        validate_ohlcv(frame)
+
+
+def test_naive_timestamps_require_explicit_utc_opt_in() -> None:
+    frame = raw_frame()
+    frame["timestamp"] = frame["timestamp"].dt.tz_localize(None)
+    validated = validate_ohlcv(frame, assume_utc=True)
+    pd.testing.assert_frame_equal(validated, validate_ohlcv(raw_frame()))
+
+
+def test_naive_datetime_index_rejected_by_default() -> None:
+    frame = raw_frame().set_index("timestamp")
+    assert isinstance(frame.index, pd.DatetimeIndex)
+    frame.index = frame.index.tz_localize(None)
+    with pytest.raises(SchemaError, match="timezone-naive"):
+        validate_ohlcv(frame)
+
+
+def test_aware_non_utc_timestamps_convert_without_opt_in() -> None:
+    frame = raw_frame()
+    frame["timestamp"] = frame["timestamp"].dt.tz_convert("Europe/Berlin")
     validated = validate_ohlcv(frame)
     pd.testing.assert_frame_equal(validated, validate_ohlcv(raw_frame()))
+
+
+def test_naive_textual_timestamps_rejected_by_default() -> None:
+    frame = raw_frame()
+    frame["timestamp"] = frame["timestamp"].dt.tz_localize(None).astype(str)
+    with pytest.raises(SchemaError, match="timezone-naive"):
+        validate_ohlcv(frame)
+
+
+def test_aware_textual_timestamps_accepted() -> None:
+    frame = raw_frame()
+    frame["timestamp"] = frame["timestamp"].astype(str)
+    validated = validate_ohlcv(frame)
+    pd.testing.assert_frame_equal(validated, validate_ohlcv(raw_frame()))
+
+
+def test_unsorted_rows_rejected_never_sorted() -> None:
+    shuffled = raw_frame().sample(frac=1, random_state=1)
+    with pytest.raises(SchemaError, match="not sorted"):
+        validate_ohlcv(shuffled)
+
+
+def test_missing_candle_rejected_when_inferring_interval() -> None:
+    frame = raw_frame(6).drop(index=3).reset_index(drop=True)
+    with pytest.raises(SchemaError, match="irregular candle intervals"):
+        validate_ohlcv(frame)
+
+
+def test_missing_candle_rejected_against_expected_interval() -> None:
+    frame = raw_frame(6).drop(index=3).reset_index(drop=True)
+    with pytest.raises(SchemaError, match="missing candles or gaps"):
+        validate_ohlcv(frame, expected_interval="1D")
+
+
+def test_wrong_expected_interval_rejected() -> None:
+    with pytest.raises(SchemaError, match="expected 0 days 01:00:00"):
+        validate_ohlcv(raw_frame(), expected_interval="1h")
+
+
+def test_matching_expected_interval_accepted() -> None:
+    validated = validate_ohlcv(raw_frame(), expected_interval="1D")
+    assert len(validated) == 6
+
+
+def test_non_positive_expected_interval_rejected() -> None:
+    with pytest.raises(ValueError, match="expected_interval must be positive"):
+        validate_ohlcv(raw_frame(), expected_interval="0s")
+
+
+def test_single_candle_has_no_interval_to_check() -> None:
+    validated = validate_ohlcv(raw_frame(1))
+    assert len(validated) == 1
+    with pytest.raises(ValueError, match="at least 2"):
+        frame_interval(validated)
+
+
+def test_frame_interval_of_validated_frame() -> None:
+    assert frame_interval(validate_ohlcv(raw_frame())) == pd.Timedelta("1D")
 
 
 def test_extra_columns_are_dropped() -> None:
@@ -149,18 +229,6 @@ def test_duplicate_timestamps_rejected() -> None:
         validate_ohlcv(frame)
 
 
-def test_unsorted_rows_are_sorted_by_default() -> None:
-    shuffled = raw_frame().sample(frac=1, random_state=1)
-    validated = validate_ohlcv(shuffled)
-    pd.testing.assert_frame_equal(validated, validate_ohlcv(raw_frame()))
-
-
-def test_unsorted_rows_rejected_when_sort_disabled() -> None:
-    shuffled = raw_frame().sample(frac=1, random_state=1)
-    with pytest.raises(SchemaError, match="not sorted"):
-        validate_ohlcv(shuffled, sort=False)
-
-
 def test_empty_frame_rejected() -> None:
     with pytest.raises(SchemaError, match="empty"):
         validate_ohlcv(raw_frame(0))
@@ -169,6 +237,14 @@ def test_empty_frame_rejected() -> None:
 def test_all_content_problems_reported_together() -> None:
     frame = raw_frame()
     frame.loc[3, "timestamp"] = frame.loc[2, "timestamp"]
+    frame.loc[1, "volume"] = -1.0
+    with pytest.raises(SchemaError) as excinfo:
+        validate_ohlcv(frame)
+    assert len(excinfo.value.problems) == 2
+
+
+def test_gap_and_value_problems_reported_together() -> None:
+    frame = raw_frame(6).drop(index=3).reset_index(drop=True)
     frame.loc[1, "volume"] = -1.0
     with pytest.raises(SchemaError) as excinfo:
         validate_ohlcv(frame)
