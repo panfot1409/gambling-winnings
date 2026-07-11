@@ -199,6 +199,22 @@ class TestTrainValidation:
         with pytest.raises(EvaluationError, match="dataset/protocol mismatch"):
             evaluate_train_validation(load_dataset(base), make_protocol(other))
 
+    def test_result_assembly_refuses_a_foreign_protocol(self, tmp_path: Path) -> None:
+        # Red-team: results must never bind one dataset's segments to a
+        # protocol registered for a different dataset.
+        base = build_coinbase_pipeline(tmp_path / "base")
+        other = build_coinbase_pipeline(tmp_path / "other", price_shift_from_row=0)
+        dataset = load_dataset(base)
+        segments = evaluate_train_validation(dataset, make_protocol(base))
+        with pytest.raises(EvaluationError, match="dataset/protocol mismatch"):
+            build_benchmark_results(
+                dataset,
+                make_protocol(other),
+                segments,
+                pre_registered_commit_sha="c" * 40,
+                test_evaluation_id=None,
+            )
+
 
 class TestResultAssemblyAndRendering:
     def test_train_validation_only_results_render_honestly(

@@ -296,6 +296,7 @@ def build_benchmark_results(
     test_evaluation_id: str | None,
 ) -> BenchmarkResults:
     """Assemble the validated result record from evaluated segments."""
+    _verify_dataset_matches_protocol(dataset, protocol)
     manifest = dataset.manifest
     warnings = tuple(
         QualityWarningSummary(
