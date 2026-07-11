@@ -131,11 +131,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from eth_research.data.coinbase import (
-    ChunkRequest,
-    derive_daily_ohlcv,
-    write_acquisition_evidence,
-)
+from eth_research.data.coinbase import ChunkRequest, publish_acquisition
 
 OVERALL_START = pd.Timestamp("2016-05-18T00:00:00Z")   # <- your value
 OVERALL_END = pd.Timestamp("2026-07-12T00:00:00Z")     # <- your value
@@ -165,13 +161,16 @@ while window < OVERALL_END:
     index += 1
     window = window_end
 
-evidence = derive_daily_ohlcv(
+# Transactional publication: the derived CSV and its evidence are written
+# together (evidence last as the completeness marker); a failure rolls back
+# so no orphan CSV without evidence can be left behind.
+evidence = publish_acquisition(
     requests,
     overall_start=OVERALL_START,
     overall_end=OVERALL_END,
-    output_csv="data/derived/coinbase-eth-usd-1d.csv",
+    derived_csv="data/derived/coinbase-eth-usd-1d.csv",
+    evidence_path="research/m2b/acquisition_evidence.json",
 )
-write_acquisition_evidence(evidence, "research/m2b/acquisition_evidence.json")
 print(evidence.derived_row_count, evidence.first_open_time, evidence.last_open_time)
 print("pre-start rows excluded:", evidence.total_rows_before_window)
 ```

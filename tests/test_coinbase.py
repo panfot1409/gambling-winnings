@@ -11,6 +11,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+import eth_research._atomic
 from eth_research.data import coinbase
 from eth_research.data.coinbase import (
     ADAPTER_TRANSFORMATIONS,
@@ -18,10 +19,12 @@ from eth_research.data.coinbase import (
     AcquisitionEvidence,
     ChunkRequest,
     DailyCandle,
+    acquisition_is_complete,
     canonical_utc_request,
     derive_daily_ohlcv,
     load_acquisition_evidence,
     parse_candles_chunk,
+    publish_acquisition,
     verify_acquisition_evidence,
     write_acquisition_evidence,
 )
@@ -523,6 +526,161 @@ def make_evidence(tmp_path: Path) -> tuple[AcquisitionEvidence, Path, Path]:
         output_csv=output,
     )
     return evidence, tmp_path, output
+
+
+class TestTransactionalPublication:
+    def test_low_level_two_step_can_orphan_a_csv(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Demonstrates the hazard the transactional op removes: with the
+        # low-level derive + separate evidence write, a failure writing the
+        # evidence leaves an orphan CSV behind.
+        requests = standard_requests(tmp_path)
+        csv = tmp_path / "d.csv"
+        ev = tmp_path / "e.json"
+        evidence = derive_daily_ohlcv(
+            requests, overall_start=day("2024-01-01"), overall_end=day("2024-01-07"), output_csv=csv
+        )
+        monkeypatch.setattr(
+            coinbase, "write_atomic", lambda *a, **k: (_ for _ in ()).throw(OSError("disk full"))
+        )
+        with pytest.raises(OSError, match="disk full"):
+            write_acquisition_evidence(evidence, ev)
+        assert csv.exists()
+        assert not ev.exists()  # orphan
+
+    def _requests(self, tmp_path: Path) -> Any:
+        return standard_requests(tmp_path)
+
+    def test_happy_path_publishes_both(self, tmp_path: Path) -> None:
+        csv = tmp_path / "out" / "d.csv"
+        ev = tmp_path / "out" / "e.json"
+        evidence = publish_acquisition(
+            self._requests(tmp_path),
+            overall_start=day("2024-01-01"),
+            overall_end=day("2024-01-07"),
+            derived_csv=csv,
+            evidence_path=ev,
+        )
+        assert csv.exists()
+        assert ev.exists()
+        assert load_acquisition_evidence(ev) == evidence
+        assert acquisition_is_complete(csv, ev)
+
+    def test_evidence_write_failure_rolls_back_csv(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        csv = tmp_path / "d.csv"
+        ev = tmp_path / "e.json"
+        real = eth_research._atomic.write_atomic
+
+        def failing(path: Path, data: bytes) -> None:
+            if path.suffix == ".json":
+                raise OSError("evidence write failed")
+            real(path, data)
+
+        monkeypatch.setattr(eth_research._atomic, "write_atomic", failing)
+        with pytest.raises(AcquisitionError, match="rolled back"):
+            publish_acquisition(
+                self._requests(tmp_path),
+                overall_start=day("2024-01-01"),
+                overall_end=day("2024-01-07"),
+                derived_csv=csv,
+                evidence_path=ev,
+            )
+        assert not csv.exists()  # no orphan
+        assert not ev.exists()
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    def test_csv_write_failure_leaves_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        csv = tmp_path / "d.csv"
+        ev = tmp_path / "e.json"
+
+        def failing(path: Path, data: bytes) -> None:
+            raise OSError("csv write failed")
+
+        monkeypatch.setattr(eth_research._atomic, "write_atomic", failing)
+        with pytest.raises(AcquisitionError, match="rolled back"):
+            publish_acquisition(
+                self._requests(tmp_path),
+                overall_start=day("2024-01-01"),
+                overall_end=day("2024-01-07"),
+                derived_csv=csv,
+                evidence_path=ev,
+            )
+        assert not csv.exists()
+        assert not ev.exists()
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    def test_overwrite_restores_previous_bytes_on_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        csv = tmp_path / "d.csv"
+        ev = tmp_path / "e.json"
+        publish_acquisition(
+            self._requests(tmp_path),
+            overall_start=day("2024-01-01"),
+            overall_end=day("2024-01-07"),
+            derived_csv=csv,
+            evidence_path=ev,
+        )
+        original_csv = csv.read_bytes()
+        original_ev = ev.read_bytes()
+        real = eth_research._atomic.write_atomic
+
+        def failing(path: Path, data: bytes) -> None:
+            if path.suffix == ".json":
+                raise OSError("evidence overwrite failed")
+            real(path, data)
+
+        monkeypatch.setattr(eth_research._atomic, "write_atomic", failing)
+        with pytest.raises(AcquisitionError, match="rolled back"):
+            publish_acquisition(
+                self._requests(tmp_path),
+                overall_start=day("2024-01-01"),
+                overall_end=day("2024-01-07"),
+                derived_csv=csv,
+                evidence_path=ev,
+                overwrite=True,
+            )
+        assert csv.read_bytes() == original_csv
+        assert ev.read_bytes() == original_ev
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    def test_refuses_preexisting_orphan_without_overwrite(self, tmp_path: Path) -> None:
+        csv = tmp_path / "d.csv"
+        ev = tmp_path / "e.json"
+        csv.write_bytes(b"stale orphan")
+        with pytest.raises(AcquisitionError, match="incomplete orphan"):
+            publish_acquisition(
+                self._requests(tmp_path),
+                overall_start=day("2024-01-01"),
+                overall_end=day("2024-01-07"),
+                derived_csv=csv,
+                evidence_path=ev,
+            )
+        assert csv.read_bytes() == b"stale orphan"
+
+    def test_refuses_preexisting_complete_pair_without_overwrite(self, tmp_path: Path) -> None:
+        csv = tmp_path / "d.csv"
+        ev = tmp_path / "e.json"
+        publish_acquisition(
+            self._requests(tmp_path),
+            overall_start=day("2024-01-01"),
+            overall_end=day("2024-01-07"),
+            derived_csv=csv,
+            evidence_path=ev,
+        )
+        with pytest.raises(AcquisitionError, match="completed acquisition"):
+            publish_acquisition(
+                self._requests(tmp_path),
+                overall_start=day("2024-01-01"),
+                overall_end=day("2024-01-07"),
+                derived_csv=csv,
+                evidence_path=ev,
+            )
 
 
 class TestAcquisitionEvidence:

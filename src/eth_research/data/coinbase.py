@@ -43,7 +43,7 @@ from typing import Any, NamedTuple
 import pandas as pd
 
 from eth_research import __version__
-from eth_research._atomic import write_atomic
+from eth_research._atomic import publish_atomically, write_atomic
 from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.provenance import (
     require_bool,
@@ -693,24 +693,17 @@ def _derived_csv_bytes(candles: list[DailyCandle]) -> bytes:
     return ("\n".join(lines) + "\n").encode("ascii")
 
 
-def derive_daily_ohlcv(
+def _compute_derivation(
     requests: list[ChunkRequest],
     *,
     overall_start: pd.Timestamp,
     overall_end: pd.Timestamp,
-    output_csv: str | Path,
-    overwrite: bool = False,
-) -> AcquisitionEvidence:
-    """Combine saved responses into one gap-free daily OHLCV CSV plus evidence.
+    derived_filename: str,
+) -> tuple[bytes, AcquisitionEvidence]:
+    """Pure computation: read/parse/combine raw chunks into (CSV bytes, evidence).
 
-    The request windows must exactly tile ``[overall_start, overall_end)``
-    half-open, in declared order, each at most :data:`MAX_WINDOW_DAYS`
-    daily buckets. The combined series must start exactly at
-    ``overall_start``, end exactly at ``overall_end - 1 day``, and contain
-    every day in between — any missing candle aborts with nothing written.
-    The CSV is written atomically; existing output is never overwritten
-    without ``overwrite=True``. Raw response files are never modified, and
-    a file that changes between hashing and publication aborts the run.
+    Reads and re-hashes the raw files but writes **nothing**. A raw file
+    that changes between its snapshot hash and the final re-hash aborts.
     """
     require_day_aligned_utc("overall_start", overall_start)
     require_day_aligned_utc("overall_end", overall_end)
@@ -731,16 +724,6 @@ def derive_daily_ohlcv(
         )
     except ValueError as exc:
         raise AcquisitionError(str(exc)) from exc
-
-    output_path = Path(output_csv)
-    if str(output_path).lower().startswith(_URL_SCHEMES):
-        raise AcquisitionError(f"output must be a local file, got {output_path}")
-    if output_path.suffix.lower() != ".csv":
-        raise AcquisitionError(f"output must be a .csv file, got {output_path.name!r}")
-    if output_path.exists() and not overwrite:
-        raise AcquisitionError(
-            f"refusing to overwrite existing {output_path}; pass overwrite=True explicitly"
-        )
 
     snapshots: list[tuple[ChunkRequest, bytes, str]] = []
     for request in requests:
@@ -777,9 +760,6 @@ def derive_daily_ohlcv(
     _check_daily_continuity(combined, start_s=start_s, end_s=end_s)
 
     csv_bytes = _derived_csv_bytes(combined)
-
-    # Assemble and validate the evidence record *before* touching the
-    # filesystem: a failure here must leave nothing behind.
     evidence = AcquisitionEvidence(
         acquisition_schema_version=ACQUISITION_SCHEMA_VERSION,
         package_version=__version__,
@@ -795,24 +775,153 @@ def derive_daily_ohlcv(
         overall_end=overall_end,
         chunks=tuple(chunks),
         total_rows_before_window=sum(chunk.rows_before_window for chunk in chunks),
-        derived_filename=output_path.name,
+        derived_filename=derived_filename,
         derived_sha256=sha256_bytes(csv_bytes),
         derived_row_count=len(combined),
         first_open_time=pd.Timestamp(combined[0].open_time_s, unit="s", tz="UTC"),
         last_open_time=pd.Timestamp(combined[-1].open_time_s, unit="s", tz="UTC"),
     )
 
-    # Belt and braces: refuse to publish evidence for files that changed
-    # between the snapshot hash and now.
+    # Belt and braces: refuse if any raw file changed between snapshot and now.
     for request, _, digest in snapshots:
         if sha256_file(request.path) != digest:
             raise AcquisitionError(
                 f"raw response {request.path.name!r} changed during derivation; "
                 "nothing was written — re-run against settled files"
             )
+    return csv_bytes, evidence
 
+
+def derive_daily_ohlcv(
+    requests: list[ChunkRequest],
+    *,
+    overall_start: pd.Timestamp,
+    overall_end: pd.Timestamp,
+    output_csv: str | Path,
+    overwrite: bool = False,
+) -> AcquisitionEvidence:
+    """Combine saved responses into one gap-free daily OHLCV CSV plus evidence.
+
+    Lower-level helper: writes only the CSV and returns the evidence object
+    (the caller persists it separately). For a crash-safe single operation
+    that publishes the CSV and its evidence together, use
+    :func:`publish_acquisition`.
+
+    The request windows must exactly tile ``[overall_start, overall_end)``
+    half-open, in declared order, each at most :data:`MAX_WINDOW_DAYS`
+    daily buckets. The combined series must start exactly at
+    ``overall_start``, end exactly at ``overall_end - 1 day``, and contain
+    every day in between — any missing candle aborts with nothing written.
+    The CSV is written atomically; existing output is never overwritten
+    without ``overwrite=True``. Raw response files are never modified, and
+    a file that changes between hashing and publication aborts the run.
+    """
+    output_path = Path(output_csv)
+    if str(output_path).lower().startswith(_URL_SCHEMES):
+        raise AcquisitionError(f"output must be a local file, got {output_path}")
+    if output_path.suffix.lower() != ".csv":
+        raise AcquisitionError(f"output must be a .csv file, got {output_path.name!r}")
+    if output_path.exists() and not overwrite:
+        raise AcquisitionError(
+            f"refusing to overwrite existing {output_path}; pass overwrite=True explicitly"
+        )
+
+    csv_bytes, evidence = _compute_derivation(
+        requests,
+        overall_start=overall_start,
+        overall_end=overall_end,
+        derived_filename=output_path.name,
+    )
+
+    # Assemble and validate the evidence record *before* touching the
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_atomic(output_path, csv_bytes)
+    return evidence
+
+
+def acquisition_is_complete(derived_csv: str | Path, evidence_path: str | Path) -> bool:
+    """True only when both artifacts exist and the evidence describes the CSV.
+
+    Distinguishes a completed acquisition from an incomplete orphan (a CSV
+    without its evidence, or an evidence file without its CSV, or a pair
+    that do not describe each other).
+    """
+    csv_path = Path(derived_csv)
+    ev_path = Path(evidence_path)
+    if not (csv_path.exists() and ev_path.exists()):
+        return False
+    try:
+        evidence = load_acquisition_evidence(ev_path)
+    except AcquisitionError:
+        return False
+    return evidence.derived_filename == csv_path.name and evidence.derived_sha256 == sha256_file(
+        csv_path
+    )
+
+
+def publish_acquisition(
+    requests: list[ChunkRequest],
+    *,
+    overall_start: pd.Timestamp,
+    overall_end: pd.Timestamp,
+    derived_csv: str | Path,
+    evidence_path: str | Path,
+    overwrite: bool = False,
+) -> AcquisitionEvidence:
+    """Transactionally publish the derived CSV and its evidence together.
+
+    Both artifact byte blobs are precomputed and validated first; then they
+    are published atomically with the evidence JSON written **last** as the
+    completeness marker. If either write fails, the batch is rolled back —
+    a fresh publication leaves nothing behind and an overwrite leaves the
+    previous bytes intact — so a reader never sees a CSV without its
+    evidence. Pre-existing state at either target is refused unless
+    ``overwrite=True``, and no temporary files remain either way.
+
+    This is the operation the documented real acquisition procedure uses;
+    :func:`derive_daily_ohlcv` remains available as a lower-level helper.
+    """
+    csv_path = Path(derived_csv)
+    ev_path = Path(evidence_path)
+    if str(csv_path).lower().startswith(_URL_SCHEMES) or str(ev_path).lower().startswith(
+        _URL_SCHEMES
+    ):
+        raise AcquisitionError("outputs must be local files")
+    if csv_path.suffix.lower() != ".csv":
+        raise AcquisitionError(f"derived output must be a .csv file, got {csv_path.name!r}")
+    if ev_path.suffix.lower() != ".json":
+        raise AcquisitionError(f"evidence output must be a .json file, got {ev_path.name!r}")
+
+    existing = [path for path in (csv_path, ev_path) if path.exists()]
+    if existing and not overwrite:
+        state = (
+            "a completed acquisition"
+            if acquisition_is_complete(csv_path, ev_path)
+            else "an incomplete orphan"
+        )
+        names = ", ".join(path.name for path in existing)
+        raise AcquisitionError(
+            f"refusing to overwrite existing artifact(s) ({names}) — {state}. "
+            "Pass overwrite=True to replace them explicitly."
+        )
+
+    csv_bytes, evidence = _compute_derivation(
+        requests,
+        overall_start=overall_start,
+        overall_end=overall_end,
+        derived_filename=csv_path.name,
+    )
+    evidence_bytes = evidence.to_json_bytes()
+
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    ev_path.parent.mkdir(parents=True, exist_ok=True)
+    publish_atomically(
+        [
+            (csv_path, csv_bytes),
+            (ev_path, evidence_bytes),  # evidence last: the completeness marker
+        ],
+        error=AcquisitionError,
+    )
     return evidence
 
 
