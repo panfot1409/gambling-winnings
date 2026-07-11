@@ -1,0 +1,393 @@
+"""Deterministic canonical dataset builder — offline, local files only.
+
+Pipeline: local CSV/Parquet file → streaming SHA-256 of the raw bytes →
+quality audit (reports, never repairs) → refuse on any error-severity
+finding → strict schema validation against the declared candle interval →
+content fingerprint → write three artifacts:
+
+* ``<slug>.canonical.parquet`` — the validated canonical frame;
+* ``<slug>.quality.json`` — the quality report;
+* ``<slug>.manifest.json`` — the provenance manifest, written last as the
+  completeness marker.
+
+Guarantees:
+
+* the raw source file is opened read-only and never modified;
+* observations are never sorted, filled, clipped, dropped, or repaired —
+  a problematic file is refused with its findings attached (the only
+  transformation is the documented canonicalization: UTC/ns timestamps,
+  float64 columns, and — only with ``allow_extra_columns=True`` —
+  dropping columns outside the OHLCV set);
+* publication is transactional: all artifact bytes are precomputed, each
+  file is written atomically (temp file, fsync, ``os.replace``), and a
+  failure mid-publication rolls back — a fresh build leaves no final
+  artifacts, an overwrite leaves the previous complete dataset
+  byte-identical and verifiable, and no temporary or backup files remain;
+  existing artifacts are never overwritten unless ``overwrite=True`` is
+  passed explicitly;
+* no network access: URL-like sources are rejected outright. Generated
+  artifacts belong under the git-ignored ``data/`` directory and are
+  never committed.
+
+``load_canonical_dataset`` is verification-on-read: the manifest is parsed
+strictly, the Parquet is re-validated, the content fingerprint is
+recomputed and compared, row count and first/last open times are
+cross-checked, and the quality report bound in the manifest is required
+beside it — SHA-256-exact, strictly parsed, and cross-checked against the
+manifest's row count, interval, and build flags. Any mismatch raises
+:class:`DatasetVerificationError`.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import io
+import os
+import tempfile
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+
+import pandas as pd
+
+from eth_research.data.provenance import (
+    DatasetIdentity,
+    DatasetManifest,
+    build_manifest,
+    content_fingerprint,
+    sha256_bytes,
+    sha256_file,
+)
+from eth_research.data.quality import QualityReport, QualityThresholds, audit_frame
+from eth_research.data.schema import SchemaError, validate_ohlcv
+
+_NETWORK_PREFIXES: tuple[str, ...] = ("http://", "https://", "ftp://", "s3://", "gs://")
+
+
+class DatasetBuildError(RuntimeError):
+    """The builder refused to build; the audit report (if any) is attached."""
+
+    def __init__(self, message: str, report: QualityReport | None = None) -> None:
+        super().__init__(message)
+        self.report = report
+
+
+class DatasetVerificationError(RuntimeError):
+    """A canonical dataset failed verification against its manifest."""
+
+
+@dataclass(frozen=True)
+class BuildResult:
+    """Artifacts produced by one successful build."""
+
+    canonical_path: Path
+    manifest_path: Path
+    quality_report_path: Path
+    manifest: DatasetManifest
+    quality_report: QualityReport
+
+
+@dataclass(frozen=True)
+class LoadedDataset:
+    """A verified canonical frame, its manifest, and its quality report."""
+
+    frame: pd.DataFrame
+    manifest: DatasetManifest
+    quality_report: QualityReport
+
+
+def _reject_network_sources(path: str | Path) -> None:
+    if str(path).lower().startswith(_NETWORK_PREFIXES):
+        raise DatasetBuildError(
+            f"network sources are not supported ({path!s}); "
+            "Milestone 2A is offline-only — provide a local file"
+        )
+
+
+def _parse_ohlcv_bytes(data: bytes, source: Path) -> pd.DataFrame:
+    """Parse an immutable in-memory snapshot of a CSV/Parquet file.
+
+    Parsing the same bytes that were hashed means the recorded
+    ``raw_file_sha256`` always describes exactly the bytes the dataset was
+    built from — a concurrent change to the file on disk cannot desynchronize
+    hash and content. CSV floats are parsed with round-trip precision so that
+    a CSV and a Parquet container holding the same values yield bit-identical
+    doubles (and therefore the same content fingerprint).
+    """
+    suffix = source.suffix.lower()
+    if suffix == ".csv":
+        return pd.read_csv(io.BytesIO(data), float_precision="round_trip")
+    if suffix in {".parquet", ".pq"}:
+        return pd.read_parquet(io.BytesIO(data))
+    raise DatasetBuildError(
+        f"unsupported data file extension {suffix!r} for {source.name!r}; "
+        "expected .csv, .parquet, or .pq"
+    )
+
+
+def read_raw_ohlcv(path: str | Path) -> pd.DataFrame:
+    """Read a local CSV/Parquet file without validating or modifying it.
+
+    The file is read into memory once and parsed from that snapshot.
+    """
+    _reject_network_sources(path)
+    file = Path(path)
+    return _parse_ohlcv_bytes(file.read_bytes(), file)
+
+
+def audit_ohlcv_file(
+    path: str | Path,
+    *,
+    expected_interval: pd.Timedelta,
+    assume_utc: bool = False,
+    allow_extra_columns: bool = False,
+    thresholds: QualityThresholds | None = None,
+) -> QualityReport:
+    """Audit a raw local OHLCV file; report problems without touching it."""
+    raw = read_raw_ohlcv(path)
+    return audit_frame(
+        raw,
+        expected_interval=expected_interval,
+        assume_utc=assume_utc,
+        allow_extra_columns=allow_extra_columns,
+        thresholds=thresholds,
+    )
+
+
+def build_canonical_dataset(
+    source_path: str | Path,
+    identity: DatasetIdentity,
+    output_dir: str | Path,
+    *,
+    assume_utc: bool = False,
+    allow_extra_columns: bool = False,
+    thresholds: QualityThresholds | None = None,
+    overwrite: bool = False,
+) -> BuildResult:
+    """Turn a local raw OHLCV file into an audited canonical dataset.
+
+    Refuses to build — raising :class:`DatasetBuildError` with the quality
+    report attached — if the audit produces any error-severity finding.
+    Nothing is ever repaired on the caller's behalf.
+    """
+    _reject_network_sources(source_path)
+    source = Path(source_path)
+    # One immutable snapshot: the bytes that are hashed ARE the bytes parsed.
+    raw_bytes = source.read_bytes()
+    raw_sha256 = sha256_bytes(raw_bytes)
+    raw = _parse_ohlcv_bytes(raw_bytes, source)
+
+    report = audit_frame(
+        raw,
+        expected_interval=identity.interval,
+        assume_utc=assume_utc,
+        allow_extra_columns=allow_extra_columns,
+        thresholds=thresholds,
+    )
+    if report.has_errors:
+        summary = "; ".join(
+            f"{finding.code} (count {finding.count})"
+            for finding in report.findings
+            if finding.severity == "error"
+        )
+        raise DatasetBuildError(
+            f"refusing to build from {source.name!r}: integrity errors — {summary}. "
+            "The raw data is never repaired; fix the source file.",
+            report=report,
+        )
+
+    canonical = validate_ohlcv(
+        raw,
+        expected_interval=identity.interval,
+        assume_utc=assume_utc,
+        allow_extra_columns=allow_extra_columns,
+    )
+
+    slug = identity.slug
+    directory = Path(output_dir)
+    canonical_path = directory / f"{slug}.canonical.parquet"
+    quality_path = directory / f"{slug}.quality.json"
+    manifest_path = directory / f"{slug}.manifest.json"
+    existing = [p for p in (canonical_path, quality_path, manifest_path) if p.exists()]
+    if existing and not overwrite:
+        names = ", ".join(p.name for p in existing)
+        raise DatasetBuildError(
+            f"refusing to overwrite existing artifact(s) in {directory}: {names}. "
+            "Pass overwrite=True to replace them explicitly."
+        )
+
+    quality_bytes = report.to_json_bytes()
+    manifest = build_manifest(
+        canonical,
+        identity,
+        raw_filename=source.name,
+        raw_file_sha256=raw_sha256,
+        canonical_filename=canonical_path.name,
+        quality_report_filename=quality_path.name,
+        quality_report_sha256=sha256_bytes(quality_bytes),
+        assume_utc=assume_utc,
+        allow_extra_columns=allow_extra_columns,
+    )
+
+    # Precompute every artifact byte blob before touching the filesystem.
+    parquet_buffer = io.BytesIO()
+    canonical.to_parquet(parquet_buffer)
+    parquet_bytes = parquet_buffer.getvalue()
+    manifest_bytes = manifest.to_json_bytes()
+
+    # Belt and braces on top of the snapshot: if the on-disk source no longer
+    # matches the hashed bytes, someone changed it mid-build — refuse to
+    # publish rather than ship provenance for a file that no longer exists.
+    if sha256_file(source) != raw_sha256:
+        raise DatasetBuildError(
+            f"source file {source.name!r} changed during the build; "
+            "nothing was written — re-run against the settled file"
+        )
+
+    directory.mkdir(parents=True, exist_ok=True)
+    _publish_atomically(
+        [
+            (canonical_path, parquet_bytes),
+            (quality_path, quality_bytes),
+            (manifest_path, manifest_bytes),  # manifest last: completeness marker
+        ]
+    )
+
+    return BuildResult(
+        canonical_path=canonical_path,
+        manifest_path=manifest_path,
+        quality_report_path=quality_path,
+        manifest=manifest,
+        quality_report=report,
+    )
+
+
+def load_canonical_dataset(manifest_path: str | Path) -> LoadedDataset:
+    """Load a canonical dataset, verifying it against its manifest.
+
+    Detects tampering and data/manifest mismatches: strict manifest
+    parsing, schema re-validation, fingerprint recomputation, row-count and
+    open-time cross-checks, and verification of the bound quality report —
+    its exact SHA-256, strict parse, and cross-checked row count, interval,
+    and build flags. Missing, edited, malformed, or mismatched artifacts
+    are rejected.
+    """
+    path = Path(manifest_path)
+    try:
+        manifest = DatasetManifest.from_json_bytes(path.read_bytes())
+    except ValueError as exc:
+        raise DatasetVerificationError(f"invalid manifest {path.name!r}: {exc}") from exc
+
+    canonical_path = path.parent / manifest.canonical_filename
+    if not canonical_path.exists():
+        raise DatasetVerificationError(
+            f"canonical file {manifest.canonical_filename!r} not found next to the manifest"
+        )
+    try:
+        frame = validate_ohlcv(
+            pd.read_parquet(canonical_path), expected_interval=manifest.candle_interval
+        )
+    except SchemaError as exc:
+        raise DatasetVerificationError(
+            f"canonical file {canonical_path.name!r} fails schema validation: {exc}"
+        ) from exc
+
+    checks: list[tuple[str, str, str]] = [
+        ("content_fingerprint", manifest.content_fingerprint, content_fingerprint(frame)),
+        ("row_count", str(manifest.row_count), str(len(frame))),
+        ("first_open_time", manifest.first_open_time.isoformat(), frame.index[0].isoformat()),
+        ("last_open_time", manifest.last_open_time.isoformat(), frame.index[-1].isoformat()),
+    ]
+    for label, expected, actual in checks:
+        if expected != actual:
+            raise DatasetVerificationError(
+                f"data/manifest mismatch on {label}: manifest says {expected!r}, "
+                f"data has {actual!r} — the dataset or its manifest was modified"
+            )
+
+    report = _verify_quality_report(path.parent, manifest)
+    return LoadedDataset(frame=frame, manifest=manifest, quality_report=report)
+
+
+def _verify_quality_report(directory: Path, manifest: DatasetManifest) -> QualityReport:
+    """The audit evidence must sit beside the manifest, byte-exact and consistent."""
+    report_path = directory / manifest.quality_report_filename
+    if not report_path.exists():
+        raise DatasetVerificationError(
+            f"quality report {manifest.quality_report_filename!r} not found next to the manifest"
+        )
+    report_bytes = report_path.read_bytes()
+    actual_sha = sha256_bytes(report_bytes)
+    if actual_sha != manifest.quality_report_sha256:
+        raise DatasetVerificationError(
+            f"quality report {report_path.name!r} does not match the manifest's "
+            f"quality_report_sha256 — the audit evidence was modified"
+        )
+    try:
+        report = QualityReport.from_json_bytes(report_bytes)
+    except ValueError as exc:
+        raise DatasetVerificationError(
+            f"invalid quality report {report_path.name!r}: {exc}"
+        ) from exc
+
+    cross_checks: list[tuple[str, object, object]] = [
+        ("row_count", manifest.row_count, report.row_count),
+        ("candle_interval", manifest.candle_interval, report.expected_interval),
+        ("assume_utc", manifest.assume_utc, report.assume_utc),
+        ("allow_extra_columns", manifest.allow_extra_columns, report.allow_extra_columns),
+    ]
+    for label, manifest_value, report_value in cross_checks:
+        if manifest_value != report_value:
+            raise DatasetVerificationError(
+                f"quality report/manifest mismatch on {label}: manifest says "
+                f"{manifest_value!r}, quality report says {report_value!r}"
+            )
+    return report
+
+
+def _publish_atomically(artifacts: Sequence[tuple[Path, bytes]]) -> None:
+    """All-or-nothing publication of precomputed artifact bytes.
+
+    Each artifact is written atomically, in order (the manifest goes last as
+    the completeness marker). If any write fails, artifacts already
+    published in this batch are rolled back — restored to their previous
+    bytes when overwriting an existing dataset, removed when newly created.
+    Prior state is held in memory, so no temporary or backup files remain
+    either way.
+    """
+    previous: dict[Path, bytes | None] = {
+        path: (path.read_bytes() if path.exists() else None) for path, _ in artifacts
+    }
+    published: list[Path] = []
+    try:
+        for path, data in artifacts:
+            _write_atomic(path, data)
+            published.append(path)
+    except BaseException as exc:
+        for path in reversed(published):
+            original = previous[path]
+            with contextlib.suppress(OSError):
+                if original is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    _write_atomic(path, original)
+        raise DatasetBuildError(
+            f"publication failed and was rolled back; no partial dataset remains ({exc})"
+        ) from exc
+
+
+def _write_atomic(path: Path, data: bytes) -> None:
+    """Write bytes to ``path`` atomically (temp file + fsync + rename)."""
+    descriptor, temp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=path.name + ".", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(temp_name)
+        raise

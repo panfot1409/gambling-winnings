@@ -108,7 +108,36 @@ Explicitly deferred from Milestone 1: parameter optimization, machine
 learning, plotting, CLI, walk-forward analysis, fractional position
 weights.
 
-## 6. Milestone 2 — Evaluation hardening
+## 6. Milestone 2A — Dataset provenance and quality
+
+Detailed plan: [M2A_PLAN.md](M2A_PLAN.md). An offline layer that turns a
+user-supplied local ETH OHLCV file into an audited, fingerprinted canonical
+dataset:
+
+- Versioned dataset identity and manifest: base/quote asset, exact symbol,
+  venue, spot market type, candle interval, UTC open-time convention,
+  source description, raw-file SHA-256, deterministic content fingerprint,
+  row count, first/last candle, manifest schema version, package version.
+- Offline quality audit that *reports and never repairs*: duplicates,
+  ordering problems, missing candles, missing/non-finite/non-positive
+  values, OHLC violations, zero-volume candles and runs, extreme returns
+  and suspicious ranges — with exact counts and first examples.
+- Deterministic canonical builder: local CSV/Parquet in, canonical Parquet
+  + JSON manifest + quality report out; atomic writes; explicit overwrite
+  opt-in; artifacts under git-ignored `data/`; verification-on-read that
+  detects tampering and data/manifest mismatches. No network access.
+
+## 7. Milestone 2B — Real ETH data, frozen and benchmarked
+
+- Acquire one real ETH OHLCV history (documented manual/offline
+  acquisition), freeze it through the 2A pipeline, and record its manifest
+  fingerprints.
+- Run the existing buy-and-hold benchmark and SMA baseline on it through
+  the untouched Milestone 1 engine; publish the resulting report.
+- Test-set discipline bookkeeping: the test segment is evaluated once and
+  the evaluation is recorded.
+
+## 8. Later milestones
 
 - Walk-forward evaluation (rolling train/validate windows) on top of the
   static split.
@@ -116,17 +145,15 @@ weights.
   "test set touched once" bookkeeping. Still no automated optimizers.
 - Fractional position weights with exact rebalancing accounting (removes
   the Milestone 1 binary-target restriction).
-- Dataset provenance and multi-symbol support (e.g. a validated `symbol`
-  column); Milestone 1 rejects unexpected columns outright.
-- Data-quality report: outlier bars, zero-volume runs, cross-file
-  consistency (hard gap/ordering rejection already ships in Milestone 1).
+- Multi-symbol support (validated `symbol` metadata beyond the single-ETH
+  manifest identity).
 - Richer cost model: bid/ask spread term and a simple volume-participation
   impact term.
 - Additional baselines: momentum, mean reversion, volatility targeting.
 - Coverage threshold in CI.
 - Small CLI entry point (`eth-research backtest ...`).
 
-## 7. Milestone 3 — Statistical robustness
+## 9. Milestone 3 — Statistical robustness
 
 - Block-bootstrap confidence intervals for Sharpe/CAGR.
 - Deflated Sharpe ratio and multiple-testing awareness for strategy families.
@@ -134,16 +161,16 @@ weights.
 - Markdown/HTML tearsheet reports comparing strategies against the
   buy-and-hold benchmark.
 
-## 8. Milestone 4 — Optional machine learning (gated)
+## 10. Milestone 4 — Optional machine learning (gated)
 
-Only after Milestones 2–3 are in place:
+Only after Milestones 2A/2B–3 are in place:
 
 - Feature pipeline with the same no-look-ahead contract as strategies.
 - Purged and embargoed time-series cross-validation.
 - Simple, inspectable models first (regularized linear, small trees).
 - Leakage tests extended to the feature layer.
 
-## 9. Testing strategy
+## 11. Testing strategy
 
 - **Unit tests** per module, including aggregated schema error reporting.
 - **Hand-calculated ledger tests**: fills, fees, cash, and equity are
@@ -163,7 +190,7 @@ Only after Milestones 2–3 are in place:
     context affects signals only, never P&L.
 - **Determinism**: synthetic data generation is seed-stable.
 
-## 10. Quality gates
+## 12. Quality gates
 
 All of the following must pass before merging:
 
@@ -174,7 +201,7 @@ mypy
 pytest
 ```
 
-## 11. Risks and mitigations
+## 13. Risks and mitigations
 
 | Risk | Mitigation |
 |------|------------|

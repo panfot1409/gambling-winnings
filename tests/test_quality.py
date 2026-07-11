@@ -1,0 +1,454 @@
+"""Tests for the offline data-quality audit: exact counts, first examples."""
+
+from __future__ import annotations
+
+import json
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from eth_research.data.quality import (
+    QualityFinding,
+    QualityReport,
+    QualityThresholds,
+    audit_frame,
+)
+from eth_research.data.synthetic import make_synthetic_ohlcv
+
+DAY = pd.Timedelta("1D")
+
+
+def raw_frame(n: int = 8) -> pd.DataFrame:
+    frame = make_synthetic_ohlcv(n_periods=n, seed=11).reset_index()
+    frame["timestamp"] = frame["timestamp"].astype(str)
+    return frame
+
+
+def audit(frame: pd.DataFrame, **kwargs: object) -> QualityReport:
+    return audit_frame(frame, expected_interval=DAY, **kwargs)  # type: ignore[arg-type]
+
+
+def finding_codes(report: QualityReport) -> list[str]:
+    return [finding.code for finding in report.findings]
+
+
+def get(report: QualityReport, code: str) -> object:
+    matches = [finding for finding in report.findings if finding.code == code]
+    assert len(matches) == 1, f"expected exactly one {code!r} finding: {report.findings}"
+    return matches[0]
+
+
+def test_clean_frame_has_no_findings() -> None:
+    report = audit(raw_frame())
+    assert report.findings == ()
+    assert not report.has_errors
+    assert report.row_count == 8
+
+
+def test_duplicate_timestamps_reported() -> None:
+    frame = raw_frame()
+    frame.loc[3, "timestamp"] = frame.loc[2, "timestamp"]
+    finding = get(audit(frame), "duplicate_timestamps")
+    assert finding.severity == "error"  # type: ignore[attr-defined]
+    assert finding.count == 1  # type: ignore[attr-defined]
+
+
+def test_unsorted_timestamps_reported_not_repaired() -> None:
+    frame = raw_frame().iloc[::-1].reset_index(drop=True)
+    finding = get(audit(frame), "unsorted_timestamps")
+    assert finding.severity == "error"  # type: ignore[attr-defined]
+    assert finding.count == 7  # type: ignore[attr-defined]
+    assert "never sorted" in finding.description  # type: ignore[attr-defined]
+
+
+def test_missing_candles_reported_with_gap_details() -> None:
+    frame = raw_frame(8).drop(index=3).reset_index(drop=True)
+    finding = get(audit(frame), "missing_candles")
+    assert finding.severity == "error"  # type: ignore[attr-defined]
+    assert finding.count == 1  # type: ignore[attr-defined]
+    assert "spacing 2 days" in finding.first_examples[0]  # type: ignore[attr-defined]
+
+
+def test_naive_timestamps_require_opt_in() -> None:
+    frame = raw_frame()
+    frame["timestamp"] = frame["timestamp"].str.replace("+00:00", "", regex=False)
+    finding = get(audit(frame), "naive_timestamps")
+    assert finding.count == 8  # type: ignore[attr-defined]
+    assert audit(frame, assume_utc=True).findings == ()
+
+
+def test_unparseable_and_missing_timestamps_reported() -> None:
+    frame = raw_frame()
+    frame.loc[2, "timestamp"] = "not-a-date"
+    frame.loc[5, "timestamp"] = None
+    report = audit(frame)
+    bad = get(report, "unparseable_timestamps")
+    assert bad.count == 1  # type: ignore[attr-defined]
+    assert "row 2: 'not-a-date'" in bad.first_examples  # type: ignore[attr-defined]
+    missing = get(report, "missing_timestamps")
+    assert missing.count == 1  # type: ignore[attr-defined]
+
+
+def test_numeric_timestamps_reported() -> None:
+    frame = raw_frame()
+    frame["timestamp"] = np.arange(len(frame))
+    finding = get(audit(frame), "numeric_timestamps")
+    assert finding.severity == "error"  # type: ignore[attr-defined]
+
+
+def test_missing_and_non_finite_values_reported() -> None:
+    frame = raw_frame()
+    frame.loc[1, "close"] = np.nan
+    frame.loc[2, "open"] = np.inf
+    report = audit(frame)
+    missing = get(report, "missing_values")
+    assert missing.count == 1  # type: ignore[attr-defined]
+    assert missing.first_examples[0].endswith(": close")  # type: ignore[attr-defined]
+    non_finite = get(report, "non_finite_values")
+    assert non_finite.count == 1  # type: ignore[attr-defined]
+
+
+def test_non_numeric_values_reported() -> None:
+    frame = raw_frame()
+    frame["close"] = frame["close"].astype(object)
+    frame.loc[4, "close"] = "oops"
+    finding = get(audit(frame), "non_numeric_values")
+    assert finding.count == 1  # type: ignore[attr-defined]
+    assert "close='oops'" in finding.first_examples[0]  # type: ignore[attr-defined]
+
+
+def test_non_positive_prices_and_negative_volume_reported() -> None:
+    frame = raw_frame()
+    frame.loc[0, "low"] = 0.0
+    frame.loc[1, "volume"] = -3.0
+    report = audit(frame)
+    assert get(report, "non_positive_prices").count == 1  # type: ignore[attr-defined]
+    assert get(report, "negative_volume").count == 1  # type: ignore[attr-defined]
+
+
+def test_ohlc_violations_reported() -> None:
+    frame = raw_frame()
+    frame.loc[2, "high"] = 0.5  # below the body and below low
+    frame.loc[4, "low"] = 1e9
+    report = audit(frame)
+    assert get(report, "high_below_body").count == 1  # type: ignore[attr-defined]
+    assert get(report, "low_above_body").count == 1  # type: ignore[attr-defined]
+    assert get(report, "high_below_low").count == 2  # type: ignore[attr-defined]
+
+
+def test_missing_and_unexpected_columns_reported() -> None:
+    frame = raw_frame().drop(columns=["volume"])
+    frame["symbol"] = "ETH-USD"
+    report = audit(frame)
+    assert get(report, "missing_columns").count == 1  # type: ignore[attr-defined]
+    unexpected = get(report, "unexpected_columns")
+    assert unexpected.severity == "error"  # type: ignore[attr-defined]
+    assert unexpected.first_examples == ("symbol",)  # type: ignore[attr-defined]
+
+
+def test_unexpected_columns_downgrade_to_warning_when_dropping_allowed() -> None:
+    frame = raw_frame()
+    frame["symbol"] = "ETH-USD"
+    report = audit(frame, allow_extra_columns=True)
+    finding = get(report, "unexpected_columns")
+    assert finding.severity == "warning"  # type: ignore[attr-defined]
+    assert not report.has_errors
+
+
+def test_zero_volume_candles_and_longest_run() -> None:
+    frame = raw_frame(10)
+    frame.loc[[1, 2, 3, 7], "volume"] = 0.0
+    report = audit(frame)
+    assert not report.has_errors
+    assert get(report, "zero_volume_candles").count == 4  # type: ignore[attr-defined]
+    run = get(report, "zero_volume_run")
+    assert run.count == 3  # type: ignore[attr-defined]
+    assert run.severity == "warning"  # type: ignore[attr-defined]
+
+
+def test_extreme_returns_and_ranges_flagged_as_warnings() -> None:
+    frame = raw_frame(6)
+    frame.loc[3, "close"] = float(frame["close"].iloc[2]) * 2.0  # +100% move
+    frame.loc[3, "high"] = float(frame["close"].iloc[3]) * 1.6  # huge range
+    report = audit(frame)
+    assert not report.has_errors
+    returns = get(report, "extreme_returns")
+    assert returns.severity == "warning"  # type: ignore[attr-defined]
+    assert returns.count >= 1  # type: ignore[attr-defined]
+    assert get(report, "extreme_ranges").count >= 1  # type: ignore[attr-defined]
+
+
+def test_thresholds_are_respected() -> None:
+    frame = raw_frame(6)
+    frame.loc[3, "close"] = float(frame["close"].iloc[2]) * 1.10  # +10% move
+    frame.loc[3, "high"] = float(frame["close"].iloc[3]) * 1.02  # keep OHLC valid
+    loose = audit(frame, thresholds=QualityThresholds(extreme_return=0.5, extreme_range=5.0))
+    assert "extreme_returns" not in finding_codes(loose)
+    tight = audit(frame, thresholds=QualityThresholds(extreme_return=0.05, extreme_range=5.0))
+    assert "extreme_returns" in finding_codes(tight)
+
+
+def test_outlier_checks_skipped_on_broken_data() -> None:
+    frame = raw_frame(6)
+    frame.loc[3, "close"] = float(frame["close"].iloc[2]) * 2.0  # would be extreme
+    frame.loc[1, "volume"] = -1.0  # integrity error
+    report = audit(frame)
+    assert report.has_errors
+    assert "extreme_returns" not in finding_codes(report)
+
+
+def test_invalid_thresholds_rejected() -> None:
+    with pytest.raises(ValueError, match="extreme_return"):
+        QualityThresholds(extreme_return=0.0)
+    with pytest.raises(ValueError, match="extreme_range"):
+        QualityThresholds(extreme_range=-1.0)
+
+
+def test_invalid_expected_interval_rejected() -> None:
+    with pytest.raises(ValueError, match="expected_interval"):
+        audit_frame(raw_frame(), expected_interval=pd.Timedelta(0))
+
+
+def test_report_serialization_is_deterministic() -> None:
+    frame = raw_frame()
+    frame.loc[1, "volume"] = -1.0
+    report = audit(frame)
+    first = report.to_json_bytes()
+    assert first == audit(frame).to_json_bytes()
+    payload = json.loads(first)
+    assert payload["schema_version"] == 1
+    assert payload["row_count"] == 8
+    assert payload["expected_interval"] == "P1DT0H0M0S"
+    assert payload["findings"][0]["code"] == "negative_volume"
+
+
+def test_findings_sorted_errors_first() -> None:
+    frame = raw_frame(10)
+    frame.loc[1, "volume"] = -1.0  # error
+    frame.loc[[4, 5], "volume"] = 0.0  # warnings
+    severities = [f.severity for f in audit(frame).findings]
+    assert severities == sorted(severities)  # "error" sorts before "warning"
+
+
+def test_report_records_build_flags() -> None:
+    frame = raw_frame()
+    frame["symbol"] = "ETH-USD"
+    frame["timestamp"] = frame["timestamp"].str.replace("+00:00", "", regex=False)
+    report = audit(frame, assume_utc=True, allow_extra_columns=True)
+    assert report.assume_utc is True
+    assert report.allow_extra_columns is True
+    assert audit(raw_frame()).assume_utc is False
+
+
+def test_report_json_round_trips_strictly() -> None:
+    frame = raw_frame(10)
+    frame.loc[1, "volume"] = -1.0
+    frame.loc[[4, 5], "volume"] = 0.0
+    report = audit(frame, assume_utc=True)
+    parsed = QualityReport.from_json_bytes(report.to_json_bytes())
+    assert parsed == report
+
+
+def test_report_parsing_rejects_tampering() -> None:
+    report = audit(raw_frame())
+    payload = json.loads(report.to_json_bytes())
+
+    unknown = dict(payload)
+    unknown["extra"] = 1
+    with pytest.raises(ValueError, match=r"unknown=\['extra'\]"):
+        QualityReport.from_json_bytes(json.dumps(unknown).encode())
+
+    missing = dict(payload)
+    del missing["assume_utc"]
+    with pytest.raises(ValueError, match=r"missing=\['assume_utc'\]"):
+        QualityReport.from_json_bytes(json.dumps(missing).encode())
+
+    bad_version = dict(payload)
+    bad_version["schema_version"] = 99
+    with pytest.raises(ValueError, match="unsupported quality report schema version"):
+        QualityReport.from_json_bytes(json.dumps(bad_version).encode())
+
+    bool_rows = dict(payload)
+    bool_rows["row_count"] = True
+    with pytest.raises(ValueError, match="bool is rejected"):
+        QualityReport.from_json_bytes(json.dumps(bool_rows).encode())
+
+    bad_flag = dict(payload)
+    bad_flag["assume_utc"] = "yes"
+    with pytest.raises(ValueError, match="assume_utc must be a boolean"):
+        QualityReport.from_json_bytes(json.dumps(bad_flag).encode())
+
+    with pytest.raises(ValueError, match="not valid JSON"):
+        QualityReport.from_json_bytes(b"{nope")
+
+
+def test_report_parsing_rejects_inconsistent_finding_counts() -> None:
+    frame = raw_frame()
+    frame.loc[1, "volume"] = -1.0
+    report = audit(frame)
+    payload = json.loads(report.to_json_bytes())
+    payload["error_finding_count"] = 0  # lie about the findings
+    with pytest.raises(ValueError, match="error_finding_count does not match"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+
+def test_report_parsing_rejects_malformed_findings() -> None:
+    report = audit_frame(raw_frame(), expected_interval=DAY)
+    payload = json.loads(report.to_json_bytes())
+    payload["findings"] = [{"code": "x"}]
+    with pytest.raises(ValueError, match="exactly the keys"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+    payload["findings"] = [
+        {
+            "code": "x",
+            "severity": "fatal",
+            "count": 1,
+            "description": "d",
+            "first_examples": [],
+        }
+    ]
+    with pytest.raises(ValueError, match="severity must be"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+
+def make_finding(**overrides: object) -> QualityFinding:
+    values: dict[str, object] = {
+        "code": "some_code",
+        "severity": "warning",
+        "count": 1,
+        "description": "a description",
+        "first_examples": ("example",),
+    }
+    values.update(overrides)
+    return QualityFinding(**values)  # type: ignore[arg-type]
+
+
+def test_boolean_finding_counts_rejected_despite_numeric_equality() -> None:
+    # A clean report has 0 error findings: False == 0 must NOT be accepted.
+    clean = audit(raw_frame())
+    payload = json.loads(clean.to_json_bytes())
+    payload["error_finding_count"] = False
+    with pytest.raises(ValueError, match="bool is rejected"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+    # One warning finding: True == 1 must NOT be accepted either.
+    warm = raw_frame(10)
+    warm.loc[4, "volume"] = 0.0
+    report = audit(warm)
+    assert [f.severity for f in report.findings] == ["warning"]
+    payload = json.loads(report.to_json_bytes())
+    payload["warning_finding_count"] = True
+    with pytest.raises(ValueError, match="bool is rejected"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+
+@pytest.mark.parametrize("bad_count", [1.0, "1", None, -1])
+def test_non_integer_finding_counts_rejected(bad_count: object) -> None:
+    payload = json.loads(audit(raw_frame()).to_json_bytes())
+    payload["error_finding_count"] = bad_count
+    with pytest.raises(ValueError, match="error_finding_count must be"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+
+def test_boolean_thresholds_rejected_on_direct_construction() -> None:
+    with pytest.raises(ValueError, match="bool is rejected"):
+        QualityThresholds(extreme_return=True)
+    with pytest.raises(ValueError, match="bool is rejected"):
+        QualityThresholds(extreme_range=False)
+
+
+def test_integer_thresholds_normalize_to_float() -> None:
+    limits = QualityThresholds(extreme_return=1, extreme_range=2)
+    assert isinstance(limits.extreme_return, float)
+    assert limits == QualityThresholds(extreme_return=1.0, extreme_range=2.0)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "match"),
+    [
+        ({"code": ""}, "finding code"),
+        ({"code": 42}, "finding code must be a string"),
+        ({"severity": "fatal"}, "severity must be 'error' or 'warning'"),
+        ({"count": True}, "bool is rejected"),
+        ({"count": 0}, "positive integer"),
+        ({"count": 1.5}, "must be an integer"),
+        ({"description": "   "}, "finding description"),
+        ({"first_examples": ("a", "b", "c", "d")}, "at most 3"),
+        ({"first_examples": ("a", 5)}, "finding example must be a string"),
+        ({"first_examples": ["a"]}, "must be a tuple"),
+    ],
+)
+def test_malformed_directly_constructed_findings_rejected(
+    overrides: dict[str, object], match: str
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        make_finding(**overrides)
+
+
+def test_more_than_three_examples_rejected_when_parsed() -> None:
+    warm = raw_frame(10)
+    warm.loc[4, "volume"] = 0.0
+    payload = json.loads(audit(warm).to_json_bytes())
+    payload["findings"][0]["first_examples"] = ["a", "b", "c", "d"]
+    with pytest.raises(ValueError, match="at most 3"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+
+def test_non_canonical_finding_order_rejected() -> None:
+    frame = raw_frame(10)
+    frame.loc[[1, 2], "volume"] = 0.0  # yields zero_volume_candles + zero_volume_run
+    report = audit(frame)
+    assert len(report.findings) == 2
+
+    # Parsed path: swap the order in JSON.
+    payload = json.loads(report.to_json_bytes())
+    payload["findings"].reverse()
+    with pytest.raises(ValueError, match="canonical order"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+    # Constructed path: same rule, same error.
+    swapped = (report.findings[1], report.findings[0])
+    with pytest.raises(ValueError, match="canonical order"):
+        QualityReport(
+            schema_version=report.schema_version,
+            row_count=report.row_count,
+            expected_interval=report.expected_interval,
+            thresholds=report.thresholds,
+            assume_utc=report.assume_utc,
+            allow_extra_columns=report.allow_extra_columns,
+            findings=swapped,
+        )
+
+
+def test_duplicate_finding_keys_rejected() -> None:
+    finding = make_finding()
+    with pytest.raises(ValueError, match="canonical order"):
+        QualityReport(
+            schema_version=1,
+            row_count=1,
+            expected_interval=DAY,
+            thresholds=QualityThresholds(),
+            assume_utc=False,
+            allow_extra_columns=False,
+            findings=(finding, finding),
+        )
+
+
+def test_every_constructed_report_round_trips_to_identical_bytes() -> None:
+    clean = raw_frame()
+
+    warnings_only = raw_frame(10)
+    warnings_only.loc[[1, 2, 3], "volume"] = 0.0
+
+    with_errors = raw_frame()
+    with_errors.loc[1, "volume"] = -1.0
+    with_errors.loc[2, "close"] = np.nan
+
+    for frame in (clean, warnings_only, with_errors):
+        report = audit(frame, assume_utc=False, allow_extra_columns=True)
+        data = report.to_json_bytes()
+        parsed = QualityReport.from_json_bytes(data)
+        assert parsed == report
+        assert parsed.to_json_bytes() == data
