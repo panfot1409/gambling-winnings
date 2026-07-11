@@ -11,6 +11,7 @@ import pytest
 
 from conftest import CoinbasePipeline
 from eth_research.data.lock import DatasetLock, build_dataset_lock
+from eth_research.metrics import SECONDS_PER_YEAR
 from eth_research.protocol import (
     ACCOUNTING,
     INITIAL_CASH,
@@ -58,6 +59,16 @@ class TestBenchmarkProtocol:
         other = dataclasses.replace(lock, quote_asset="EUR")
         with pytest.raises(ProtocolError, match="mismatch on dataset_lock_sha256"):
             verify_protocol(protocol, other)
+
+    def test_verify_rejects_wrong_package_version(
+        self, coinbase_pipeline: CoinbasePipeline
+    ) -> None:
+        # R6: a protocol claiming a package version other than the running
+        # (and lock/manifest) version must be refused.
+        lock = make_lock(coinbase_pipeline)
+        protocol = build_benchmark_protocol(lock, package_version="999.0.0")
+        with pytest.raises(ProtocolError, match="package version"):
+            verify_protocol(protocol, lock)
 
     def _payload(self, pipeline: CoinbasePipeline, **changes: Any) -> dict[str, Any]:
         protocol = build_benchmark_protocol(make_lock(pipeline), package_version="0.3.0")
@@ -178,23 +189,29 @@ def segment_metrics(
     context = 0
     if strategy == "sma_20_50" and segment != "train":
         context = SMA_CONTEXT_BARS
+    initial = INITIAL_CASH
+    terminal = 10_500.0
+    notional = 9_990.0
+    start = first_open
+    end = first_open + n_bars * DAY
+    years = (end - start).total_seconds() / SECONDS_PER_YEAR
     return SegmentMetrics(
         strategy=strategy,
         segment=segment,
         n_bars=n_bars,
-        start_time=first_open,
-        end_time=first_open + n_bars * DAY,
+        start_time=start,
+        end_time=end,
         context_bars=context,
-        initial_cash=INITIAL_CASH,
-        terminal_equity=10_500.0,
+        initial_cash=initial,
+        terminal_equity=terminal,
         terminal_liquidation_equity=10_480.0,
-        total_return=0.05,
-        cagr=0.2,
+        total_return=terminal / initial - 1.0,
+        cagr=(terminal / initial) ** (1.0 / years) - 1.0,
         sharpe=sharpe,
         sortino=0.7,
         max_drawdown=-0.1,
-        total_traded_notional=9_990.0,
-        turnover=0.999,
+        total_traded_notional=notional,
+        turnover=notional / initial,
         num_fills=1,
     )
 
@@ -396,3 +413,57 @@ class TestBenchmarkResults:
         payload["segments"][0]["n_bars"] = True
         with pytest.raises(ValueError, match="bool is rejected"):
             BenchmarkResults.from_json_bytes(json.dumps(payload).encode("utf-8"))
+
+
+class TestSegmentMetricsConsistency:
+    """R6: forged internally-inconsistent metrics must be rejected."""
+
+    def _valid(self) -> SegmentMetrics:
+        return make_results().segments[0]
+
+    def test_forged_total_return_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="total_return"):
+            dataclasses.replace(self._valid(), total_return=123.0)
+
+    def test_forged_turnover_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="turnover"):
+            dataclasses.replace(self._valid(), turnover=999.0)
+
+    def test_drawdown_below_minus_one_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="max_drawdown"):
+            dataclasses.replace(self._valid(), max_drawdown=-1.5)
+
+    def test_forged_cagr_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="cagr"):
+            dataclasses.replace(self._valid(), cagr=0.2)
+
+    def test_zero_fills_with_nonzero_notional_is_rejected(self) -> None:
+        # An SMA segment (not buy-and-hold) with traded notional but no fills.
+        sma_train = make_results().segments[3]
+        assert sma_train.strategy == "sma_20_50"
+        with pytest.raises(ValueError, match="zero fills must imply zero traded notional"):
+            dataclasses.replace(sma_train, num_fills=0)
+
+    def test_flat_segment_with_zero_everything_is_accepted(self) -> None:
+        # Genuinely flat: no fills, no notional, no turnover, flat equity.
+        sma_train = make_results().segments[3]
+        flat = dataclasses.replace(
+            sma_train,
+            terminal_equity=INITIAL_CASH,
+            terminal_liquidation_equity=INITIAL_CASH,
+            total_return=0.0,
+            cagr=0.0,
+            max_drawdown=0.0,
+            total_traded_notional=0.0,
+            turnover=0.0,
+            num_fills=0,
+        )
+        assert flat.num_fills == 0
+        assert flat.turnover == 0.0
+
+    def test_buy_and_hold_must_have_exactly_one_fill(self) -> None:
+        bnh = make_results().segments[0]
+        assert bnh.strategy == "buy_and_hold"
+        # Two fills contradicts buy-and-hold's single ex-ante entry.
+        with pytest.raises(ValueError, match="buy_and_hold"):
+            dataclasses.replace(bnh, num_fills=2)

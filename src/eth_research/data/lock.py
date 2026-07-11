@@ -297,6 +297,9 @@ def verify_dataset_lock(
         ) from exc
 
     _require_match("package_version", lock.package_version, manifest.package_version)
+    # Software-version chain: the acquisition evidence must report the same
+    # version as the manifest and lock that pin it.
+    _require_match("package_version (evidence)", evidence.package_version, manifest.package_version)
     _require_match("base_asset", lock.base_asset, manifest.base_asset)
     _require_match("quote_asset", lock.quote_asset, manifest.quote_asset)
     _require_match("symbol", lock.symbol, manifest.symbol)

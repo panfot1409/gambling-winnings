@@ -18,6 +18,7 @@ from eth_research.data.lock import (
     load_dataset_lock,
     verify_dataset_lock,
 )
+from eth_research.data.provenance import sha256_file
 
 
 def make_lock(pipeline: CoinbasePipeline) -> DatasetLock:
@@ -183,6 +184,26 @@ class TestVerifyDatasetLock:
                 lock,
                 manifest_path=rebuild.manifest_path,
                 acquisition_evidence_path=coinbase_pipeline.evidence_path,
+            )
+
+    def test_evidence_version_mismatch_breaks_the_chain(
+        self, coinbase_pipeline: CoinbasePipeline
+    ) -> None:
+        # R6: acquisition evidence reporting a different software version than
+        # the manifest breaks the version chain, even with a matching hash.
+        forged = dataclasses.replace(coinbase_pipeline.evidence, package_version="9.9.9")
+        forged_path = coinbase_pipeline.evidence_path.with_name("forged_evidence.json")
+        forged_path.write_bytes(forged.to_json_bytes())
+        lock = build_dataset_lock(
+            coinbase_pipeline.build.manifest,
+            manifest_sha256=coinbase_pipeline.manifest_sha256,
+            acquisition_evidence_sha256=sha256_file(forged_path),
+        )
+        with pytest.raises(DatasetLockError, match=r"package_version \(evidence\)"):
+            verify_dataset_lock(
+                lock,
+                manifest_path=coinbase_pipeline.build.manifest_path,
+                acquisition_evidence_path=forged_path,
             )
 
     def test_missing_manifest_is_detected(self, coinbase_pipeline: CoinbasePipeline) -> None:

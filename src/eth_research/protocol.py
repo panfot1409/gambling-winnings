@@ -20,12 +20,14 @@ byte-identical.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+from eth_research import __version__
 from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.lock import DatasetLock
 from eth_research.data.provenance import (
@@ -45,6 +47,7 @@ from eth_research.data.validation import (
     require_nonnegative_int,
     require_positive_int,
 )
+from eth_research.metrics import SECONDS_PER_YEAR
 
 PROTOCOL_SCHEMA_VERSION: int = 1
 RESULTS_SCHEMA_VERSION: int = 1
@@ -425,7 +428,23 @@ def build_benchmark_protocol(lock: DatasetLock, *, package_version: str) -> Benc
 
 
 def verify_protocol(protocol: BenchmarkProtocol, lock: DatasetLock) -> None:
-    """The protocol must pin exactly this dataset lock and its artifacts."""
+    """The protocol must pin exactly this dataset lock and its artifacts.
+
+    For the frozen Milestone 2B protocol the software-version chain is
+    validated too: the protocol, the dataset lock, and the running package
+    must all report the same version.
+    """
+    if protocol.package_version != lock.package_version:
+        raise ProtocolError(
+            f"protocol/dataset-lock package version mismatch: protocol says "
+            f"{protocol.package_version!r}, lock says {lock.package_version!r}"
+        )
+    if protocol.package_version != __version__:
+        raise ProtocolError(
+            f"protocol package version {protocol.package_version!r} is not the running "
+            f"package version {__version__!r}; the frozen 2B protocol must be run by the "
+            "version that pre-registered it"
+        )
     checks: list[tuple[str, str, str]] = [
         (
             "dataset_content_fingerprint",
@@ -516,18 +535,55 @@ class SegmentMetrics:
             value = require_finite_float(label, getattr(self, label))
             if value <= 0:
                 raise ValueError(f"{label} must be positive, got {value!r}")
-        require_finite_float("total_return", self.total_return)
-        require_finite_float("cagr", self.cagr)
+        total_return = require_finite_float("total_return", self.total_return)
+        cagr = require_finite_float("cagr", self.cagr)
         _optional_finite_float("sharpe", self.sharpe)
         _optional_finite_float("sortino", self.sortino)
         drawdown = require_finite_float("max_drawdown", self.max_drawdown)
-        if drawdown > 0:
-            raise ValueError(f"max_drawdown must be <= 0, got {drawdown!r}")
-        for label in ("total_traded_notional", "turnover"):
-            value = require_finite_float(label, getattr(self, label))
+        if not -1.0 <= drawdown <= 0.0:
+            raise ValueError(f"max_drawdown must be in [-1, 0], got {drawdown!r}")
+        notional = require_finite_float("total_traded_notional", self.total_traded_notional)
+        turnover = require_finite_float("turnover", self.turnover)
+        for label, value in (("total_traded_notional", notional), ("turnover", turnover)):
             if value < 0:
                 raise ValueError(f"{label} must be >= 0, got {value!r}")
-        require_nonnegative_int("num_fills", self.num_fills)
+        num_fills = require_nonnegative_int("num_fills", self.num_fills)
+
+        # Identities reconstructable from the serialized scalars alone.
+        expected_return = self.terminal_equity / self.initial_cash - 1.0
+        if total_return != expected_return:
+            raise ValueError(
+                f"total_return {total_return!r} does not equal terminal_equity / initial_cash "
+                f"- 1 ({expected_return!r})"
+            )
+        if total_return <= -1.0:
+            raise ValueError(f"total_return must be > -1 for positive equity, got {total_return!r}")
+        expected_turnover = notional / self.initial_cash
+        if turnover != expected_turnover:
+            raise ValueError(
+                f"turnover {turnover!r} does not equal total_traded_notional / initial_cash "
+                f"({expected_turnover!r})"
+            )
+        if cagr <= -1.0:
+            raise ValueError(f"cagr must be > -1, got {cagr!r}")
+        years = (self.end_time - self.start_time).total_seconds() / SECONDS_PER_YEAR
+        expected_cagr = (self.terminal_equity / self.initial_cash) ** (1.0 / years) - 1.0
+        if not math.isclose(cagr, expected_cagr, rel_tol=1e-9, abs_tol=1e-12):
+            raise ValueError(
+                f"cagr {cagr!r} is inconsistent with total return over the segment duration "
+                f"(expected ~{expected_cagr!r})"
+            )
+
+        # Fill / notional coherence.
+        if num_fills == 0 and (notional != 0.0 or turnover != 0.0):
+            raise ValueError("zero fills must imply zero traded notional and zero turnover")
+        if notional > 0.0 and num_fills == 0:
+            raise ValueError("positive traded notional cannot coexist with zero fills")
+        if strategy == "buy_and_hold" and num_fills != 1:
+            raise ValueError(
+                f"buy_and_hold enters once at the first open, so num_fills must be 1, "
+                f"got {num_fills}"
+            )
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
