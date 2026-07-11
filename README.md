@@ -162,14 +162,26 @@ report = audit_ohlcv_file("data/raw/ethusd.csv", expected_interval=identity.inte
   the build; the raw file is never modified, sorted, filled, or clipped.
 - The **manifest** records what the data claims to be (ETH spot only:
   exact symbol, venue, candle interval, UTC open-time convention, source
-  description), the raw-file SHA-256, and a container-independent content
-  fingerprint (`ohlcv-fp-v1/sha256` — equivalent CSV and Parquet inputs
-  fingerprint identically). `load_canonical_dataset` re-verifies the
-  fingerprint, row count, and time bounds, so tampering with either the
-  data or the manifest is detected.
-- Writes are atomic, and existing artifacts are never overwritten without
-  an explicit `overwrite=True`. No network access: acquiring real ETH data
-  is Milestone 2B.
+  description), the SHA-256 of the exact raw bytes that were parsed (one
+  immutable snapshot — a mid-build source change aborts the build), a
+  container-independent content fingerprint (`ohlcv-fp-v1/sha256` —
+  equivalent CSV and Parquet inputs fingerprint identically), the package
+  version that built it, the two build flags (`assume_utc`,
+  `allow_extra_columns`), and the quality report's filename and SHA-256 —
+  the audit evidence is bound to the dataset. Manifests validate through
+  one strict shared path (exact JSON types, no repair; safe basenames;
+  64-lowercase-hex hashes; consistent time bounds).
+- `load_canonical_dataset` re-verifies everything: fingerprint, row count,
+  time bounds, and the quality report (exact hash, strict parse, and
+  cross-checked row count / interval / build flags). Missing, edited,
+  malformed, or mismatched artifacts are rejected.
+- Publication is **transactional**: artifact bytes are precomputed, writes
+  are atomic with the manifest last as the completeness marker, and a
+  failure mid-publication rolls back — a fresh build leaves nothing behind
+  and a failed overwrite leaves the previous dataset byte-identical.
+  Existing artifacts are never overwritten without an explicit
+  `overwrite=True`. No network access: acquiring real ETH data is
+  Milestone 2B.
 
 ## Conventions
 

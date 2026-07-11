@@ -127,3 +127,38 @@ No real-data download, no strategies or backtest-engine changes, no
 optimization/walk-forward/parameter grids, no fractional weights, no ML,
 no live/paper trading, no wallets/exchanges/credentials/network clients,
 and no committed market datasets.
+
+## 5. Remediation record (same branch, pre-acceptance)
+
+Review of the initial 2A implementation found five provenance/publication
+defects, fixed in order:
+
+1. **Unique software version** — the package moved to 0.2.0 (pyproject,
+   `__version__`, `uv.lock` together); a test pins installed metadata to
+   `__version__` so they cannot drift, and manifests can no longer claim
+   the foreign `v0.1.0` tag's version.
+2. **Genuinely strict manifests** — schema version 1 was extended in place
+   (no released manifests existed): every field validates in the
+   `DatasetManifest` constructor, the single shared path for built and
+   parsed manifests. Exact JSON types (no `str(...)` repair), bool rejected
+   where integers are required, locked `base_asset`/`market_type`/
+   `timestamp_convention`, 64-lowercase-hex hashes, `sha256:<64 hex>`
+   fingerprints, positive finite interval, ordered timezone-aware time
+   bounds consistent with `first + (row_count − 1) × interval`, and safe
+   basenames for all filenames. Adversarial tests cover every rejection.
+3. **Audit evidence bound to the dataset** — the manifest now records
+   `quality_report_filename`, `quality_report_sha256`, `assume_utc`, and
+   `allow_extra_columns`; the quality report records the same flags and
+   parses strictly; loading requires the report beside the manifest,
+   verifies its exact SHA-256, parses it strictly, cross-checks row count,
+   interval, and flags, and returns it in `LoadedDataset`.
+4. **Raw hash bound to parsed bytes** — the source is read once into an
+   immutable snapshot that is both hashed and parsed; the on-disk file is
+   re-hashed just before publication and any mid-build change aborts with
+   nothing written.
+5. **Failure-safe publication** — all artifact bytes are precomputed;
+   writes are atomic with the manifest last; any failure rolls back so a
+   fresh build leaves no artifacts and a failed overwrite leaves the
+   previous dataset byte-identical, with no temporary or backup files.
+   Failure-injection tests cover each artifact on fresh and overwrite
+   paths.
