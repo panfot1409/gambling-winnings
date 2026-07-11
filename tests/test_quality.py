@@ -224,3 +224,85 @@ def test_findings_sorted_errors_first() -> None:
     frame.loc[[4, 5], "volume"] = 0.0  # warnings
     severities = [f.severity for f in audit(frame).findings]
     assert severities == sorted(severities)  # "error" sorts before "warning"
+
+
+def test_report_records_build_flags() -> None:
+    frame = raw_frame()
+    frame["symbol"] = "ETH-USD"
+    frame["timestamp"] = frame["timestamp"].str.replace("+00:00", "", regex=False)
+    report = audit(frame, assume_utc=True, allow_extra_columns=True)
+    assert report.assume_utc is True
+    assert report.allow_extra_columns is True
+    assert audit(raw_frame()).assume_utc is False
+
+
+def test_report_json_round_trips_strictly() -> None:
+    frame = raw_frame(10)
+    frame.loc[1, "volume"] = -1.0
+    frame.loc[[4, 5], "volume"] = 0.0
+    report = audit(frame, assume_utc=True)
+    parsed = QualityReport.from_json_bytes(report.to_json_bytes())
+    assert parsed == report
+
+
+def test_report_parsing_rejects_tampering() -> None:
+    report = audit(raw_frame())
+    payload = json.loads(report.to_json_bytes())
+
+    unknown = dict(payload)
+    unknown["extra"] = 1
+    with pytest.raises(ValueError, match=r"unknown=\['extra'\]"):
+        QualityReport.from_json_bytes(json.dumps(unknown).encode())
+
+    missing = dict(payload)
+    del missing["assume_utc"]
+    with pytest.raises(ValueError, match=r"missing=\['assume_utc'\]"):
+        QualityReport.from_json_bytes(json.dumps(missing).encode())
+
+    bad_version = dict(payload)
+    bad_version["schema_version"] = 99
+    with pytest.raises(ValueError, match="unsupported quality report schema version"):
+        QualityReport.from_json_bytes(json.dumps(bad_version).encode())
+
+    bool_rows = dict(payload)
+    bool_rows["row_count"] = True
+    with pytest.raises(ValueError, match="bool is rejected"):
+        QualityReport.from_json_bytes(json.dumps(bool_rows).encode())
+
+    bad_flag = dict(payload)
+    bad_flag["assume_utc"] = "yes"
+    with pytest.raises(ValueError, match="assume_utc must be a boolean"):
+        QualityReport.from_json_bytes(json.dumps(bad_flag).encode())
+
+    with pytest.raises(ValueError, match="not valid JSON"):
+        QualityReport.from_json_bytes(b"{nope")
+
+
+def test_report_parsing_rejects_inconsistent_finding_counts() -> None:
+    frame = raw_frame()
+    frame.loc[1, "volume"] = -1.0
+    report = audit(frame)
+    payload = json.loads(report.to_json_bytes())
+    payload["error_finding_count"] = 0  # lie about the findings
+    with pytest.raises(ValueError, match="error_finding_count does not match"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+
+def test_report_parsing_rejects_malformed_findings() -> None:
+    report = audit_frame(raw_frame(), expected_interval=DAY)
+    payload = json.loads(report.to_json_bytes())
+    payload["findings"] = [{"code": "x"}]
+    with pytest.raises(ValueError, match="exactly the keys"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())
+
+    payload["findings"] = [
+        {
+            "code": "x",
+            "severity": "fatal",
+            "count": 1,
+            "description": "d",
+            "first_examples": [],
+        }
+    ]
+    with pytest.raises(ValueError, match="severity must be"):
+        QualityReport.from_json_bytes(json.dumps(payload).encode())

@@ -27,8 +27,11 @@ Guarantees:
 
 ``load_canonical_dataset`` is verification-on-read: the manifest is parsed
 strictly, the Parquet is re-validated, the content fingerprint is
-recomputed and compared, and row count and first/last open times are
-cross-checked. Any mismatch raises :class:`DatasetVerificationError`.
+recomputed and compared, row count and first/last open times are
+cross-checked, and the quality report bound in the manifest is required
+beside it — SHA-256-exact, strictly parsed, and cross-checked against the
+manifest's row count, interval, and build flags. Any mismatch raises
+:class:`DatasetVerificationError`.
 """
 
 from __future__ import annotations
@@ -81,10 +84,11 @@ class BuildResult:
 
 @dataclass(frozen=True)
 class LoadedDataset:
-    """A verified canonical frame together with its manifest."""
+    """A verified canonical frame, its manifest, and its quality report."""
 
     frame: pd.DataFrame
     manifest: DatasetManifest
+    quality_report: QualityReport
 
 
 def _reject_network_sources(path: str | Path) -> None:
@@ -226,9 +230,12 @@ def build_canonical_dataset(
 def load_canonical_dataset(manifest_path: str | Path) -> LoadedDataset:
     """Load a canonical dataset, verifying it against its manifest.
 
-    Detects manifest tampering and data/manifest mismatches: strict
-    manifest parsing, schema re-validation, fingerprint recomputation, and
-    row-count / first / last open-time cross-checks.
+    Detects tampering and data/manifest mismatches: strict manifest
+    parsing, schema re-validation, fingerprint recomputation, row-count and
+    open-time cross-checks, and verification of the bound quality report —
+    its exact SHA-256, strict parse, and cross-checked row count, interval,
+    and build flags. Missing, edited, malformed, or mismatched artifacts
+    are rejected.
     """
     path = Path(manifest_path)
     try:
@@ -262,7 +269,45 @@ def load_canonical_dataset(manifest_path: str | Path) -> LoadedDataset:
                 f"data/manifest mismatch on {label}: manifest says {expected!r}, "
                 f"data has {actual!r} — the dataset or its manifest was modified"
             )
-    return LoadedDataset(frame=frame, manifest=manifest)
+
+    report = _verify_quality_report(path.parent, manifest)
+    return LoadedDataset(frame=frame, manifest=manifest, quality_report=report)
+
+
+def _verify_quality_report(directory: Path, manifest: DatasetManifest) -> QualityReport:
+    """The audit evidence must sit beside the manifest, byte-exact and consistent."""
+    report_path = directory / manifest.quality_report_filename
+    if not report_path.exists():
+        raise DatasetVerificationError(
+            f"quality report {manifest.quality_report_filename!r} not found next to the manifest"
+        )
+    report_bytes = report_path.read_bytes()
+    actual_sha = sha256_bytes(report_bytes)
+    if actual_sha != manifest.quality_report_sha256:
+        raise DatasetVerificationError(
+            f"quality report {report_path.name!r} does not match the manifest's "
+            f"quality_report_sha256 — the audit evidence was modified"
+        )
+    try:
+        report = QualityReport.from_json_bytes(report_bytes)
+    except ValueError as exc:
+        raise DatasetVerificationError(
+            f"invalid quality report {report_path.name!r}: {exc}"
+        ) from exc
+
+    cross_checks: list[tuple[str, object, object]] = [
+        ("row_count", manifest.row_count, report.row_count),
+        ("candle_interval", manifest.candle_interval, report.expected_interval),
+        ("assume_utc", manifest.assume_utc, report.assume_utc),
+        ("allow_extra_columns", manifest.allow_extra_columns, report.allow_extra_columns),
+    ]
+    for label, manifest_value, report_value in cross_checks:
+        if manifest_value != report_value:
+            raise DatasetVerificationError(
+                f"quality report/manifest mismatch on {label}: manifest says "
+                f"{manifest_value!r}, quality report says {report_value!r}"
+            )
+    return report
 
 
 def _write_atomic(path: Path, data: bytes) -> None:

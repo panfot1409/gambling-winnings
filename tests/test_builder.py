@@ -15,7 +15,7 @@ from eth_research.data.builder import (
     build_canonical_dataset,
     load_canonical_dataset,
 )
-from eth_research.data.provenance import DatasetIdentity
+from eth_research.data.provenance import DatasetIdentity, sha256_bytes
 from eth_research.data.schema import validate_ohlcv
 from eth_research.data.synthetic import make_synthetic_ohlcv
 
@@ -254,3 +254,87 @@ def test_canonical_content_matches_direct_validation(
     loaded = load_canonical_dataset(result.manifest_path)
     direct = validate_ohlcv(pd.read_csv(source), expected_interval=IDENTITY.interval)
     pd.testing.assert_frame_equal(loaded.frame, direct, check_freq=False)
+
+
+def test_loaded_dataset_includes_verified_quality_report(
+    tmp_path: Path, canonical: pd.DataFrame
+) -> None:
+    source = write_csv(canonical, tmp_path / "raw.csv")
+    result = build_canonical_dataset(source, IDENTITY, tmp_path / "out", assume_utc=False)
+    loaded = load_canonical_dataset(result.manifest_path)
+    assert loaded.quality_report == result.quality_report
+    assert loaded.quality_report.assume_utc is False
+    assert loaded.quality_report.allow_extra_columns is False
+    assert loaded.manifest.quality_report_filename == result.quality_report_path.name
+
+
+def test_deleted_quality_report_fails_verification(tmp_path: Path, canonical: pd.DataFrame) -> None:
+    source = write_csv(canonical, tmp_path / "raw.csv")
+    result = build_canonical_dataset(source, IDENTITY, tmp_path / "out")
+    result.quality_report_path.unlink()
+    with pytest.raises(DatasetVerificationError, match=r"quality report .* not found"):
+        load_canonical_dataset(result.manifest_path)
+
+
+def test_edited_quality_report_fails_verification(tmp_path: Path, canonical: pd.DataFrame) -> None:
+    source = write_csv(canonical, tmp_path / "raw.csv")
+    result = build_canonical_dataset(source, IDENTITY, tmp_path / "out")
+    payload = json.loads(result.quality_report_path.read_bytes())
+    payload["row_count"] = 999  # even a "plausible" edit changes the bytes
+    result.quality_report_path.write_bytes(json.dumps(payload).encode())
+    with pytest.raises(DatasetVerificationError, match="quality_report_sha256"):
+        load_canonical_dataset(result.manifest_path)
+
+
+def test_malformed_quality_report_with_fixed_hash_fails_parse(
+    tmp_path: Path, canonical: pd.DataFrame
+) -> None:
+    """An attacker who also fixes the manifest hash still fails strict parsing."""
+    source = write_csv(canonical, tmp_path / "raw.csv")
+    result = build_canonical_dataset(source, IDENTITY, tmp_path / "out")
+
+    bad_report = b"{not json"
+    result.quality_report_path.write_bytes(bad_report)
+    manifest_payload = json.loads(result.manifest_path.read_bytes())
+    manifest_payload["quality_report_sha256"] = sha256_bytes(bad_report)
+    result.manifest_path.write_bytes(json.dumps(manifest_payload).encode())
+    with pytest.raises(DatasetVerificationError, match="invalid quality report"):
+        load_canonical_dataset(result.manifest_path)
+
+
+def test_consistent_looking_report_edit_fails_cross_checks(
+    tmp_path: Path, canonical: pd.DataFrame
+) -> None:
+    """A well-formed but wrong report is caught by manifest cross-checks."""
+    source = write_csv(canonical, tmp_path / "raw.csv")
+    result = build_canonical_dataset(source, IDENTITY, tmp_path / "out")
+
+    payload = json.loads(result.quality_report_path.read_bytes())
+    payload["assume_utc"] = True  # claim a different audit configuration
+    forged = json.dumps(payload, sort_keys=True, indent=2).encode() + b"\n"
+    result.quality_report_path.write_bytes(forged)
+    manifest_payload = json.loads(result.manifest_path.read_bytes())
+    manifest_payload["quality_report_sha256"] = sha256_bytes(forged)
+    result.manifest_path.write_bytes(json.dumps(manifest_payload).encode())
+    with pytest.raises(DatasetVerificationError, match="mismatch on assume_utc"):
+        load_canonical_dataset(result.manifest_path)
+
+
+def test_build_flags_are_recorded_in_manifest_and_report(
+    tmp_path: Path, canonical: pd.DataFrame
+) -> None:
+    naive = canonical.reset_index()
+    naive["timestamp"] = naive["timestamp"].dt.tz_localize(None)
+    extra = naive.assign(symbol="ETH/USD")
+    path = tmp_path / "raw.csv"
+    extra.to_csv(path, index=False)
+
+    result = build_canonical_dataset(
+        path, IDENTITY, tmp_path / "out", assume_utc=True, allow_extra_columns=True
+    )
+    assert result.manifest.assume_utc is True
+    assert result.manifest.allow_extra_columns is True
+    assert result.quality_report.assume_utc is True
+    assert result.quality_report.allow_extra_columns is True
+    loaded = load_canonical_dataset(result.manifest_path)
+    assert loaded.quality_report.assume_utc is True
