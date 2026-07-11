@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Research data and outputs at the repository root (never commit market data or results)
+/data/
+/outputs/
