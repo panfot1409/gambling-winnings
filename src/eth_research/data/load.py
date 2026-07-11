@@ -52,7 +52,11 @@ def load_ohlcv(
     file = Path(path)
     suffix = file.suffix.lower()
     if suffix == ".csv":
-        raw = pd.read_csv(file)
+        # Round-trip parsing: the loaded doubles are exactly the doubles the
+        # file denotes, matching the canonical dataset builder (the default
+        # parser can be several ulps off, which would let the same file
+        # load differently here than through build_canonical_dataset).
+        raw = pd.read_csv(file, float_precision="round_trip")
     elif suffix in {".parquet", ".pq"}:
         raw = pd.read_parquet(file)
     else:
