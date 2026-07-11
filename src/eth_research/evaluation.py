@@ -34,8 +34,8 @@ import pandas as pd
 from eth_research import __version__
 from eth_research._atomic import publish_atomically
 from eth_research.backtest import BacktestResult, CostModel, run_backtest
-from eth_research.data.builder import LoadedDataset
-from eth_research.data.lock import DatasetLock, verify_dataset_lock
+from eth_research.data.builder import LoadedDataset, load_canonical_dataset
+from eth_research.data.lock import load_dataset_lock, verify_dataset_lock
 from eth_research.data.provenance import (
     content_fingerprint,
     require_nonempty_str,
@@ -44,6 +44,15 @@ from eth_research.data.provenance import (
 from eth_research.data.validation import (
     require_commit_sha,
     require_evaluation_id,
+)
+from eth_research.gitcheck import (
+    GitError,
+    file_bytes_at_commit,
+    head_commit,
+    is_commit_object,
+    relative_to_repo,
+    resolve_repo_root,
+    tracked_tree_is_clean,
 )
 from eth_research.ledger import (
     EVENT_COMPLETED,
@@ -72,6 +81,9 @@ _SEGMENT_ORDER: dict[str, int] = {"train": 0, "validation": 1, "test": 2}
 
 RESULTS_FILENAME: str = "benchmark_results.json"
 REPORT_FILENAME: str = "benchmark_report.md"
+
+CANONICAL_LEDGER_RELPATH: str = "research/m2b/test_evaluations.jsonl"
+"""The one authoritative, tracked location of the test-access ledger."""
 
 EVALUATION_CONFIRM_TOKEN: str = (
     "I-UNDERSTAND-THIS-PERMANENTLY-CONSUMES-THE-ONE-TIME-TEST-EVALUATION"
@@ -248,6 +260,16 @@ def _run_segment(
     )
 
 
+def _recheck_frame_fingerprint(dataset: LoadedDataset) -> None:
+    """The frame must recompute to its manifest fingerprint (guards forged
+    hand-built ``LoadedDataset`` objects that could mislabel results)."""
+    if content_fingerprint(dataset.frame) != dataset.manifest.content_fingerprint:
+        raise EvaluationError(
+            "the dataset frame does not recompute to its manifest content fingerprint — "
+            "refusing to evaluate a dataset whose frame and manifest disagree"
+        )
+
+
 def evaluate_train_validation(
     dataset: LoadedDataset, protocol: BenchmarkProtocol
 ) -> tuple[SegmentMetrics, ...]:
@@ -257,6 +279,7 @@ def evaluate_train_validation(
     split off mechanically but never handed to a strategy or the engine.
     """
     _verify_dataset_matches_protocol(dataset, protocol)
+    _recheck_frame_fingerprint(dataset)
     splits = _split(dataset, protocol)
     segments: list[SegmentMetrics] = []
     for strategy, context_bars in _strategies(protocol):
@@ -265,6 +288,19 @@ def evaluate_train_validation(
             context = _context_for(splits, segment, context_bars)
             segments.append(_run_segment(frame, context, strategy, protocol, segment))
     return tuple(segments)
+
+
+def evaluate_train_validation_from_manifest(
+    manifest_path: str | Path, protocol: BenchmarkProtocol
+) -> tuple[SegmentMetrics, ...]:
+    """Load and verify the dataset from its manifest, then run train/validation.
+
+    The high-level entry point that never trusts a caller-built
+    :class:`LoadedDataset`: :func:`load_canonical_dataset` re-verifies the
+    Parquet, manifest, fingerprint, and quality report before evaluation.
+    """
+    dataset = load_canonical_dataset(manifest_path)
+    return evaluate_train_validation(dataset, protocol)
 
 
 def split_boundaries(
@@ -370,28 +406,68 @@ def publish_benchmark_reports(
     return results_path, report_path
 
 
+def _require_bytes_match_head(repo_root: Path, head: str, path: Path, label: str) -> None:
+    """The working bytes of a tracked file must equal its bytes at ``head``."""
+    try:
+        relpath = relative_to_repo(repo_root, path)
+    except GitError as exc:
+        raise EvaluationError(f"{label} path is not inside the repository: {exc}") from exc
+    if not path.exists():
+        raise EvaluationError(f"{label} {path} does not exist")
+    try:
+        committed = file_bytes_at_commit(repo_root, head, relpath)
+    except GitError as exc:
+        raise EvaluationError(
+            f"{label} {relpath!r} is not committed at the pre-registered revision: {exc}"
+        ) from exc
+    if path.read_bytes() != committed:
+        raise EvaluationError(
+            f"{label} {relpath!r} differs from its bytes committed at the pre-registered "
+            "revision — refusing to run the one-time evaluation on modified inputs"
+        )
+
+
 def run_authorized_benchmark(
-    dataset: LoadedDataset,
-    protocol: BenchmarkProtocol,
     *,
-    lock: DatasetLock,
+    repo_root: str | Path,
     manifest_path: str | Path,
+    protocol_path: str | Path,
+    lock_path: str | Path,
     acquisition_evidence_path: str | Path,
-    ledger_path: str | Path,
     output_dir: str | Path,
     authorization: OneTimeTestAuthorization | None = None,
+    ledger_path: str | Path | None = None,
+    raw_chunk_dir: str | Path | None = None,
+    derived_csv: str | Path | None = None,
     clock: Callable[[], pd.Timestamp] | None = None,
     overwrite: bool = False,
 ) -> BenchmarkRun:
     """Run the complete benchmark including the one-time test evaluation.
 
     Refused by default: ``authorization`` must be an explicit
-    :class:`OneTimeTestAuthorization` carrying the confirmation token.
-    The provenance chain is re-verified, the ledger consulted, and the
-    ``started`` event written before any test signal or P&L is computed.
-    Completion or failure is recorded honestly; any access — including a
-    crash or failure after ``started`` — permanently consumes the
-    one-time evaluation for this (dataset lock, protocol) pair.
+    :class:`OneTimeTestAuthorization` carrying the confirmation token whose
+    ``code_commit_sha`` equals the repository's actual ``HEAD``.
+
+    Trust boundary (single-repository, single-researcher operational
+    control — see :mod:`eth_research.gitcheck` for its honest limits):
+
+    * the repository ``HEAD`` is resolved with git; the authorization SHA
+      must equal it, name a real commit, and the tracked working tree must
+      be clean;
+    * the tracked inputs (protocol, dataset lock, acquisition evidence, and
+      the pristine ledger at the canonical path
+      ``research/m2b/test_evaluations.jsonl``) are read from disk and their
+      bytes must equal their blobs committed at ``HEAD``;
+    * the dataset is **reloaded and re-verified internally** with
+      :func:`load_canonical_dataset` (Parquet, manifest, fingerprint,
+      quality-report hash + strict parse + cross-checks) — no
+      caller-supplied :class:`LoadedDataset` is trusted;
+    * the dataset lock, protocol, and — when ``raw_chunk_dir`` and
+      ``derived_csv`` are supplied — the full semantic acquisition
+      re-derivation are verified;
+    * the ``started`` event is appended before any test signal or P&L is
+      computed; completion or failure is recorded honestly; any access
+      permanently consumes the one-time evaluation.
     """
     if authorization is None:
         raise EvaluationError(
@@ -400,26 +476,91 @@ def run_authorized_benchmark(
         )
     tick = clock if clock is not None else _default_clock
 
-    # Full provenance chain, re-verified from bytes on disk.
+    # --- R3: bind to the actual, clean, pre-registered git revision. ---
+    try:
+        root = resolve_repo_root(repo_root)
+        head = head_commit(root)
+    except GitError as exc:
+        raise EvaluationError(f"could not establish the repository revision: {exc}") from exc
+    if not is_commit_object(root, authorization.code_commit_sha):
+        raise EvaluationError(
+            f"authorization code_commit_sha {authorization.code_commit_sha!r} is not a real "
+            "commit in this repository"
+        )
+    if authorization.code_commit_sha != head:
+        raise EvaluationError(
+            f"authorization code_commit_sha {authorization.code_commit_sha!r} is not the "
+            f"repository HEAD {head!r}; the frozen evaluation must run from the pre-registered "
+            "revision"
+        )
+    try:
+        clean = tracked_tree_is_clean(root)
+    except GitError as exc:
+        raise EvaluationError(f"could not check the working tree: {exc}") from exc
+    if not clean:
+        raise EvaluationError(
+            "the tracked working tree is not clean; commit or discard tracked changes before "
+            "the one-time evaluation (ignored raw/canonical data may remain)"
+        )
+
+    # --- R2: the ledger is the canonical tracked file, not caller-selected. ---
+    ledger = root / CANONICAL_LEDGER_RELPATH
+    if ledger.is_symlink():
+        raise EvaluationError(
+            "the canonical test-access ledger must be a real tracked file, not a symlink"
+        )
+    try:
+        relative_to_repo(root, ledger)  # resolved path must remain inside the repo
+    except GitError as exc:
+        raise EvaluationError(
+            f"the canonical ledger resolves outside the repository: {exc}"
+        ) from exc
+    if ledger_path is not None and Path(ledger_path).resolve() != ledger.resolve():
+        raise EvaluationError(
+            f"ledger path {Path(ledger_path)} is not the canonical tracked ledger "
+            f"{CANONICAL_LEDGER_RELPATH!r}; an alternate, copied, or path-outside-repo ledger "
+            "is refused"
+        )
+
+    # --- R3: every tracked input must equal its committed bytes at HEAD. ---
+    protocol_file = Path(protocol_path)
+    lock_file = Path(lock_path)
+    evidence_file = Path(acquisition_evidence_path)
+    _require_bytes_match_head(root, head, protocol_file, "protocol")
+    _require_bytes_match_head(root, head, lock_file, "dataset lock")
+    _require_bytes_match_head(root, head, evidence_file, "acquisition evidence")
+    _require_bytes_match_head(root, head, ledger, "test-access ledger")
+
+    # --- R4: load lock/protocol from the verified bytes; reload the dataset. ---
+    lock = load_dataset_lock(lock_file)
+    try:
+        protocol = BenchmarkProtocol.from_json_bytes(protocol_file.read_bytes())
+    except ValueError as exc:
+        raise EvaluationError(f"invalid protocol {protocol_file.name!r}: {exc}") from exc
+
     manifest, _evidence = verify_dataset_lock(
         lock,
         manifest_path=manifest_path,
-        acquisition_evidence_path=acquisition_evidence_path,
+        acquisition_evidence_path=evidence_file,
+        raw_chunk_dir=raw_chunk_dir,
+        derived_csv=derived_csv,
     )
-    if manifest != dataset.manifest:
-        raise EvaluationError("the loaded dataset's manifest is not the manifest the lock pins")
+    dataset = load_canonical_dataset(manifest_path)
+    if dataset.manifest != manifest:
+        raise EvaluationError("the reloaded dataset's manifest is not the manifest the lock pins")
     verify_protocol(protocol, lock)
     _verify_dataset_matches_protocol(dataset, protocol)
+    _recheck_frame_fingerprint(dataset)
     if content_fingerprint(dataset.frame) != protocol.dataset_content_fingerprint:
         raise EvaluationError(
-            "the loaded frame's recomputed fingerprint is not the protocol's dataset "
+            "the reloaded frame's recomputed fingerprint is not the protocol's dataset "
             "fingerprint — refusing to run the one-time evaluation on unverified data"
         )
 
     protocol_sha = sha256_bytes(protocol.to_json_bytes())
     lock_sha = sha256_bytes(lock.to_json_bytes())
 
-    events = read_ledger(ledger_path)
+    events = read_ledger(ledger)
     consumed = accesses_for(events, dataset_lock_sha256=lock_sha, protocol_sha256=protocol_sha)
     if consumed:
         raise EvaluationError(
@@ -433,6 +574,7 @@ def run_authorized_benchmark(
             "already used; evaluation ids are single-use"
         )
 
+    ledger_path = ledger
     directory = Path(output_dir)
     results_path = directory / RESULTS_FILENAME
     report_path = directory / REPORT_FILENAME

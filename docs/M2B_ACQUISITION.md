@@ -272,44 +272,64 @@ stay 20/50 no matter what those runs show.
 
 Only after everything above, once, from the clean pre-registered commit:
 
+The evaluator loads and re-verifies the dataset itself and binds the run
+to the repository's actual `HEAD`, so it takes **paths**, not
+pre-built objects, and must run from the clean, pre-registered commit:
+
 ```python
-from eth_research.data.builder import load_canonical_dataset
-from eth_research.data.lock import load_dataset_lock
+import subprocess
+
 from eth_research.evaluation import (
     EVALUATION_CONFIRM_TOKEN,
     OneTimeTestAuthorization,
     run_authorized_benchmark,
 )
-from eth_research.protocol import load_benchmark_protocol
 
-dataset = load_canonical_dataset("data/datasets/m2b/coinbase-exchange-eth-usd-86400s.manifest.json")
-lock = load_dataset_lock("research/m2b/dataset_lock.json")
-protocol = load_benchmark_protocol("research/m2b/protocol.json")
+head = subprocess.run(
+    ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+).stdout.strip()
+
 run = run_authorized_benchmark(
-    dataset,
-    protocol,
-    lock=lock,
+    repo_root=".",
     manifest_path="data/datasets/m2b/coinbase-exchange-eth-usd-86400s.manifest.json",
+    protocol_path="research/m2b/protocol.json",
+    lock_path="research/m2b/dataset_lock.json",
     acquisition_evidence_path="research/m2b/acquisition_evidence.json",
-    ledger_path="research/m2b/test_evaluations.jsonl",
     output_dir="reports/m2b",
+    raw_chunk_dir="data/raw/coinbase",
+    derived_csv="data/derived/coinbase-eth-usd-1d.csv",
     authorization=OneTimeTestAuthorization(
         evaluation_id="m2b-coinbase-eth-usd-test-001",
         reason="authorized one-time Milestone 2B test evaluation",
-        code_commit_sha="<the pre-registered commit SHA>",
+        code_commit_sha=head,  # must equal the actual repository HEAD
         confirm_token=EVALUATION_CONFIRM_TOKEN,
     ),
 )
 print(run.results_path, run.report_path)
 ```
 
-This writes the `started` ledger event before any test signal exists,
-publishes `reports/m2b/benchmark_results.json` and
-`benchmark_report.md` atomically, and appends `completed` with the
-results' SHA-256. Re-run the test suite and static gates (without
-re-running the test), then commit the two reports **and** the ledger
-(message: `Record the one-time test result and honest benchmark
-report`), push, and verify final CI.
+Before writing anything, the evaluator: resolves the real `HEAD` with
+git and requires `code_commit_sha == HEAD` (a real commit) with a clean
+tracked working tree; requires the tracked inputs (protocol, dataset
+lock, acquisition evidence, and the pristine ledger at the canonical
+path `research/m2b/test_evaluations.jsonl`) to equal their bytes
+committed at `HEAD`; **reloads the canonical dataset itself** via
+`load_canonical_dataset` (no caller-supplied dataset is trusted);
+re-runs the semantic acquisition check from the raw chunks; and only
+then writes the `started` ledger event before any test signal exists. It
+publishes `reports/m2b/benchmark_results.json` and `benchmark_report.md`
+atomically and appends `completed` with the results' SHA-256. Re-run the
+test suite and static gates (without re-running the test), then commit
+the two reports **and** the ledger (message: `Record the one-time test
+result and honest benchmark report`), push, and verify final CI.
+
+This git binding is a single-repository, single-researcher operational
+control (see `eth_research.gitcheck`): it proves the working files equal
+a real local commit and that the tree is tracked-clean; it cannot prove
+anything about a remote or GitHub CI status, nor prevent a concurrent
+clone or a deliberate history rewrite. CI-green verification remains a
+procedural step you perform and record, not something the local code can
+attest.
 
 **Never rerun.** A crash or failure after `started` is a consumed
 access: the guard will refuse any further attempt for this dataset lock
