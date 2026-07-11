@@ -286,6 +286,14 @@ class TestBenchmarkResults:
         with pytest.raises(ValueError, match="sharpe must be finite"):
             make_results(sharpe=float("nan"))
 
+    def test_serializer_refuses_a_smuggled_nan(self) -> None:
+        # Even a NaN forced past the frozen dataclass (object.__setattr__)
+        # cannot reach the published bytes: allow_nan=False is a second wall.
+        results = make_results()
+        object.__setattr__(results.segments[0], "total_return", float("nan"))
+        with pytest.raises(ValueError, match="Out of range float values"):
+            results.to_json_bytes()
+
     def test_nan_literal_in_json_is_rejected(self) -> None:
         raw = (
             make_results().to_json_bytes().replace(b'"total_return": 0.05', b'"total_return": NaN')
