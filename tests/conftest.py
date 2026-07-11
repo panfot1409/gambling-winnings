@@ -97,33 +97,55 @@ class CoinbasePipeline:
         return sha256_file(self.evidence_path)
 
 
-def _synthetic_coinbase_rows(start: pd.Timestamp, days: int) -> list[list[float | int]]:
+def _synthetic_coinbase_rows(
+    start: pd.Timestamp,
+    days: int,
+    *,
+    first_row_index: int,
+    price_shift_from_row: int | None,
+) -> list[list[float | int]]:
     """Deterministic plausible daily candles in Coinbase field order (ascending)."""
     rows: list[list[float | int]] = []
     for i in range(days):
-        open_ = 100.0 + (i % 17) - (i % 5)
-        close = open_ + ((i % 3) - 1) * 2.0
+        row_index = first_row_index + i
+        shift = (
+            5.0 if price_shift_from_row is not None and row_index >= price_shift_from_row else 0.0
+        )
+        open_ = 100.0 + (row_index % 17) - (row_index % 5) + shift
+        close = open_ + ((row_index % 3) - 1) * 2.0
         high = max(open_, close) + 1.5
         low = min(open_, close) - 1.25
-        volume = 10.0 + (i % 7)
+        volume = 10.0 + (row_index % 7)
         time_s = int(start.as_unit("ns").value) // 10**9 + i * 86_400
         rows.append([time_s, low, high, open_, close, volume])
     return rows
 
 
-@pytest.fixture
-def coinbase_pipeline(tmp_path: Path) -> CoinbasePipeline:
-    """120 synthetic days frozen through the full acquisition -> M2A chain."""
+def build_coinbase_pipeline(
+    root: Path, *, price_shift_from_row: int | None = None
+) -> CoinbasePipeline:
+    """120 synthetic days frozen through the full acquisition -> M2A chain.
+
+    ``price_shift_from_row`` shifts prices from that row position onward —
+    used to build a dataset that differs from the default *only* in later
+    rows (e.g. only inside the test segment) for invariance proofs.
+    """
+    root.mkdir(parents=True, exist_ok=True)
     start = pd.Timestamp("2024-01-01", tz="UTC")
     total_days = 120
     chunk_days = 60
-    chunk_dir = tmp_path / "raw"
+    chunk_dir = root / "raw"
     chunk_dir.mkdir()
     requests: list[ChunkRequest] = []
     for position in range(0, total_days, chunk_days):
         window_start = start + pd.Timedelta(days=position)
         window_end = window_start + pd.Timedelta(days=chunk_days)
-        rows = _synthetic_coinbase_rows(window_start, chunk_days)
+        rows = _synthetic_coinbase_rows(
+            window_start,
+            chunk_days,
+            first_row_index=position,
+            price_shift_from_row=price_shift_from_row,
+        )
         path = chunk_dir / f"chunk_{position:03d}.json"
         path.write_bytes(json.dumps(rows).encode("ascii"))
         requests.append(
@@ -136,14 +158,14 @@ def coinbase_pipeline(tmp_path: Path) -> CoinbasePipeline:
                 retrieved_at=pd.Timestamp("2026-07-11T12:00:00+00:00"),
             )
         )
-    derived_csv = tmp_path / "synthetic-eth-usd-daily.csv"
+    derived_csv = root / "synthetic-eth-usd-daily.csv"
     evidence = derive_daily_ohlcv(
         requests,
         overall_start=start,
         overall_end=start + pd.Timedelta(days=total_days),
         output_csv=derived_csv,
     )
-    evidence_path = tmp_path / "acquisition_evidence.json"
+    evidence_path = root / "acquisition_evidence.json"
     write_acquisition_evidence(evidence, evidence_path)
     identity = DatasetIdentity(
         quote_asset="USD",
@@ -152,7 +174,7 @@ def coinbase_pipeline(tmp_path: Path) -> CoinbasePipeline:
         interval=pd.Timedelta(days=1),
         source="synthetic fixture — deterministic fake candles, not real market data",
     )
-    build = build_canonical_dataset(derived_csv, identity, tmp_path / "datasets")
+    build = build_canonical_dataset(derived_csv, identity, root / "datasets")
     return CoinbasePipeline(
         chunk_dir=chunk_dir,
         derived_csv=derived_csv,
@@ -161,3 +183,8 @@ def coinbase_pipeline(tmp_path: Path) -> CoinbasePipeline:
         build=build,
         identity=identity,
     )
+
+
+@pytest.fixture
+def coinbase_pipeline(tmp_path: Path) -> CoinbasePipeline:
+    return build_coinbase_pipeline(tmp_path)
