@@ -13,9 +13,12 @@ from eth_research.strategies.base import Strategy
 class MovingAverageCrossover(Strategy):
     """Long when the fast SMA of close is above the slow SMA, otherwise flat.
 
-    With ``fast_window=1`` this degenerates to "price above its SMA". During
-    the warm-up period, before both averages have a full window of data, the
-    strategy stays flat.
+    The target at row ``t`` uses closes up to and including bar ``t`` and is
+    executed by the engine at the open of bar ``t + 1``. With
+    ``fast_window=1`` this degenerates to "price above its SMA". During the
+    warm-up period, before both averages have a full window of data, the
+    strategy stays flat (``initial_target`` keeps the default 0: it starts
+    in cash).
     """
 
     fast_window: int = 20

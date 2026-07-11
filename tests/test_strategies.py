@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -17,8 +18,9 @@ def test_positions_contract(strategy: Strategy, synthetic_daily: pd.DataFrame) -
     positions = strategy.target_positions(synthetic_daily)
     assert positions.index.equals(synthetic_daily.index)
     assert not positions.isna().any()
-    assert float(positions.min()) >= 0.0
-    assert float(positions.max()) <= 1.0
+    # Milestone 1 restricts targets to exactly binary long/cash.
+    assert np.isin(positions.to_numpy(dtype=float), (0.0, 1.0)).all()
+    assert strategy.initial_target in (0, 1)
 
 
 def test_buy_and_hold_is_always_fully_invested(synthetic_daily: pd.DataFrame) -> None:
@@ -26,6 +28,15 @@ def test_buy_and_hold_is_always_fully_invested(synthetic_daily: pd.DataFrame) ->
     positions = strategy.target_positions(synthetic_daily)
     assert (positions == 1.0).all()
     assert strategy.name == "buy_and_hold"
+
+
+def test_buy_and_hold_is_ex_ante() -> None:
+    """Buy-and-hold needs no observed data: it targets 1 from the first open."""
+    assert BuyAndHold.initial_target == 1
+
+
+def test_data_driven_strategies_start_in_cash() -> None:
+    assert MovingAverageCrossover(fast_window=5, slow_window=10).initial_target == 0
 
 
 def test_sma_long_in_rising_market(
