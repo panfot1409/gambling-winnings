@@ -1,6 +1,7 @@
 {
   "accounting": "independent-segments-v1",
   "acquisition_evidence_sha256": "27ba6a6013fab67c02361bc3e2b43a761fa5ac0310556d7557859bdcbbbd2d0b",
+  "authorized_evaluation_code_commit_sha": null,
   "base_asset": "ETH",
   "candle_interval": "P1DT0H0M0S",
   "dataset_content_fingerprint": "sha256:273f89eb07ae882784e40c2bc2ef2be5db93ddb3efa7de6270880ad1b7dd5718",
@@ -11,7 +12,7 @@
   "dataset_row_count": 3702,
   "market_type": "spot",
   "package_version": "0.3.0",
-  "pre_registered_commit_sha": "b89627463775bf32698effb5adea1270a5927890",
+  "protocol_registration_commit_sha": "b89627463775bf32698effb5adea1270a5927890",
   "protocol_sha256": "a75a9cf508ead459976060ab7518c4e382ecb95e54cc0ee36ec0ff9281f26a81",
   "quality_report_sha256": "b167df002768469bd5fb17c5a6588edc2c98e3ce910a0995187e1f68ed14f07a",
   "quality_warnings": [
@@ -35,7 +36,7 @@
     }
   ],
   "quote_asset": "USD",
-  "results_schema_version": 1,
+  "results_schema_version": 2,
   "segments": [
     {
       "cagr": 1.0600989927944164,

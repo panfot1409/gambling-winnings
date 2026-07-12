@@ -54,7 +54,7 @@ class TestDecisionContent:
         decision = build_research_decision_from_results(results)
         assert decision.protocol_sha256 == results.protocol_sha256
         assert decision.dataset_content_fingerprint == results.dataset_content_fingerprint
-        assert decision.pre_registered_commit_sha == results.pre_registered_commit_sha
+        assert decision.protocol_registration_commit_sha == results.protocol_registration_commit_sha
 
     def test_wording_is_specific_not_universal(self) -> None:
         rationale = build_research_decision_from_results(committed_results()).rationale

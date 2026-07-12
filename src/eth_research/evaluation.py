@@ -87,6 +87,7 @@ from eth_research.metrics import PerformanceSummary, summarize
 from eth_research.protocol import (
     BUY_AND_HOLD_STRATEGY,
     RESULT_STRATEGY_NAMES,
+    RESULTS_SCHEMA_VERSION,
     BenchmarkProtocol,
     BenchmarkResults,
     QualityWarningSummary,
@@ -365,8 +366,9 @@ def build_benchmark_results(
     protocol: BenchmarkProtocol,
     segments: tuple[SegmentMetrics, ...],
     *,
-    pre_registered_commit_sha: str,
+    protocol_registration_commit_sha: str,
     test_evaluation_id: str | None,
+    authorized_evaluation_code_commit_sha: str | None = None,
 ) -> BenchmarkResults:
     """Assemble the validated result record from evaluated segments."""
     _verify_dataset_matches_protocol(dataset, protocol)
@@ -379,7 +381,7 @@ def build_benchmark_results(
         if finding.severity == "warning"
     )
     return BenchmarkResults(
-        results_schema_version=1,
+        results_schema_version=RESULTS_SCHEMA_VERSION,
         package_version=__version__,
         base_asset=manifest.base_asset,
         quote_asset=manifest.quote_asset,
@@ -393,7 +395,8 @@ def build_benchmark_results(
         quality_report_sha256=manifest.quality_report_sha256,
         acquisition_evidence_sha256=protocol.acquisition_evidence_sha256,
         protocol_sha256=sha256_bytes(protocol.to_json_bytes()),
-        pre_registered_commit_sha=pre_registered_commit_sha,
+        protocol_registration_commit_sha=protocol_registration_commit_sha,
+        authorized_evaluation_code_commit_sha=authorized_evaluation_code_commit_sha,
         dataset_row_count=manifest.row_count,
         dataset_first_open_time=manifest.first_open_time,
         dataset_last_open_time=manifest.last_open_time,
@@ -465,11 +468,11 @@ def _require_bytes_match_head(repo_root: Path, head: str, path: Path, label: str
         committed = file_bytes_at_commit(repo_root, head, relpath)
     except GitError as exc:
         raise EvaluationError(
-            f"{label} {relpath!r} is not committed at the pre-registered revision: {exc}"
+            f"{label} {relpath!r} is not committed at the authorized revision: {exc}"
         ) from exc
     if path.read_bytes() != committed:
         raise EvaluationError(
-            f"{label} {relpath!r} differs from its bytes committed at the pre-registered "
+            f"{label} {relpath!r} differs from its bytes committed at the authorized "
             "revision — refusing to run the one-time evaluation on modified inputs"
         )
 
@@ -619,8 +622,8 @@ def prepare_authorized_evaluation(
         if authorization_commit != head:
             raise EvaluationError(
                 f"authorization code_commit_sha {authorization_commit!r} is not the "
-                f"repository HEAD {head!r}; the frozen evaluation must run from the "
-                "pre-registered revision"
+                f"repository HEAD {head!r}; the authorized evaluation must run from the "
+                "explicitly authorized revision"
             )
 
     # 3. The running package is the source committed at HEAD (C1).
@@ -763,7 +766,7 @@ def prepare_authorized_evaluation(
     # verdict or edited number can never survive to the ledger boundary.
     from eth_research import m2b_report  # local import: m2b_report imports this module
 
-    registration = m2b_report.committed_pre_registered_commit(root)
+    registration = m2b_report.committed_protocol_registration_commit(root)
     if not is_commit_object(root, registration):
         raise EvaluationError(
             f"the recorded protocol-registration commit {registration!r} is not a real "
@@ -774,7 +777,7 @@ def prepare_authorized_evaluation(
         dataset,
         protocol,
         train_validation,
-        pre_registered_commit_sha=registration,
+        protocol_registration_commit_sha=registration,
         test_evaluation_id=None,
     )
     if results.to_json_bytes() != (root / m2b_report.RESULTS_RELPATH).read_bytes():
@@ -1001,8 +1004,9 @@ def _run_bound_benchmark(
             dataset,
             protocol,
             ordered,
-            pre_registered_commit_sha=authorization.code_commit_sha,
+            protocol_registration_commit_sha=prepared.protocol_registration_commit_sha,
             test_evaluation_id=authorization.evaluation_id,
+            authorized_evaluation_code_commit_sha=authorization.code_commit_sha,
         )
         markdown = render_benchmark_markdown(results)
         results_path, report_path = publish_benchmark_reports(
@@ -1121,7 +1125,12 @@ def render_benchmark_markdown(results: BenchmarkResults) -> str:
     add("## Protocol")
     add("")
     add(f"- Protocol SHA-256: `{results.protocol_sha256}`")
-    add(f"- Pre-registered code commit: `{results.pre_registered_commit_sha}`")
+    add(f"- Protocol registration commit: `{results.protocol_registration_commit_sha}`")
+    if results.authorized_evaluation_code_commit_sha is not None:
+        add(
+            "- Authorized evaluation code commit: "
+            f"`{results.authorized_evaluation_code_commit_sha}`"
+        )
     add(
         "- Split: 60% train / 20% validation / 20% test, chronological, positional floor semantics."
     )
@@ -1200,10 +1209,11 @@ def render_benchmark_markdown(results: BenchmarkResults) -> str:
     add("")
     if results.test_evaluation_id is not None:
         add(
-            f"The test segment was evaluated **exactly once**, under pre-registered "
-            f"evaluation id `{results.test_evaluation_id}` recorded in the append-only "
-            f"test-access ledger, at code commit "
-            f"`{results.pre_registered_commit_sha}`."
+            f"The test segment was evaluated **exactly once**, under evaluation id "
+            f"`{results.test_evaluation_id}` recorded in the append-only test-access "
+            f"ledger, at authorized evaluation code commit "
+            f"`{results.authorized_evaluation_code_commit_sha}` (protocol registered at "
+            f"`{results.protocol_registration_commit_sha}`)."
         )
     else:
         add(

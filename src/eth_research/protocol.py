@@ -50,7 +50,7 @@ from eth_research.data.validation import (
 from eth_research.metrics import SECONDS_PER_YEAR
 
 PROTOCOL_SCHEMA_VERSION: int = 1
-RESULTS_SCHEMA_VERSION: int = 1
+RESULTS_SCHEMA_VERSION: int = 2
 
 TRAIN_FRACTION: float = 0.6
 VALIDATION_FRACTION: float = 0.2
@@ -161,7 +161,8 @@ _RESULTS_KEYS: frozenset[str] = frozenset(
         "quality_report_sha256",
         "acquisition_evidence_sha256",
         "protocol_sha256",
-        "pre_registered_commit_sha",
+        "protocol_registration_commit_sha",
+        "authorized_evaluation_code_commit_sha",
         "dataset_row_count",
         "dataset_first_open_time",
         "dataset_last_open_time",
@@ -765,7 +766,12 @@ class BenchmarkResults:
     quality_report_sha256: str
     acquisition_evidence_sha256: str
     protocol_sha256: str
-    pre_registered_commit_sha: str
+    protocol_registration_commit_sha: str
+    """The commit that registered the frozen protocol — an immutable
+    pre-registration fact, never a commit chosen at execution time."""
+    authorized_evaluation_code_commit_sha: str | None
+    """The reviewed code revision authorized for the one-time test; present
+    if and only if test segments are. Never conflated with registration."""
     dataset_row_count: int
     dataset_first_open_time: pd.Timestamp
     dataset_last_open_time: pd.Timestamp
@@ -806,7 +812,9 @@ class BenchmarkResults:
             "protocol_sha256",
         ):
             require_hex64(label, getattr(self, label))
-        require_commit_sha("pre_registered_commit_sha", self.pre_registered_commit_sha)
+        require_commit_sha(
+            "protocol_registration_commit_sha", self.protocol_registration_commit_sha
+        )
         row_count = require_positive_int("dataset_row_count", self.dataset_row_count)
         require_aware_timestamp("dataset_first_open_time", self.dataset_first_open_time)
         require_aware_timestamp("dataset_last_open_time", self.dataset_last_open_time)
@@ -893,8 +901,20 @@ class BenchmarkResults:
         has_test = "test" in evaluated
         if has_test:
             require_evaluation_id("test_evaluation_id", self.test_evaluation_id)
-        elif self.test_evaluation_id is not None:
-            raise ValueError("test_evaluation_id must be null when no test segment was evaluated")
+            require_commit_sha(
+                "authorized_evaluation_code_commit_sha",
+                self.authorized_evaluation_code_commit_sha,
+            )
+        else:
+            if self.test_evaluation_id is not None:
+                raise ValueError(
+                    "test_evaluation_id must be null when no test segment was evaluated"
+                )
+            if self.authorized_evaluation_code_commit_sha is not None:
+                raise ValueError(
+                    "authorized_evaluation_code_commit_sha must be null when no test "
+                    "segment was evaluated"
+                )
 
     def to_json_bytes(self) -> bytes:
         """Deterministic serialization: sorted keys, indent 2, trailing newline."""
@@ -913,7 +933,8 @@ class BenchmarkResults:
             "quality_report_sha256": self.quality_report_sha256,
             "acquisition_evidence_sha256": self.acquisition_evidence_sha256,
             "protocol_sha256": self.protocol_sha256,
-            "pre_registered_commit_sha": self.pre_registered_commit_sha,
+            "protocol_registration_commit_sha": self.protocol_registration_commit_sha,
+            "authorized_evaluation_code_commit_sha": self.authorized_evaluation_code_commit_sha,
             "dataset_row_count": self.dataset_row_count,
             "dataset_first_open_time": self.dataset_first_open_time.isoformat(),
             "dataset_last_open_time": self.dataset_last_open_time.isoformat(),
@@ -962,7 +983,8 @@ class BenchmarkResults:
             quality_report_sha256=payload["quality_report_sha256"],
             acquisition_evidence_sha256=payload["acquisition_evidence_sha256"],
             protocol_sha256=payload["protocol_sha256"],
-            pre_registered_commit_sha=payload["pre_registered_commit_sha"],
+            protocol_registration_commit_sha=payload["protocol_registration_commit_sha"],
+            authorized_evaluation_code_commit_sha=payload["authorized_evaluation_code_commit_sha"],
             dataset_row_count=payload["dataset_row_count"],
             dataset_first_open_time=parse_timestamp_field(
                 "dataset_first_open_time", payload["dataset_first_open_time"]

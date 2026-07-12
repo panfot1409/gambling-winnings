@@ -442,7 +442,7 @@ def commit_synthetic_dossier(repo: Path, pipe: CoinbasePipeline) -> GitPipeline:
 
     # Development evidence generated from the frozen protocol commit.
     results_bytes, report_md = m2b_report.generate(
-        repo, pipe.build.manifest_path, pre_registered_commit_sha=registration_head
+        repo, pipe.build.manifest_path, protocol_registration_commit_sha=registration_head
     )
     (repo / m2b_report.RESULTS_RELPATH).write_bytes(results_bytes)
     (repo / m2b_report.REPORT_RELPATH).write_text(report_md, encoding="utf-8")

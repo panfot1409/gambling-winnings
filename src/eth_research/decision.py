@@ -37,7 +37,7 @@ from eth_research.data.validation import (
 )
 from eth_research.protocol import BenchmarkResults
 
-DECISION_SCHEMA_VERSION: int = 1
+DECISION_SCHEMA_VERSION: int = 2
 
 REJECTED_FOR_TEST_PROMOTION: str = "rejected_for_test_promotion"
 ELIGIBLE_FOR_TEST_PROMOTION: str = "eligible_for_test_promotion"
@@ -81,7 +81,7 @@ _DECISION_KEYS: frozenset[str] = frozenset(
         "test_accessed",
         "protocol_sha256",
         "dataset_content_fingerprint",
-        "pre_registered_commit_sha",
+        "protocol_registration_commit_sha",
     }
 )
 
@@ -110,7 +110,7 @@ class ResearchDecision:
     test_accessed: bool
     protocol_sha256: str
     dataset_content_fingerprint: str
-    pre_registered_commit_sha: str
+    protocol_registration_commit_sha: str
 
     def __post_init__(self) -> None:
         version = require_int("decision_schema_version", self.decision_schema_version)
@@ -161,7 +161,9 @@ class ResearchDecision:
             )
         require_hex64("protocol_sha256", self.protocol_sha256)
         require_fingerprint("dataset_content_fingerprint", self.dataset_content_fingerprint)
-        require_commit_sha("pre_registered_commit_sha", self.pre_registered_commit_sha)
+        require_commit_sha(
+            "protocol_registration_commit_sha", self.protocol_registration_commit_sha
+        )
 
     def to_json_bytes(self) -> bytes:
         """Deterministic serialization: sorted keys, indent 2, trailing newline."""
@@ -178,7 +180,7 @@ class ResearchDecision:
             "test_accessed": self.test_accessed,
             "protocol_sha256": self.protocol_sha256,
             "dataset_content_fingerprint": self.dataset_content_fingerprint,
-            "pre_registered_commit_sha": self.pre_registered_commit_sha,
+            "protocol_registration_commit_sha": self.protocol_registration_commit_sha,
         }
         text = json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False)
         return (text + "\n").encode("utf-8")
@@ -212,7 +214,7 @@ class ResearchDecision:
             test_accessed=payload["test_accessed"],
             protocol_sha256=payload["protocol_sha256"],
             dataset_content_fingerprint=payload["dataset_content_fingerprint"],
-            pre_registered_commit_sha=payload["pre_registered_commit_sha"],
+            protocol_registration_commit_sha=payload["protocol_registration_commit_sha"],
         )
 
 
@@ -255,7 +257,7 @@ def build_research_decision_from_results(results: BenchmarkResults) -> ResearchD
         test_accessed=False,
         protocol_sha256=results.protocol_sha256,
         dataset_content_fingerprint=results.dataset_content_fingerprint,
-        pre_registered_commit_sha=results.pre_registered_commit_sha,
+        protocol_registration_commit_sha=results.protocol_registration_commit_sha,
     )
 
 
@@ -295,7 +297,7 @@ def render_research_decision(decision: ResearchDecision) -> str:
         "",
         f"- Protocol SHA-256: `{decision.protocol_sha256}`",
         f"- Dataset content fingerprint: `{decision.dataset_content_fingerprint}`",
-        f"- Pre-registered code commit: `{decision.pre_registered_commit_sha}`",
+        f"- Protocol registration commit: `{decision.protocol_registration_commit_sha}`",
         "",
         "The pre-registered protocol is preserved unchanged as an honest record. "
         "The one-time test holdout remains untouched and sealed.",

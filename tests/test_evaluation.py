@@ -241,7 +241,7 @@ class TestTrainValidation:
                 dataset,
                 make_protocol(other),
                 segments,
-                pre_registered_commit_sha="c" * 40,
+                protocol_registration_commit_sha="c" * 40,
                 test_evaluation_id=None,
             )
 
@@ -257,7 +257,7 @@ class TestResultAssemblyAndRendering:
             dataset,
             protocol,
             segments,
-            pre_registered_commit_sha="c" * 40,
+            protocol_registration_commit_sha="c" * 40,
             test_evaluation_id=None,
         )
         raw = results.to_json_bytes()
@@ -277,14 +277,14 @@ class TestResultAssemblyAndRendering:
             dataset,
             protocol,
             segments,
-            pre_registered_commit_sha="c" * 40,
+            protocol_registration_commit_sha="c" * 40,
             test_evaluation_id=None,
         )
         second = build_benchmark_results(
             dataset,
             protocol,
             segments,
-            pre_registered_commit_sha="c" * 40,
+            protocol_registration_commit_sha="c" * 40,
             test_evaluation_id=None,
         )
         assert first.to_json_bytes() == second.to_json_bytes()
@@ -300,7 +300,7 @@ class TestResultAssemblyAndRendering:
             dataset,
             protocol,
             segments,
-            pre_registered_commit_sha="c" * 40,
+            protocol_registration_commit_sha="c" * 40,
             test_evaluation_id=None,
         )
         with pytest.raises(EvaluationError, match="not the rendering of the results model"):
@@ -400,7 +400,10 @@ class TestGuardedOneTimeEvaluation:
         assert run.results.to_json_bytes() == published
         assert run.report_path.read_text(encoding="utf-8") == run.markdown
         assert run.results.test_evaluation_id == "m2b-synthetic-eval-001"
-        assert run.results.pre_registered_commit_sha == git_pipeline.head
+        # The two commit concepts stay distinct: registration is the fixture's
+        # protocol-freeze commit; the authorized evaluation ran at HEAD.
+        assert run.results.protocol_registration_commit_sha == git_pipeline.registration_head
+        assert run.results.authorized_evaluation_code_commit_sha == git_pipeline.head
         assert len(run.results.segments) == 6
         assert "exactly once" in run.markdown
 
@@ -534,7 +537,7 @@ class TestGuardedOneTimeEvaluation:
 
 
 class TestGitRevisionBinding:
-    """R3: bind the evaluation to the real, clean, pre-registered revision."""
+    """R3: bind the evaluation to the real, clean, authorized revision."""
 
     def test_forty_zero_sha_is_rejected(self, git_pipeline: GitPipeline) -> None:
         with pytest.raises(EvaluationError, match="not a real commit"):
@@ -570,7 +573,7 @@ class TestGitRevisionBinding:
         # A protocol file that is not committed at HEAD (untracked path).
         alt = git_pipeline.protocol_path.with_name("protocol_alt.json")
         alt.write_bytes(git_pipeline.protocol_path.read_bytes())
-        with pytest.raises(EvaluationError, match="not committed at the pre-registered"):
+        with pytest.raises(EvaluationError, match="not committed at the authorized"):
             run_git(git_pipeline, head_auth(git_pipeline), protocol_path=alt)
         assert read_ledger(git_pipeline.ledger_path) == ()
 

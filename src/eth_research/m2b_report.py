@@ -52,7 +52,7 @@ def build_results(
     repo_root: str | Path,
     manifest_path: str | Path,
     *,
-    pre_registered_commit_sha: str,
+    protocol_registration_commit_sha: str,
 ) -> BenchmarkResults:
     """Compute the train/validation-only results from the frozen protocol.
 
@@ -69,7 +69,7 @@ def build_results(
         dataset,
         protocol,
         segments,
-        pre_registered_commit_sha=pre_registered_commit_sha,
+        protocol_registration_commit_sha=protocol_registration_commit_sha,
         test_evaluation_id=None,
     )
 
@@ -138,7 +138,7 @@ def _protocol_commit(repo_root: Path) -> str:
     return sha
 
 
-def committed_pre_registered_commit(repo_root: str | Path) -> str:
+def committed_protocol_registration_commit(repo_root: str | Path) -> str:
     """Read the pre-registered commit recorded in the committed results.
 
     Verification regenerates from this stored provenance fact rather than
@@ -146,19 +146,19 @@ def committed_pre_registered_commit(repo_root: str | Path) -> str:
     checkout.
     """
     results = BenchmarkResults.from_json_bytes((Path(repo_root) / RESULTS_RELPATH).read_bytes())
-    return results.pre_registered_commit_sha
+    return results.protocol_registration_commit_sha
 
 
 def generate(
     repo_root: str | Path,
     manifest_path: str | Path,
     *,
-    pre_registered_commit_sha: str,
+    protocol_registration_commit_sha: str,
 ) -> tuple[bytes, str]:
     """Return the deterministic (results JSON bytes, report markdown)."""
     root = Path(repo_root)
     results = build_results(
-        root, manifest_path, pre_registered_commit_sha=pre_registered_commit_sha
+        root, manifest_path, protocol_registration_commit_sha=protocol_registration_commit_sha
     )
     return results.to_json_bytes(), render_report(root, results)
 
@@ -178,8 +178,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         # Verification regenerates from the recorded provenance commit (no git
         # history needed); creation derives it from local git history.
-        commit = committed_pre_registered_commit(root) if args.check else _protocol_commit(root)
-        results_bytes, report_md = generate(root, args.manifest, pre_registered_commit_sha=commit)
+        commit = (
+            committed_protocol_registration_commit(root) if args.check else _protocol_commit(root)
+        )
+        results_bytes, report_md = generate(
+            root, args.manifest, protocol_registration_commit_sha=commit
+        )
     except (RuntimeError, ValueError) as exc:
         print(f"train/validation report generation failed: {exc}", file=sys.stderr)
         return 1

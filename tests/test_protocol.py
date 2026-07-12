@@ -251,7 +251,7 @@ def make_results(
         for name in segment_names
     )
     return BenchmarkResults(
-        results_schema_version=1,
+        results_schema_version=2,
         package_version="0.3.0",
         base_asset="ETH",
         quote_asset="USD",
@@ -265,7 +265,7 @@ def make_results(
         quality_report_sha256="4" * 64,
         acquisition_evidence_sha256="5" * 64,
         protocol_sha256="6" * 64,
-        pre_registered_commit_sha="a" * 40,
+        protocol_registration_commit_sha="a" * 40,
         dataset_row_count=10,
         dataset_first_open_time=START,
         dataset_last_open_time=START + 9 * DAY,
@@ -276,6 +276,7 @@ def make_results(
         segments=segments,
         accounting=ACCOUNTING,
         test_evaluation_id=test_evaluation_id if include_test else None,
+        authorized_evaluation_code_commit_sha=("d" * 40) if include_test else None,
     )
 
 
@@ -397,8 +398,8 @@ class TestBenchmarkResults:
     @pytest.mark.parametrize("sha", ["ABC", "a" * 39, "g" * 40])
     def test_malformed_commit_sha_is_rejected(self, sha: str) -> None:
         results = make_results()
-        with pytest.raises(ValueError, match="pre_registered_commit_sha"):
-            dataclasses.replace(results, pre_registered_commit_sha=sha)
+        with pytest.raises(ValueError, match="protocol_registration_commit_sha"):
+            dataclasses.replace(results, protocol_registration_commit_sha=sha)
 
     def test_unknown_segment_key_is_rejected(self) -> None:
         results = make_results()

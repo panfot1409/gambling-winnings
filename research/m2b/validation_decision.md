@@ -23,6 +23,6 @@ This fixed SMA specification materially underperformed buy-and-hold in the valid
 
 - Protocol SHA-256: `a75a9cf508ead459976060ab7518c4e382ecb95e54cc0ee36ec0ff9281f26a81`
 - Dataset content fingerprint: `sha256:273f89eb07ae882784e40c2bc2ef2be5db93ddb3efa7de6270880ad1b7dd5718`
-- Pre-registered code commit: `b89627463775bf32698effb5adea1270a5927890`
+- Protocol registration commit: `b89627463775bf32698effb5adea1270a5927890`
 
 The pre-registered protocol is preserved unchanged as an honest record. The one-time test holdout remains untouched and sealed.

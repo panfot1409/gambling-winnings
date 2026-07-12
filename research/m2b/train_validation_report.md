@@ -25,7 +25,7 @@ Warnings are reported, inspected, and explained — never removed; the audit nev
 ## Protocol
 
 - Protocol SHA-256: `a75a9cf508ead459976060ab7518c4e382ecb95e54cc0ee36ec0ff9281f26a81`
-- Pre-registered code commit: `b89627463775bf32698effb5adea1270a5927890`
+- Protocol registration commit: `b89627463775bf32698effb5adea1270a5927890`
 - Split: 60% train / 20% validation / 20% test, chronological, positional floor semantics.
 - Strategies: buy-and-hold (ex-ante entry at the first evaluated open) and SMA crossover (fast 20, slow 50) — fixed, never tuned.
 - Costs: 10 bps fee plus 5 bps directional slippage per fill.

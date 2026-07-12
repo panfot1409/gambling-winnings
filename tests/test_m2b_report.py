@@ -33,13 +33,13 @@ def real_manifest(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def _commit() -> str:
     # The recorded provenance commit, read from the committed results (no git
     # history needed, so this works on shallow CI checkouts too).
-    return m2b_report.committed_pre_registered_commit(REPO_ROOT)
+    return m2b_report.committed_protocol_registration_commit(REPO_ROOT)
 
 
 class TestReproducibility:
     def test_generated_matches_committed(self, real_manifest: Path) -> None:
         results_bytes, report_md = m2b_report.generate(
-            REPO_ROOT, real_manifest, pre_registered_commit_sha=_commit()
+            REPO_ROOT, real_manifest, protocol_registration_commit_sha=_commit()
         )
         committed_results = (REPO_ROOT / m2b_report.RESULTS_RELPATH).read_bytes()
         committed_report = (REPO_ROOT / m2b_report.REPORT_RELPATH).read_text(encoding="utf-8")
@@ -48,15 +48,15 @@ class TestReproducibility:
 
     def test_generation_is_deterministic(self, real_manifest: Path) -> None:
         commit = _commit()
-        a = m2b_report.generate(REPO_ROOT, real_manifest, pre_registered_commit_sha=commit)
-        b = m2b_report.generate(REPO_ROOT, real_manifest, pre_registered_commit_sha=commit)
+        a = m2b_report.generate(REPO_ROOT, real_manifest, protocol_registration_commit_sha=commit)
+        b = m2b_report.generate(REPO_ROOT, real_manifest, protocol_registration_commit_sha=commit)
         assert a == b
 
     def test_results_round_trip(self, real_manifest: Path) -> None:
         from eth_research.protocol import BenchmarkResults
 
         results_bytes, _ = m2b_report.generate(
-            REPO_ROOT, real_manifest, pre_registered_commit_sha=_commit()
+            REPO_ROOT, real_manifest, protocol_registration_commit_sha=_commit()
         )
         assert BenchmarkResults.from_json_bytes(results_bytes).to_json_bytes() == results_bytes
 
@@ -76,7 +76,7 @@ class TestTestSetIsUntouched:
 
         monkeypatch.setattr(evaluation, "run_backtest", spy)
         commit = "0" * 40
-        m2b_report.build_results(REPO_ROOT, real_manifest, pre_registered_commit_sha=commit)
+        m2b_report.build_results(REPO_ROOT, real_manifest, protocol_registration_commit_sha=commit)
         assert seen, "the spy must have observed backtest calls"
         # every bar (data or warm-up context) handed to the engine is strictly
         # before the first test open — the test segment never reached a strategy
@@ -84,7 +84,7 @@ class TestTestSetIsUntouched:
 
     def test_report_reports_no_test_performance(self, real_manifest: Path) -> None:
         _, report_md = m2b_report.generate(
-            REPO_ROOT, real_manifest, pre_registered_commit_sha=_commit()
+            REPO_ROOT, real_manifest, protocol_registration_commit_sha=_commit()
         )
         assert "has **not** been evaluated" in report_md
         # the results table has train and validation rows only, never a test row
@@ -99,5 +99,7 @@ class TestTestSetIsUntouched:
     def test_ledger_untouched_by_generation(self, real_manifest: Path) -> None:
         ledger = REPO_ROOT / "research/m2b/test_evaluations.jsonl"
         before = ledger.read_bytes()
-        m2b_report.build_results(REPO_ROOT, real_manifest, pre_registered_commit_sha="0" * 40)
+        m2b_report.build_results(
+            REPO_ROOT, real_manifest, protocol_registration_commit_sha="0" * 40
+        )
         assert ledger.read_bytes() == before == b""
