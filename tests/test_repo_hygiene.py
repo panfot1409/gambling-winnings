@@ -3,9 +3,25 @@
 from __future__ import annotations
 
 import ast
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+RAW_ROOT = REPO_ROOT / "research" / "m2b" / "raw" / "coinbase"
+RAW_AGGREGATE_CAP_BYTES: int = 10 * 1024 * 1024  # 10 MiB
+LEDGER = REPO_ROOT / "research" / "m2b" / "test_evaluations.jsonl"
+
+
+def _tracked_files(prefix: str) -> list[str]:
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "--", prefix],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [line for line in result.stdout.splitlines() if line]
+
 
 FORBIDDEN_IMPORT_ROOTS: frozenset[str] = frozenset(
     {
@@ -123,3 +139,91 @@ def test_data_and_outputs_directories_are_gitignored() -> None:
     ignored = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "/data/" in ignored
     assert "/outputs/" in ignored
+
+
+# --- Milestone 2B raw-data allowlist and holdout hygiene ---------------------
+
+
+def test_tracked_raw_bodies_are_allowlisted_json() -> None:
+    """Only .json candle bodies + receipts under the raw coinbase tree."""
+    tracked = _tracked_files("research/m2b/raw")
+    assert tracked, "expected committed raw acquisition bodies"
+    for rel in tracked:
+        path = REPO_ROOT / rel
+        # under research/m2b/raw/coinbase/<attempt>/, .json only, no traversal
+        assert rel.startswith("research/m2b/raw/coinbase/"), rel
+        assert rel.endswith(".json"), f"unexpected non-JSON tracked raw file: {rel}"
+        assert ".." not in rel
+        assert not path.is_symlink(), f"raw file is a symlink: {rel}"
+        head = path.read_bytes()[:64]
+        assert not head.startswith(b"version https://git-lfs"), f"LFS pointer masquerading: {rel}"
+
+
+def test_raw_bodies_match_their_receipts() -> None:
+    """Every tracked raw body is named in its plan and hashes to its receipt."""
+    from eth_research.data.acquisition_plan import (
+        load_acquisition_plan,
+        load_acquisition_receipt,
+    )
+    from eth_research.data.provenance import sha256_file
+
+    attempts = sorted(p for p in RAW_ROOT.iterdir() if p.is_dir())
+    assert attempts, "expected at least one acquisition attempt"
+    plan_for = {
+        "discovery-001": "research/m2b/discovery_plan.json",
+        "coinbase-eth-usd-001": "research/m2b/acquisition_request_plan.json",
+    }
+    for attempt in attempts:
+        receipt = load_acquisition_receipt(attempt / "acquisition_receipt.json")
+        plan = load_acquisition_plan(REPO_ROOT / plan_for[attempt.name])
+        assert receipt.plan_sha256 == plan.plan_sha256()
+        planned = {window.filename for window in plan.windows}
+        bodies = {p.name for p in attempt.glob("*.json") if p.name != "acquisition_receipt.json"}
+        assert bodies == planned, f"{attempt.name}: bodies {bodies} != planned {planned}"
+        for response in receipt.responses:
+            assert sha256_file(attempt / response.filename) == response.sha256
+
+
+def test_raw_aggregate_size_is_bounded() -> None:
+    total = sum((REPO_ROOT / rel).stat().st_size for rel in _tracked_files("research/m2b/raw"))
+    assert total <= RAW_AGGREGATE_CAP_BYTES, f"raw aggregate {total} exceeds the 10 MiB cap"
+
+
+def test_no_derived_or_canonical_artifacts_are_tracked() -> None:
+    """The derived CSV and canonical Parquet must never be committed."""
+    for pattern in ("*.csv", "*.parquet", "*.pq"):
+        assert _tracked_files(pattern) == [], f"tracked {pattern} artifact found"
+    # the derived CSV name specifically must not appear anywhere tracked
+    assert _tracked_files("data") == []
+
+
+def test_test_access_ledger_is_byte_empty() -> None:
+    assert LEDGER.is_file()
+    assert LEDGER.read_bytes() == b""
+
+
+def test_no_real_test_reports_are_committed() -> None:
+    for name in ("benchmark_results.json", "benchmark_report.md"):
+        assert _tracked_files(name) == [], f"a real test report {name} is committed"
+
+
+def test_train_validation_report_has_no_test_performance_row() -> None:
+    report = REPO_ROOT / "research" / "m2b" / "train_validation_report.md"
+    if not report.exists():
+        return
+    text = report.read_text(encoding="utf-8")
+    assert "has **not** been evaluated" in text
+    for line in text.splitlines():
+        if line.startswith("| buy_and_hold |") or line.startswith("| sma_20_50 |"):
+            assert "| test |" not in line
+
+
+def test_no_private_key_material_in_tracked_tree() -> None:
+    """No PEM private key blocks or committed .env files."""
+    assert _tracked_files("*.env") == []
+    for rel in _tracked_files("research") + _tracked_files("src") + _tracked_files("examples"):
+        path = REPO_ROOT / rel
+        if path.suffix in {".parquet", ".pq"}:
+            continue
+        raw = path.read_bytes()
+        assert b"-----BEGIN" not in raw, f"PEM key block in {rel}"
