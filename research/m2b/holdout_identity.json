@@ -1,0 +1,18 @@
+{
+  "base_asset": "ETH",
+  "candle_interval": "P1DT0H0M0S",
+  "dataset_content_fingerprint": "sha256:273f89eb07ae882784e40c2bc2ef2be5db93ddb3efa7de6270880ad1b7dd5718",
+  "fingerprint_algorithm": "holdout-fp-v1/sha256",
+  "holdout_schema_version": 1,
+  "market_type": "spot",
+  "quote_asset": "USD",
+  "split_semantics": "positional-floor-v1",
+  "symbol": "ETH-USD",
+  "test_content_fingerprint": "sha256:5aab2fa965259a7eedfe621c76e8119d371d8cce11fe859efffcd8a29dc59c28",
+  "test_first_open_time": "2024-07-01T00:00:00+00:00",
+  "test_last_open_time": "2026-07-11T00:00:00+00:00",
+  "test_row_count": 741,
+  "train_fraction": 0.6,
+  "validation_fraction": 0.2,
+  "venue": "coinbase-exchange"
+}

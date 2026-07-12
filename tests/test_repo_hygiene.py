@@ -189,6 +189,14 @@ def test_raw_aggregate_size_is_bounded() -> None:
     assert total <= RAW_AGGREGATE_CAP_BYTES, f"raw aggregate {total} exceeds the 10 MiB cap"
 
 
+def test_provenance_graph_verifies_at_head() -> None:
+    """The committed provenance-v2 graph must verify against every artifact."""
+    from eth_research.provenance_v2 import verify_provenance_graph
+
+    result = verify_provenance_graph(REPO_ROOT)
+    assert result.ok, result.errors
+
+
 def test_committed_manifest_and_quality_anchor_the_lock() -> None:
     """The tracked manifest/quality byte anchors must hash to the dataset lock.
 
