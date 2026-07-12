@@ -18,10 +18,12 @@ the first/last timestamp, the interval, and the instrument identity.
 
 :func:`find_holdout_conflicts` is the freshness gate: a proposed holdout is
 rejected if any prior ledger event shares its holdout id, its dataset
-content fingerprint, or its test content fingerprint (a later commit adds
-temporal-overlap protection). Changing the protocol, the lock, the package
-version, the schema, the evaluation id, the commit, the runtime, or any
-wording therefore does **not** restore freshness.
+content fingerprint, or its test content fingerprint, or if its test window
+overlaps a prior one for the same instrument. Changing the protocol, the
+lock, the package version, the schema, the evaluation id, the commit, the
+runtime, or any wording therefore does **not** restore freshness, and a
+grown or trimmed dataset cannot slip an overlapping test window past the
+gate.
 """
 
 from __future__ import annotations
@@ -343,6 +345,16 @@ class HoldoutConflict:
     reasons: tuple[str, ...]
 
 
+def _windows_overlap(
+    a_first: pd.Timestamp,
+    a_last: pd.Timestamp,
+    b_first: pd.Timestamp,
+    b_last: pd.Timestamp,
+) -> bool:
+    """Two inclusive open-time ranges share at least one candle open."""
+    return a_first <= b_last and b_first <= a_last
+
+
 def find_holdout_conflicts(
     events: tuple[LedgerEvent, ...], proposed: HoldoutIdentity
 ) -> tuple[HoldoutConflict, ...]:
@@ -351,10 +363,14 @@ def find_holdout_conflicts(
     Any returned conflict — started, completed, or failed — means the
     one-time test evaluation of these candles has already been consumed.
     A holdout collides when a prior event shares its holdout id, its
-    dataset content fingerprint, or its test content fingerprint. None of
-    these change when the protocol, lock, package version, schema,
-    evaluation id, commit, runtime, or wording changes, so none of those
-    edits can restore freshness.
+    dataset content fingerprint, or its test content fingerprint, or when
+    its test open-time window overlaps the proposed one for the *same
+    instrument* (symbol, venue, and interval). The temporal check catches
+    an overlapping or containing test window even when a grown or trimmed
+    dataset changes both content fingerprints. None of these signals change
+    when the protocol, lock, package version, schema, evaluation id,
+    commit, runtime, or wording changes, so none of those edits can restore
+    freshness.
     """
     conflicts: list[HoldoutConflict] = []
     for event in events:
@@ -365,6 +381,18 @@ def find_holdout_conflicts(
             reasons.append("same dataset content fingerprint")
         if event.test_content_fingerprint == proposed.test_content_fingerprint:
             reasons.append("same test content fingerprint")
+        if (
+            event.symbol == proposed.symbol
+            and event.venue == proposed.venue
+            and event.candle_interval == proposed.candle_interval
+            and _windows_overlap(
+                event.test_first_open_time,
+                event.test_last_open_time,
+                proposed.test_first_open_time,
+                proposed.test_last_open_time,
+            )
+        ):
+            reasons.append("overlapping test window for the same instrument")
         if reasons:
             conflicts.append(
                 HoldoutConflict(

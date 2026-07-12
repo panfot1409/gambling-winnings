@@ -64,6 +64,24 @@ def make_holdout(**overrides: Any) -> HoldoutIdentity:
     return HoldoutIdentity(**fields)
 
 
+# Distinct fingerprints so a proposed holdout can only collide on the
+# temporal-overlap dimension, never on an exact-match one.
+DISTINCT = {
+    "dataset_content_fingerprint": "sha256:" + "c" * 64,
+    "test_content_fingerprint": "sha256:" + "d" * 64,
+}
+
+
+def windowed(first: pd.Timestamp, n: int, **overrides: Any) -> HoldoutIdentity:
+    """A holdout over an ``n``-candle daily window starting at ``first``."""
+    return make_holdout(
+        test_first_open_time=first,
+        test_last_open_time=first + (n - 1) * DAY,
+        test_row_count=n,
+        **overrides,
+    )
+
+
 def ledger_event_for(
     holdout: HoldoutIdentity,
     *,
@@ -251,6 +269,7 @@ class TestFindHoldoutConflicts:
             "same holdout identity",
             "same dataset content fingerprint",
             "same test content fingerprint",
+            "overlapping test window for the same instrument",
         )
 
     def test_same_dataset_fingerprint_conflicts_even_if_test_digest_differs(self) -> None:
@@ -284,3 +303,54 @@ class TestFindHoldoutConflicts:
     def test_any_event_type_consumes_the_holdout(self, event: str) -> None:
         prior = ledger_event_for(make_holdout(), event=event)
         assert find_holdout_conflicts((prior,), make_holdout())
+
+
+class TestTemporalOverlapProtection:
+    """A grown/trimmed dataset changes both fingerprints, but an overlapping
+    test window on the same instrument must still be refused."""
+
+    D0 = pd.Timestamp("2024-07-01", tz="UTC")
+
+    def _prior(self) -> LedgerEvent:
+        return ledger_event_for(windowed(self.D0, 10))
+
+    def test_partial_overlap_is_refused(self) -> None:
+        proposed = windowed(self.D0 + 5 * DAY, 10, **DISTINCT)
+        conflicts = find_holdout_conflicts((self._prior(),), proposed)
+        assert conflicts
+        assert conflicts[0].reasons == ("overlapping test window for the same instrument",)
+
+    def test_proposed_contained_in_prior_is_refused(self) -> None:
+        prior = ledger_event_for(windowed(self.D0, 20))
+        proposed = windowed(self.D0 + 5 * DAY, 5, **DISTINCT)
+        assert find_holdout_conflicts((prior,), proposed)
+
+    def test_prior_contained_in_proposed_is_refused(self) -> None:
+        prior = ledger_event_for(windowed(self.D0 + 5 * DAY, 5))
+        proposed = windowed(self.D0, 20, **DISTINCT)
+        assert find_holdout_conflicts((prior,), proposed)
+
+    def test_single_shared_candle_is_refused(self) -> None:
+        # Prior ends at D0+9; proposed starts at D0+9 — one shared open.
+        proposed = windowed(self.D0 + 9 * DAY, 10, **DISTINCT)
+        assert find_holdout_conflicts((self._prior(),), proposed)
+
+    def test_adjacent_but_disjoint_window_is_allowed(self) -> None:
+        # Prior ends at D0+9; proposed starts one interval later at D0+10.
+        proposed = windowed(self.D0 + 10 * DAY, 10, **DISTINCT)
+        assert find_holdout_conflicts((self._prior(),), proposed) == ()
+
+    def test_same_window_different_venue_is_allowed(self) -> None:
+        proposed = windowed(self.D0, 10, venue="OtherVenue", **DISTINCT)
+        assert find_holdout_conflicts((self._prior(),), proposed) == ()
+
+    def test_same_window_different_interval_is_allowed(self) -> None:
+        first = self.D0
+        proposed = make_holdout(
+            candle_interval=pd.Timedelta(hours=12),
+            test_first_open_time=first,
+            test_last_open_time=first + 9 * pd.Timedelta(hours=12),
+            test_row_count=10,
+            **DISTINCT,
+        )
+        assert find_holdout_conflicts((self._prior(),), proposed) == ()
