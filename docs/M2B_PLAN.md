@@ -403,3 +403,101 @@ session already knows the first one holds:
 The milestone therefore ends this session as: **infrastructure complete
 and hardened; real-data freeze, protocol pre-registration, and the
 one-time test evaluation pending on data acquisition.**
+
+## 14. Trust-boundary remediation rounds (R1–R7, C1–C4)
+
+Two independent executable red-team passes on the pristine infrastructure
+found trust-boundary failures that were each reproduced with a failing
+test before being fixed. Rounds R1–R7 are recorded in the commit history;
+this section documents the final closure round (C1–C4) and the standing
+audit that keeps it honest.
+
+### C1 — the running package is bound to the authorized commit
+
+`run_authorized_benchmark` verified that `authorization.code_commit_sha`
+is the repository `HEAD`, but nothing proved the *executing* `eth_research`
+code came from that repository at that commit. A checkout carrying only
+committed provenance metadata (no `src/eth_research`) could authorize an
+evaluation run by code from an entirely different clone.
+
+`gitcheck.verify_package_source(repo_root, head, package_root)` closes this
+as the **first** gate in the public entry point, before the ledger is
+read, the dataset is loaded, or any signal is computed. Its algorithm:
+
+1. reject a symlinked `src/eth_research` directory, or a repository that
+   has no such directory at all (metadata-only checkout);
+2. reject unless the package was imported from exactly
+   `<repo_root>/src/eth_research` (a foreign clone or a site-packages /
+   editable install resolves elsewhere);
+3. list the `*.py` tree committed under `src/eth_research` at `head`;
+   reject if empty (no committed source at the authorized revision);
+4. enumerate the working `*.py` files (skipping `__pycache__`, rejecting
+   symlinked files); reject any untracked shadow module and any committed
+   file missing from the working tree;
+5. for every committed source file, reject unless its working bytes equal
+   its blob at `head`.
+
+This is a single-repository, single-researcher operational control: it
+cannot attest a remote, a cryptographic identity, or a concurrent clone.
+That limitation is stated in `gitcheck`'s module docstring and asserted by
+a test. Because in-process `eth_research.__file__` is fixed to the running
+checkout, the binding is exercised by dedicated unit tests
+(`tests/test_gitcheck.py`), in-process negatives, and one genuine
+integration test that clones the repository, imports that clone's own
+package in a subprocess, and evaluates successfully — proving the gate
+admits the real thing, not only that it rejects impostors.
+
+### C2 — raw acquisition re-derivation is mandatory
+
+`raw_chunk_dir` and `derived_csv` were optional on the one-time path;
+omitting both silently skipped the semantic raw→derived acquisition
+verification. They are now **required parameters** of
+`run_authorized_benchmark` (omitting either is a `TypeError`), defensively
+re-checked for `None` at runtime, and `verify_dataset_lock` now rejects
+supplying exactly one (an all-or-nothing XOR guard) so a caller can never
+downgrade to the metadata-only cross-check on the authorized path.
+
+### C3 — impossible serialized accounting is rejected
+
+`SegmentMetrics` accepted physically impossible combinations. The shared
+constructor/parser now enforces, identically on construct and on parse:
+zero fills iff zero traded notional and zero turnover; any fill requires
+strictly positive traded notional and turnover; and
+`0 < terminal_liquidation_equity <= terminal_equity` (a costed liquidation
+can never exceed the marked equity). The exact turnover and total-return
+identities are retained.
+
+### C4 — standing audit of every optional / conditional trust input
+
+Every optional argument and trust-relevant conditional branch across the
+authorized path was audited for whether omitting or substituting it can
+skip a mandatory verification. Trust-critical optionals are fail-closed;
+the remainder are benign (they cannot skip a check) and are documented as
+such rather than removed.
+
+| Surface | Optional / branch | Omit or substitute → skips a check? | Disposition |
+| --- | --- | --- | --- |
+| `run_authorized_benchmark` | `authorization=None` | Yes — would run the test unauthorized | **Fail-closed**: refused by default |
+| `run_authorized_benchmark` | `raw_chunk_dir`, `derived_csv` | Previously yes (C2) | **Fail-closed**: required params; `None` refused at runtime |
+| `run_authorized_benchmark` | package-source binding (C1) | Previously yes | **Fail-closed**: first gate; foreign/modified/shadow source refused |
+| `run_authorized_benchmark` | `ledger_path=None` | No | Defaults to the canonical tracked ledger; a non-canonical path is **refused**, never used |
+| `run_authorized_benchmark` | `clock=None` | No | Benign timestamp source only; cannot skip a verification (at worst a bad clock fails its own `completed` append, leaving an honest consumed `started`) |
+| `run_authorized_benchmark` | `overwrite=False` | No | Governs output-collision only; a second access for a consumed (lock, protocol) pair is refused regardless, so it cannot enable re-evaluation |
+| `verify_dataset_lock` | `raw_chunk_dir`/`derived_csv` both `None` | Yes, on *that* call | Metadata-only mode is retained for standalone use, but the authorized path always passes both; **exactly one is refused** (XOR) |
+| `verify_acquisition_evidence` | — | No optionals | All arguments mandatory; full semantic re-derivation always runs |
+| `load_canonical_dataset` | — | No optionals | Manifest parse, schema re-validation, fingerprint recompute, and quality-report cross-check are unconditional |
+| result assembly | `test_evaluation_id=None` | No | Controls only the "test discipline" report text; the dataset/protocol fingerprint match is unconditional |
+| ledger handling | `append_event` sequencing | No | Whole ledger is re-validated before every append; `started` is the single writer and lives after every verification |
+
+The audit found no additional bypass. The finding it hardened against is a
+*coverage* gap, not a new hole: pre-authorization refusals were proven
+inert only case by case. `tests/test_evaluation.py::TestPreauthorizationSideEffects`
+now sweeps fourteen refusal scenarios (no authorization; explicit `None`
+raw/derived; zero and foreign commit SHAs; dirty tree; alternate ledger;
+evidence outside the repo; uncommitted protocol; mutated raw chunk;
+non-reconstructing derived CSV; forged quality report; missing chunk
+directory; existing-report collision), and for **each** proves — with the
+backtest engine instrumented — that no strategy or backtest was ever
+reached, the canonical ledger stayed byte-for-byte empty, and no report
+was written. The one-time access is consumed only at the `started` event,
+which is structurally the last thing before test signals exist.

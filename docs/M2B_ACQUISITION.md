@@ -308,15 +308,24 @@ run = run_authorized_benchmark(
 print(run.results_path, run.report_path)
 ```
 
+`raw_chunk_dir` and `derived_csv` are **mandatory** (omitting either is a
+`TypeError`): the one-time run always re-derives the CSV from the raw
+chunks, so acquisition verification can never be silently skipped.
+
 Before writing anything, the evaluator: resolves the real `HEAD` with
-git and requires `code_commit_sha == HEAD` (a real commit) with a clean
-tracked working tree; requires the tracked inputs (protocol, dataset
-lock, acquisition evidence, and the pristine ledger at the canonical
-path `research/m2b/test_evaluations.jsonl`) to equal their bytes
-committed at `HEAD`; **reloads the canonical dataset itself** via
-`load_canonical_dataset` (no caller-supplied dataset is trusted);
-re-runs the semantic acquisition check from the raw chunks; and only
-then writes the `started` ledger event before any test signal exists. It
+git and, as the **first** gate, proves the running `eth_research` package
+is exactly the `src/eth_research` tree committed at `HEAD`
+(`gitcheck.verify_package_source` — a foreign clone, site-packages
+install, untracked shadow module, or modified working copy is refused
+before the ledger is even read); requires `code_commit_sha == HEAD` (a
+real commit) with a clean tracked working tree; requires the tracked
+inputs (protocol, dataset lock, acquisition evidence, and the pristine
+ledger at the canonical path `research/m2b/test_evaluations.jsonl`) to
+equal their bytes committed at `HEAD`; **reloads the canonical dataset
+itself** via `load_canonical_dataset` (no caller-supplied dataset is
+trusted); re-runs the semantic acquisition check from the raw chunks; and
+only then writes the `started` ledger event before any test signal
+exists. It
 publishes `reports/m2b/benchmark_results.json` and `benchmark_report.md`
 atomically and appends `completed` with the results' SHA-256. Re-run the
 test suite and static gates (without re-running the test), then commit

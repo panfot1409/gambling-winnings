@@ -212,10 +212,17 @@ a locked, pre-registered benchmark with one-time test-set access:
   full provenance re-verification, `started` written to the append-only
   ledger before any test signal exists, completion/failure recorded
   honestly, and any access (including a crash) permanently consumes the
-  one-time evaluation. Train/validation run freely and are reconciled
-  exactly against the engine's accounting; results serialize
-  deterministically (undefined ratios as JSON `null`) and the Markdown
-  report is generated only from the validated JSON model.
+  one-time evaluation. Before any of that, two structural gates fail
+  closed: the running `eth_research` package is proven to be exactly the
+  `src/eth_research` tree committed at the authorized `HEAD`
+  (`gitcheck.verify_package_source` — not a foreign clone, site-packages
+  install, shadow module, or modified copy), and the raw chunk directory
+  and derived CSV are **mandatory** so the derived data is always
+  re-derived byte-for-byte from the raw responses (acquisition
+  verification can never be silently skipped). Train/validation run
+  freely and are reconciled exactly against the engine's accounting;
+  results serialize deterministically (undefined ratios as JSON `null`)
+  and the Markdown report is generated only from the validated JSON model.
 
 Status: the real dataset, `dataset_lock.json`, `protocol.json`, and
 `reports/m2b/` are **pending** — this environment cannot reach the
@@ -280,7 +287,7 @@ src/eth_research/
     protocol.py     # frozen benchmark protocol + deterministic result models
     ledger.py       # append-only one-time test-access ledger
     evaluation.py   # guarded benchmark evaluator + report generation
-    gitcheck.py     # read-only git checks binding the test run to HEAD
+    gitcheck.py     # read-only git checks binding the test run + running package source to HEAD
 research/m2b/       # committable provenance records + pristine test ledger
 tests/              # unit, hand-calculated ledger, and look-ahead regression tests
 examples/           # runnable end-to-end example

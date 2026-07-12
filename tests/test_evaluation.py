@@ -1066,3 +1066,176 @@ class TestVerifyDatasetLockXor:
                 acquisition_evidence_path=coinbase_pipeline.evidence_path,
                 derived_csv=coinbase_pipeline.derived_csv,
             )
+
+
+# --- C4: every pre-authorization refusal is inert (no backtest, no ledger or
+# output mutation). Each scenario starts from a byte-empty canonical ledger and
+# must fail strictly before the `started` event — which is the only point at
+# which the one-time access is consumed and the only writer of the ledger. ---
+
+
+def _scn_no_authorization(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    return None, {}
+
+
+def _scn_explicit_none_raw_chunk_dir(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    return head_auth(gp), {"raw_chunk_dir": None}
+
+
+def _scn_explicit_none_derived_csv(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    return head_auth(gp), {"derived_csv": None}
+
+
+def _scn_zero_commit_sha(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    return make_authorization(code_commit_sha="0" * 40), {}
+
+
+def _scn_foreign_commit_sha(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    _git(gp.repo_root, "commit", "-q", "--allow-empty", "-m", "later")
+    foreign = _git(gp.repo_root, "rev-parse", "HEAD")
+    _git(gp.repo_root, "reset", "--hard", "-q", gp.head)
+    return make_authorization(code_commit_sha=foreign), {}
+
+
+def _scn_dirty_tracked_tree(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    gp.lock_path.write_bytes(gp.lock_path.read_bytes() + b"\n")
+    return head_auth(gp), {}
+
+
+def _scn_alternate_ledger_path(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    alt = tmp_path / "other_ledger.jsonl"
+    alt.write_bytes(b"")
+    return head_auth(gp), {"ledger_path": alt}
+
+
+def _scn_evidence_outside_repository(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    outside = tmp_path / "outside_evidence.json"
+    outside.write_bytes(gp.evidence_path.read_bytes())
+    return head_auth(gp), {"acquisition_evidence_path": outside}
+
+
+def _scn_uncommitted_protocol_path(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    alt = gp.protocol_path.with_name("protocol_alt.json")
+    alt.write_bytes(gp.protocol_path.read_bytes())
+    return head_auth(gp), {"protocol_path": alt}
+
+
+def _scn_mutated_raw_chunk(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    chunk = next(iter(gp.raw_chunk_dir.glob("*.json")))
+    chunk.write_bytes(chunk.read_bytes().replace(b"100.0", b"123.0", 1))
+    return head_auth(gp), {}
+
+
+def _scn_non_reconstructing_derived_csv(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    gp.derived_csv.write_bytes(gp.derived_csv.read_bytes().replace(b"105.0", b"106.0", 1))
+    return head_auth(gp), {}
+
+
+def _scn_forged_quality_report(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    manifest = json.loads(gp.manifest_path.read_bytes())
+    quality_path = gp.manifest_path.with_name(manifest["quality_report_filename"])
+    quality_path.write_bytes(quality_path.read_bytes().replace(b'"row_count"', b'"row_kount"', 1))
+    return head_auth(gp), {}
+
+
+def _scn_missing_chunk_directory(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    return head_auth(gp), {"raw_chunk_dir": tmp_path / "nope"}
+
+
+def _scn_existing_reports_collision(
+    gp: GitPipeline, tmp_path: Path
+) -> tuple[OneTimeTestAuthorization | None, dict[str, Any]]:
+    gp.output_dir.mkdir(parents=True)
+    (gp.output_dir / "benchmark_results.json").write_bytes(b"{}")
+    return head_auth(gp), {}
+
+
+_PREAUTH_REFUSALS: tuple[
+    tuple[str, Any],
+    ...,
+] = (
+    ("no_authorization", _scn_no_authorization),
+    ("explicit_none_raw_chunk_dir", _scn_explicit_none_raw_chunk_dir),
+    ("explicit_none_derived_csv", _scn_explicit_none_derived_csv),
+    ("zero_commit_sha", _scn_zero_commit_sha),
+    ("foreign_commit_sha", _scn_foreign_commit_sha),
+    ("dirty_tracked_tree", _scn_dirty_tracked_tree),
+    ("alternate_ledger_path", _scn_alternate_ledger_path),
+    ("evidence_outside_repository", _scn_evidence_outside_repository),
+    ("uncommitted_protocol_path", _scn_uncommitted_protocol_path),
+    ("mutated_raw_chunk", _scn_mutated_raw_chunk),
+    ("non_reconstructing_derived_csv", _scn_non_reconstructing_derived_csv),
+    ("forged_quality_report", _scn_forged_quality_report),
+    ("missing_chunk_directory", _scn_missing_chunk_directory),
+    ("existing_reports_collision", _scn_existing_reports_collision),
+)
+
+
+class TestPreauthorizationSideEffects:
+    """C4: no pre-authorization refusal may run a strategy/backtest, touch the
+    canonical ledger, or write a report. Instruments the engine to prove no
+    backtest is reached and snapshots the ledger and output on every path."""
+
+    @pytest.mark.parametrize(
+        "setup", [scn for _, scn in _PREAUTH_REFUSALS], ids=[name for name, _ in _PREAUTH_REFUSALS]
+    )
+    def test_refusal_runs_no_backtest_and_leaves_ledger_and_output_unchanged(
+        self,
+        git_pipeline: GitPipeline,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        setup: Any,
+    ) -> None:
+        called = {"n": 0}
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            called["n"] += 1
+            return real_run_backtest(*args, **kwargs)
+
+        monkeypatch.setattr(evaluation, "run_backtest", spy)
+
+        results_file = git_pipeline.output_dir / "benchmark_results.json"
+        report_file = git_pipeline.output_dir / "benchmark_report.md"
+        auth, overrides = setup(git_pipeline, tmp_path)
+        ledger_before = git_pipeline.ledger_path.read_bytes()
+        results_before = results_file.read_bytes() if results_file.exists() else None
+
+        with pytest.raises((EvaluationError, DatasetLockError, DatasetVerificationError)):
+            run_git(git_pipeline, auth, **overrides)
+
+        # No signal was ever generated: the engine was never entered.
+        assert called["n"] == 0
+        # The canonical ledger is byte-for-byte unchanged (still empty here).
+        assert git_pipeline.ledger_path.read_bytes() == ledger_before == b""
+        assert read_ledger(git_pipeline.ledger_path) == ()
+        # No authoritative report was produced (and a pre-existing decoy, if
+        # the scenario planted one, is left byte-identical).
+        results_after = results_file.read_bytes() if results_file.exists() else None
+        assert results_after == results_before
+        assert not report_file.exists()
