@@ -53,10 +53,12 @@ Warnings are reported, inspected, and explained — never removed; the audit nev
 
 ### SMA (20/50) versus buy-and-hold, after costs
 
-| segment | buy-and-hold return | SMA return | difference |
+The difference column is the arithmetic gap between the two return percentages, in percentage points (pp) — not a ratio and not a percentage of buy-and-hold.
+
+| segment | buy-and-hold return | SMA return | difference (pp) |
 | --- | ---: | ---: | ---: |
-| train | +8003.64% | +40393.85% | +32390.21% |
-| validation | +204.67% | +1.48% | -203.19% |
+| train | +8003.64% | +40393.85% | +32390.21 pp |
+| validation | +204.67% | +1.48% | -203.19 pp |
 
 ## Test-set discipline
 

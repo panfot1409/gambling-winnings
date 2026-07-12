@@ -819,6 +819,11 @@ def _pct(value: float) -> str:
     return f"{value * 100:+.2f}%"
 
 
+def _pp(value: float) -> str:
+    """A gap between two return percentages, in percentage points (not a ratio)."""
+    return f"{value * 100:+.2f} pp"
+
+
 def _money(value: float) -> str:
     return f"{value:,.2f}"
 
@@ -933,7 +938,13 @@ def render_benchmark_markdown(results: BenchmarkResults) -> str:
     add("")
     add("### SMA (20/50) versus buy-and-hold, after costs")
     add("")
-    add("| segment | buy-and-hold return | SMA return | difference |")
+    add(
+        "The difference column is the arithmetic gap between the two return "
+        "percentages, in percentage points (pp) — not a ratio and not a "
+        "percentage of buy-and-hold."
+    )
+    add("")
+    add("| segment | buy-and-hold return | SMA return | difference (pp) |")
     add("| --- | ---: | ---: | ---: |")
     by_key = {(entry.strategy, entry.segment): entry for entry in results.segments}
     for segment in evaluated:
@@ -942,7 +953,7 @@ def render_benchmark_markdown(results: BenchmarkResults) -> str:
         difference = sma.total_return - bnh.total_return
         add(
             f"| {segment} | {_pct(bnh.total_return)} | {_pct(sma.total_return)} | "
-            f"{_pct(difference)} |"
+            f"{_pp(difference)} |"
         )
     add("")
     add("## Test-set discipline")
