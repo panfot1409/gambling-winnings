@@ -535,6 +535,15 @@ class SegmentMetrics:
             value = require_finite_float(label, getattr(self, label))
             if value <= 0:
                 raise ValueError(f"{label} must be positive, got {value!r}")
+        # Liquidating (sell at the last close with slippage + fee) can never
+        # exceed marking to market; equality holds only for a flat/cash
+        # terminal position. The exact value needs the equity/fill path, so
+        # only this stable bound is enforceable from the serialized scalars.
+        if self.terminal_liquidation_equity > self.terminal_equity:
+            raise ValueError(
+                f"terminal_liquidation_equity {self.terminal_liquidation_equity!r} must not "
+                f"exceed terminal_equity {self.terminal_equity!r}"
+            )
         total_return = require_finite_float("total_return", self.total_return)
         cagr = require_finite_float("cagr", self.cagr)
         _optional_finite_float("sharpe", self.sharpe)
@@ -574,11 +583,16 @@ class SegmentMetrics:
                 f"(expected ~{expected_cagr!r})"
             )
 
-        # Fill / notional coherence.
-        if num_fills == 0 and (notional != 0.0 or turnover != 0.0):
-            raise ValueError("zero fills must imply zero traded notional and zero turnover")
-        if notional > 0.0 and num_fills == 0:
-            raise ValueError("positive traded notional cannot coexist with zero fills")
+        # Fill / notional coherence: num_fills == 0 if and only if traded
+        # notional == 0 (and, via the turnover identity, turnover == 0).
+        if num_fills == 0:
+            if notional != 0.0 or turnover != 0.0:
+                raise ValueError("zero fills must imply zero traded notional and zero turnover")
+        elif notional <= 0.0 or turnover <= 0.0:
+            raise ValueError(
+                f"num_fills {num_fills} > 0 requires strictly positive traded notional and "
+                f"turnover, got notional {notional!r}, turnover {turnover!r}"
+            )
         if strategy == "buy_and_hold" and num_fills != 1:
             raise ValueError(
                 f"buy_and_hold enters once at the first open, so num_fills must be 1, "

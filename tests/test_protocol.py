@@ -467,3 +467,52 @@ class TestSegmentMetricsConsistency:
         # Two fills contradicts buy-and-hold's single ex-ante entry.
         with pytest.raises(ValueError, match="buy_and_hold"):
             dataclasses.replace(bnh, num_fills=2)
+
+    # --- C3: fills<->notional iff, and the liquidation bound. ---
+
+    def test_one_fill_with_zero_notional_is_rejected(self) -> None:
+        bnh = make_results().segments[0]
+        with pytest.raises(ValueError, match="positive traded notional"):
+            dataclasses.replace(bnh, total_traded_notional=0.0, turnover=0.0)
+
+    def test_multiple_fills_with_zero_notional_is_rejected(self) -> None:
+        sma = make_results().segments[3]
+        with pytest.raises(ValueError, match="positive traded notional"):
+            dataclasses.replace(sma, num_fills=2, total_traded_notional=0.0, turnover=0.0)
+
+    def test_liquidation_equity_above_marked_equity_is_rejected(self) -> None:
+        valid = make_results().segments[0]
+        with pytest.raises(ValueError, match="terminal_liquidation_equity"):
+            dataclasses.replace(valid, terminal_liquidation_equity=valid.terminal_equity + 100.0)
+
+    def test_zero_liquidation_equity_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="terminal_liquidation_equity"):
+            dataclasses.replace(make_results().segments[0], terminal_liquidation_equity=0.0)
+
+    def test_liquidation_equal_to_marked_equity_is_accepted(self) -> None:
+        # A cash-terminal (flat) segment: liquidation equals marked equity.
+        valid = make_results().segments[0]
+        ok = dataclasses.replace(valid, terminal_liquidation_equity=valid.terminal_equity)
+        assert ok.terminal_liquidation_equity == ok.terminal_equity
+
+    def test_open_position_liquidation_below_marked_is_accepted(self) -> None:
+        valid = make_results().segments[0]
+        assert valid.terminal_liquidation_equity < valid.terminal_equity  # default fixture
+
+    def test_parse_path_rejects_fills_notional_inconsistency(self) -> None:
+        results = make_results()
+        payload: dict[str, Any] = json.loads(results.to_json_bytes().decode("utf-8"))
+        payload["segments"][3]["num_fills"] = 3
+        payload["segments"][3]["total_traded_notional"] = 0.0
+        payload["segments"][3]["turnover"] = 0.0
+        with pytest.raises(ValueError, match="positive traded notional"):
+            BenchmarkResults.from_json_bytes(json.dumps(payload).encode("utf-8"))
+
+    def test_parse_path_rejects_liquidation_above_marked(self) -> None:
+        results = make_results()
+        payload: dict[str, Any] = json.loads(results.to_json_bytes().decode("utf-8"))
+        payload["segments"][0]["terminal_liquidation_equity"] = (
+            payload["segments"][0]["terminal_equity"] + 1.0
+        )
+        with pytest.raises(ValueError, match="terminal_liquidation_equity"):
+            BenchmarkResults.from_json_bytes(json.dumps(payload).encode("utf-8"))
