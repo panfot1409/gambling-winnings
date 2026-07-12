@@ -7,11 +7,18 @@ access is public and permanent:
 
 * a ``started`` event is written **before** any test signal or P&L is
   computed — a crash after that point is a consumed access, not a do-over;
-* ``completed`` carries the SHA-256 of the published results;
+* ``completed`` carries the SHA-256 of the published results JSON, the
+  report Markdown, and the domain-separated result bundle;
 * ``failed`` carries an honest failure description;
 * nothing is ever erased or rewritten — the file only grows, and a
   malformed or truncated line is loud contamination evidence, never
   silently skipped.
+
+Schema v2 records the **holdout identity** the access consumed
+(``holdout_id``, ``test_content_fingerprint``, instrument, test window) so
+that freshness is a property of the candles evaluated, not of a mutable
+``(dataset_lock, protocol)`` pair. The production ledger is byte-empty, so
+v2 is adopted before the first real event; there is no v1↔v2 migration.
 
 ``append_event`` strictly re-validates the entire ledger before every
 append, then appends the new line with a single write and fsync, so a
@@ -43,41 +50,65 @@ from eth_research.data.validation import (
     require_commit_sha,
     require_evaluation_id,
     require_fingerprint,
+    require_positive_int,
 )
 
-LEDGER_SCHEMA_VERSION: int = 1
+LEDGER_SCHEMA_VERSION: int = 2
 
 EVENT_STARTED: str = "started"
 EVENT_COMPLETED: str = "completed"
 EVENT_FAILED: str = "failed"
 _EVENT_NAMES: tuple[str, ...] = (EVENT_STARTED, EVENT_COMPLETED, EVENT_FAILED)
 
+_RESULT_FIELDS: tuple[str, ...] = (
+    "results_json_sha256",
+    "report_markdown_sha256",
+    "result_bundle_sha256",
+)
+"""Present together on ``completed``; all null otherwise."""
+
 _EVENT_KEYS: frozenset[str] = frozenset(
     {
         "ledger_schema_version",
         "event",
         "evaluation_id",
+        "holdout_id",
         "dataset_content_fingerprint",
-        "dataset_lock_sha256",
-        "protocol_sha256",
-        "code_commit_sha",
+        "test_content_fingerprint",
+        "symbol",
+        "venue",
+        "candle_interval",
         "test_first_open_time",
         "test_last_open_time",
+        "test_row_count",
+        "dataset_lock_sha256",
+        "protocol_sha256",
+        "runtime_contract_sha256",
+        "code_commit_sha",
         "reason",
         "event_time_utc",
-        "result_report_sha256",
+        "results_json_sha256",
+        "report_markdown_sha256",
+        "result_bundle_sha256",
         "failure_description",
     }
 )
 
 _SHARED_FIELDS: tuple[str, ...] = (
     "evaluation_id",
+    "holdout_id",
     "dataset_content_fingerprint",
-    "dataset_lock_sha256",
-    "protocol_sha256",
-    "code_commit_sha",
+    "test_content_fingerprint",
+    "symbol",
+    "venue",
+    "candle_interval",
     "test_first_open_time",
     "test_last_open_time",
+    "test_row_count",
+    "dataset_lock_sha256",
+    "protocol_sha256",
+    "runtime_contract_sha256",
+    "code_commit_sha",
     "reason",
 )
 """Fields that must be identical across all events of one evaluation id."""
@@ -94,15 +125,24 @@ class LedgerEvent:
     ledger_schema_version: int
     event: str
     evaluation_id: str
+    holdout_id: str
     dataset_content_fingerprint: str
-    dataset_lock_sha256: str
-    protocol_sha256: str
-    code_commit_sha: str
+    test_content_fingerprint: str
+    symbol: str
+    venue: str
+    candle_interval: pd.Timedelta
     test_first_open_time: pd.Timestamp
     test_last_open_time: pd.Timestamp
+    test_row_count: int
+    dataset_lock_sha256: str
+    protocol_sha256: str
+    runtime_contract_sha256: str
+    code_commit_sha: str
     reason: str
     event_time_utc: pd.Timestamp
-    result_report_sha256: str | None
+    results_json_sha256: str | None
+    report_markdown_sha256: str | None
+    result_bundle_sha256: str | None
     failure_description: str | None
 
     def __post_init__(self) -> None:
@@ -116,23 +156,47 @@ class LedgerEvent:
         if event not in _EVENT_NAMES:
             raise ValueError(f"event must be one of {_EVENT_NAMES}, got {event!r}")
         require_evaluation_id("evaluation_id", self.evaluation_id)
+        require_hex64("holdout_id", self.holdout_id)
         require_fingerprint("dataset_content_fingerprint", self.dataset_content_fingerprint)
-        require_hex64("dataset_lock_sha256", self.dataset_lock_sha256)
-        require_hex64("protocol_sha256", self.protocol_sha256)
-        require_commit_sha("code_commit_sha", self.code_commit_sha)
+        require_fingerprint("test_content_fingerprint", self.test_content_fingerprint)
+        for label in ("symbol", "venue"):
+            require_nonempty_str(label, getattr(self, label))
+        if (
+            not isinstance(self.candle_interval, pd.Timedelta)
+            or pd.isna(self.candle_interval)
+            or self.candle_interval <= pd.Timedelta(0)
+        ):
+            raise ValueError(
+                f"candle_interval must be a positive Timedelta, got {self.candle_interval!r}"
+            )
         require_aware_timestamp("test_first_open_time", self.test_first_open_time)
         require_aware_timestamp("test_last_open_time", self.test_last_open_time)
+        row_count = require_positive_int("test_row_count", self.test_row_count)
         if self.test_first_open_time > self.test_last_open_time:
             raise ValueError(
                 f"test_first_open_time {self.test_first_open_time} must not be after "
                 f"test_last_open_time {self.test_last_open_time}"
             )
+        expected_last = self.test_first_open_time + (row_count - 1) * self.candle_interval
+        if self.test_last_open_time != expected_last:
+            raise ValueError(
+                "test_last_open_time is inconsistent with test_first_open_time + "
+                f"(test_row_count - 1) * candle_interval: expected {expected_last}, "
+                f"got {self.test_last_open_time}"
+            )
+        require_hex64("dataset_lock_sha256", self.dataset_lock_sha256)
+        require_hex64("protocol_sha256", self.protocol_sha256)
+        require_hex64("runtime_contract_sha256", self.runtime_contract_sha256)
+        require_commit_sha("code_commit_sha", self.code_commit_sha)
         require_nonempty_str("reason", self.reason)
         require_aware_timestamp("event_time_utc", self.event_time_utc)
         if event == EVENT_COMPLETED:
-            require_hex64("result_report_sha256", self.result_report_sha256)
-        elif self.result_report_sha256 is not None:
-            raise ValueError(f"result_report_sha256 must be null on a {event!r} event")
+            for label in _RESULT_FIELDS:
+                require_hex64(label, getattr(self, label))
+        else:
+            for label in _RESULT_FIELDS:
+                if getattr(self, label) is not None:
+                    raise ValueError(f"{label} must be null on a {event!r} event")
         if event == EVENT_FAILED:
             require_nonempty_str("failure_description", self.failure_description)
         elif self.failure_description is not None:
@@ -144,15 +208,24 @@ class LedgerEvent:
             "ledger_schema_version": self.ledger_schema_version,
             "event": self.event,
             "evaluation_id": self.evaluation_id,
+            "holdout_id": self.holdout_id,
             "dataset_content_fingerprint": self.dataset_content_fingerprint,
-            "dataset_lock_sha256": self.dataset_lock_sha256,
-            "protocol_sha256": self.protocol_sha256,
-            "code_commit_sha": self.code_commit_sha,
+            "test_content_fingerprint": self.test_content_fingerprint,
+            "symbol": self.symbol,
+            "venue": self.venue,
+            "candle_interval": self.candle_interval.isoformat(),
             "test_first_open_time": self.test_first_open_time.isoformat(),
             "test_last_open_time": self.test_last_open_time.isoformat(),
+            "test_row_count": self.test_row_count,
+            "dataset_lock_sha256": self.dataset_lock_sha256,
+            "protocol_sha256": self.protocol_sha256,
+            "runtime_contract_sha256": self.runtime_contract_sha256,
+            "code_commit_sha": self.code_commit_sha,
             "reason": self.reason,
             "event_time_utc": self.event_time_utc.isoformat(),
-            "result_report_sha256": self.result_report_sha256,
+            "results_json_sha256": self.results_json_sha256,
+            "report_markdown_sha256": self.report_markdown_sha256,
+            "result_bundle_sha256": self.result_bundle_sha256,
             "failure_description": self.failure_description,
         }
         text = json.dumps(
@@ -176,23 +249,37 @@ class LedgerEvent:
             raise ValueError(
                 f"ledger event keys do not match schema: unknown={unknown}, missing={missing}"
             )
+        interval_text = require_str("candle_interval", payload["candle_interval"])
+        try:
+            interval = pd.Timedelta(interval_text)
+        except ValueError as exc:
+            raise ValueError(f"candle_interval is unparseable: {interval_text!r}") from exc
         return cls(
             ledger_schema_version=payload["ledger_schema_version"],
             event=payload["event"],
             evaluation_id=payload["evaluation_id"],
+            holdout_id=payload["holdout_id"],
             dataset_content_fingerprint=payload["dataset_content_fingerprint"],
-            dataset_lock_sha256=payload["dataset_lock_sha256"],
-            protocol_sha256=payload["protocol_sha256"],
-            code_commit_sha=payload["code_commit_sha"],
+            test_content_fingerprint=payload["test_content_fingerprint"],
+            symbol=payload["symbol"],
+            venue=payload["venue"],
+            candle_interval=interval,
             test_first_open_time=parse_timestamp_field(
                 "test_first_open_time", payload["test_first_open_time"]
             ),
             test_last_open_time=parse_timestamp_field(
                 "test_last_open_time", payload["test_last_open_time"]
             ),
+            test_row_count=payload["test_row_count"],
+            dataset_lock_sha256=payload["dataset_lock_sha256"],
+            protocol_sha256=payload["protocol_sha256"],
+            runtime_contract_sha256=payload["runtime_contract_sha256"],
+            code_commit_sha=payload["code_commit_sha"],
             reason=payload["reason"],
             event_time_utc=parse_timestamp_field("event_time_utc", payload["event_time_utc"]),
-            result_report_sha256=payload["result_report_sha256"],
+            results_json_sha256=payload["results_json_sha256"],
+            report_markdown_sha256=payload["report_markdown_sha256"],
+            result_bundle_sha256=payload["result_bundle_sha256"],
             failure_description=payload["failure_description"],
         )
 
@@ -292,22 +379,3 @@ def append_event(path: str | Path, event: LedgerEvent) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
-
-
-def accesses_for(
-    events: tuple[LedgerEvent, ...],
-    *,
-    dataset_lock_sha256: str,
-    protocol_sha256: str,
-) -> tuple[LedgerEvent, ...]:
-    """Every recorded access for one (dataset lock, protocol) pair.
-
-    Any returned event — started, completed, or failed — means the
-    one-time test evaluation for that pair has been consumed.
-    """
-    return tuple(
-        event
-        for event in events
-        if event.dataset_lock_sha256 == dataset_lock_sha256
-        and event.protocol_sha256 == protocol_sha256
-    )

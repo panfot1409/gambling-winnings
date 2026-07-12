@@ -23,6 +23,7 @@ the Milestone 1 engine. Its jobs:
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -61,12 +62,13 @@ from eth_research.gitcheck import (
     tracked_tree_is_clean,
     verify_package_source,
 )
+from eth_research.holdout import build_holdout_identity, find_holdout_conflicts
 from eth_research.ledger import (
     EVENT_COMPLETED,
     EVENT_FAILED,
     EVENT_STARTED,
+    LEDGER_SCHEMA_VERSION,
     LedgerEvent,
-    accesses_for,
     append_event,
     read_ledger,
 )
@@ -95,6 +97,22 @@ CANONICAL_LEDGER_RELPATH: str = "research/m2b/test_evaluations.jsonl"
 EVALUATION_CONFIRM_TOKEN: str = (
     "I-UNDERSTAND-THIS-PERMANENTLY-CONSUMES-THE-ONE-TIME-TEST-EVALUATION"
 )
+
+_RESULT_BUNDLE_HEADER: bytes = b"eth-research result-bundle-v1\n"
+
+
+def compute_result_bundle_sha256(results_json: bytes, report_markdown: bytes) -> str:
+    """Domain-separated SHA-256 binding the results JSON and report Markdown.
+
+    A single hash over both published artifacts, so the ledger's completed
+    event pins the *bundle*, not just the authoritative JSON. Hashing the
+    two component digests (rather than concatenating the blobs) keeps the
+    boundary between them unambiguous.
+    """
+    hasher = hashlib.sha256()
+    hasher.update(_RESULT_BUNDLE_HEADER)
+    hasher.update(f"{sha256_bytes(results_json)}|{sha256_bytes(report_markdown)}\n".encode("ascii"))
+    return hasher.hexdigest()
 
 
 class EvaluationError(RuntimeError):
@@ -666,14 +684,25 @@ def _run_bound_benchmark(
 
     protocol_sha = sha256_bytes(protocol.to_json_bytes())
     lock_sha = sha256_bytes(lock.to_json_bytes())
+    runtime_sha = sha256_bytes((root / CANONICAL_RUNTIME_CONTRACT_RELPATH).read_bytes())
+
+    # Derive the durable holdout identity — an integrity-only operation that
+    # reads/hashes the test candles but runs no strategy, engine, or metric.
+    # Freshness is a property of *these candles*, not of the mutable
+    # (dataset_lock, protocol) pair, so changing the protocol/lock/version/
+    # schema/eval-id/commit/runtime cannot launder a second access.
+    holdout = build_holdout_identity(dataset, protocol)
 
     events = read_ledger(ledger)
-    consumed = accesses_for(events, dataset_lock_sha256=lock_sha, protocol_sha256=protocol_sha)
-    if consumed:
+    conflicts = find_holdout_conflicts(events, holdout)
+    if conflicts:
+        first = conflicts[0]
         raise EvaluationError(
-            f"test evaluation refused: the one-time access for this dataset lock and "
-            f"protocol was already consumed by evaluation id {consumed[0].evaluation_id!r} "
-            f"({consumed[0].event!r}). Design a new holdout protocol instead of rerunning."
+            f"test evaluation refused: this holdout was already consumed by evaluation id "
+            f"{first.evaluation_id!r} ({first.event!r}) — {'; '.join(first.reasons)}. The "
+            "one-time test holdout is permanently consumed; changing the protocol, lock, "
+            "package version, schema, evaluation id, commit, or wording does not restore it. "
+            "Design a genuinely new, non-overlapping holdout instead."
         )
     if any(event.evaluation_id == authorization.evaluation_id for event in events):
         raise EvaluationError(
@@ -696,23 +725,30 @@ def _run_bound_benchmark(
     # Everything below is allowed pre-authorization: train/validation runs
     # and mechanical split bounds.
     train_validation = evaluate_train_validation(dataset, protocol)
-    boundaries = split_boundaries(dataset, protocol)
-    test_bounds = boundaries[2]
 
     def event_for(kind: str, **extra: str | None) -> LedgerEvent:
         return LedgerEvent(
-            ledger_schema_version=1,
+            ledger_schema_version=LEDGER_SCHEMA_VERSION,
             event=kind,
             evaluation_id=authorization.evaluation_id,
-            dataset_content_fingerprint=protocol.dataset_content_fingerprint,
+            holdout_id=holdout.holdout_id,
+            dataset_content_fingerprint=holdout.dataset_content_fingerprint,
+            test_content_fingerprint=holdout.test_content_fingerprint,
+            symbol=holdout.symbol,
+            venue=holdout.venue,
+            candle_interval=holdout.candle_interval,
+            test_first_open_time=holdout.test_first_open_time,
+            test_last_open_time=holdout.test_last_open_time,
+            test_row_count=holdout.test_row_count,
             dataset_lock_sha256=lock_sha,
             protocol_sha256=protocol_sha,
+            runtime_contract_sha256=runtime_sha,
             code_commit_sha=authorization.code_commit_sha,
-            test_first_open_time=test_bounds.first_open_time,
-            test_last_open_time=test_bounds.last_open_time,
             reason=authorization.reason,
             event_time_utc=tick(),
-            result_report_sha256=extra.get("result_report_sha256"),
+            results_json_sha256=extra.get("results_json_sha256"),
+            report_markdown_sha256=extra.get("report_markdown_sha256"),
+            result_bundle_sha256=extra.get("result_bundle_sha256"),
             failure_description=extra.get("failure_description"),
         )
 
@@ -747,9 +783,16 @@ def _run_bound_benchmark(
         description = f"{type(exc).__name__}: {exc}"[:500].strip() or type(exc).__name__
         append_event(ledger_path, event_for(EVENT_FAILED, failure_description=description))
         raise
+    results_bytes = results.to_json_bytes()
+    report_bytes = markdown.encode("utf-8")
     append_event(
         ledger_path,
-        event_for(EVENT_COMPLETED, result_report_sha256=sha256_bytes(results.to_json_bytes())),
+        event_for(
+            EVENT_COMPLETED,
+            results_json_sha256=sha256_bytes(results_bytes),
+            report_markdown_sha256=sha256_bytes(report_bytes),
+            result_bundle_sha256=compute_result_bundle_sha256(results_bytes, report_bytes),
+        ),
     )
     return BenchmarkRun(
         results=results,

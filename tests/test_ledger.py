@@ -11,9 +11,9 @@ import pandas as pd
 import pytest
 
 from eth_research.ledger import (
+    LEDGER_SCHEMA_VERSION,
     LedgerError,
     LedgerEvent,
-    accesses_for,
     append_event,
     read_ledger,
 )
@@ -28,19 +28,29 @@ def make_event(
     minutes: int = 0,
     **overrides: Any,
 ) -> LedgerEvent:
+    completed = event == "completed"
     fields: dict[str, Any] = {
-        "ledger_schema_version": 1,
+        "ledger_schema_version": LEDGER_SCHEMA_VERSION,
         "event": event,
         "evaluation_id": evaluation_id,
+        "holdout_id": "5" * 64,
         "dataset_content_fingerprint": "sha256:" + "1" * 64,
-        "dataset_lock_sha256": "2" * 64,
-        "protocol_sha256": "3" * 64,
-        "code_commit_sha": "a" * 40,
+        "test_content_fingerprint": "sha256:" + "e" * 64,
+        "symbol": "ETH-USD",
+        "venue": "Coinbase Exchange",
+        "candle_interval": pd.Timedelta(days=1),
         "test_first_open_time": pd.Timestamp("2024-01-09", tz="UTC"),
         "test_last_open_time": pd.Timestamp("2024-01-10", tz="UTC"),
+        "test_row_count": 2,
+        "dataset_lock_sha256": "2" * 64,
+        "protocol_sha256": "3" * 64,
+        "runtime_contract_sha256": "6" * 64,
+        "code_commit_sha": "a" * 40,
         "reason": "authorized one-time Milestone 2B test evaluation",
         "event_time_utc": T0 + pd.Timedelta(minutes=minutes),
-        "result_report_sha256": "4" * 64 if event == "completed" else None,
+        "results_json_sha256": "4" * 64 if completed else None,
+        "report_markdown_sha256": "7" * 64 if completed else None,
+        "result_bundle_sha256": "8" * 64 if completed else None,
         "failure_description": "engine raised" if event == "failed" else None,
     }
     fields.update(overrides)
@@ -66,13 +76,17 @@ class TestEventModel:
         with pytest.raises(ValueError, match="event must be one of"):
             make_event("rerun")
 
-    def test_completed_requires_result_hash(self) -> None:
-        with pytest.raises(ValueError, match="result_report_sha256"):
-            make_event("completed", result_report_sha256=None)
+    def test_completed_requires_all_result_hashes(self) -> None:
+        with pytest.raises(ValueError, match="results_json_sha256"):
+            make_event("completed", results_json_sha256=None)
+        with pytest.raises(ValueError, match="report_markdown_sha256"):
+            make_event("completed", report_markdown_sha256=None)
+        with pytest.raises(ValueError, match="result_bundle_sha256"):
+            make_event("completed", result_bundle_sha256=None)
 
-    def test_started_must_not_carry_result_hash(self) -> None:
+    def test_started_must_not_carry_result_hashes(self) -> None:
         with pytest.raises(ValueError, match="must be null on a 'started' event"):
-            make_event("started", result_report_sha256="4" * 64)
+            make_event("started", results_json_sha256="4" * 64)
 
     def test_failed_requires_description(self) -> None:
         with pytest.raises(ValueError, match="failure_description"):
@@ -81,6 +95,14 @@ class TestEventModel:
     def test_completed_must_not_carry_failure_description(self) -> None:
         with pytest.raises(ValueError, match="failure_description must be null"):
             make_event("completed", failure_description="oops")
+
+    def test_holdout_id_must_be_hex64(self) -> None:
+        with pytest.raises(ValueError, match="holdout_id"):
+            make_event(holdout_id="not-hex")
+
+    def test_test_bounds_must_match_row_count(self) -> None:
+        with pytest.raises(ValueError, match="inconsistent with test_first_open_time"):
+            make_event(test_row_count=3)
 
     @pytest.mark.parametrize("identifier", ["short", "Bad-ID", "x" * 65])
     def test_malformed_evaluation_id_is_rejected(self, identifier: str) -> None:
@@ -91,6 +113,10 @@ class TestEventModel:
         with pytest.raises(ValueError, match="bool is rejected"):
             make_event(ledger_schema_version=True)
 
+    def test_stale_v1_schema_version_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="unsupported ledger schema version"):
+            make_event(ledger_schema_version=1)
+
     def test_naive_event_time_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="timezone-aware"):
             make_event(event_time_utc=pd.Timestamp("2026-07-11"))
@@ -100,6 +126,7 @@ class TestEventModel:
             make_event(
                 test_first_open_time=pd.Timestamp("2024-01-11", tz="UTC"),
                 test_last_open_time=pd.Timestamp("2024-01-10", tz="UTC"),
+                test_row_count=1,
             )
 
     def test_unknown_key_is_rejected(self) -> None:
@@ -162,6 +189,12 @@ class TestReadLedger:
         with pytest.raises(LedgerError, match="'protocol_sha256' disagrees"):
             read_ledger(ledger_path)
 
+    def test_holdout_id_disagreement_with_started_is_rejected(self, ledger_path: Path) -> None:
+        completed = make_event("completed", minutes=1, holdout_id="f" * 64)
+        ledger_path.write_bytes(make_event("started").to_json_line() + completed.to_json_line())
+        with pytest.raises(LedgerError, match="'holdout_id' disagrees"):
+            read_ledger(ledger_path)
+
     def test_time_regression_is_rejected(self, ledger_path: Path) -> None:
         ledger_path.write_bytes(
             make_event("started").to_json_line()
@@ -200,32 +233,15 @@ class TestAppendEvent:
             append_event(ledger_path, make_event("started"))
         assert ledger_path.read_bytes() == b"garbage\n"
 
-
-class TestAccessesFor:
-    def test_any_event_counts_as_consumed_access(self, ledger_path: Path) -> None:
-        append_event(ledger_path, make_event("started"))
-        events = read_ledger(ledger_path)
-        matching = accesses_for(events, dataset_lock_sha256="2" * 64, protocol_sha256="3" * 64)
-        assert len(matching) == 1
-        other = accesses_for(events, dataset_lock_sha256="f" * 64, protocol_sha256="3" * 64)
-        assert other == ()
-
-    def test_crash_after_started_reads_as_consumed(self, ledger_path: Path) -> None:
-        # Simulate a crash: 'started' was written, no terminal event followed.
+    def test_crash_after_started_reads_as_one_consumed_event(self, ledger_path: Path) -> None:
+        # A crash: 'started' was written, no terminal event followed. The read
+        # still surfaces the consumed access — never an empty, pristine ledger.
         append_event(ledger_path, make_event("started"))
         events = read_ledger(ledger_path)
         assert [event.event for event in events] == ["started"]
-        assert accesses_for(events, dataset_lock_sha256="2" * 64, protocol_sha256="3" * 64)
-
-    def test_different_id_same_dataset_still_counts(self, ledger_path: Path) -> None:
-        append_event(ledger_path, make_event("started"))
-        events = read_ledger(ledger_path)
-        # A fresh id does not launder a consumed (lock, protocol) pair.
-        matching = accesses_for(events, dataset_lock_sha256="2" * 64, protocol_sha256="3" * 64)
-        assert matching
 
 
 def test_dataclass_replace_reruns_validation() -> None:
     event = make_event("started")
     with pytest.raises(ValueError, match="must be null on a 'started' event"):
-        dataclasses.replace(event, result_report_sha256="9" * 64)
+        dataclasses.replace(event, results_json_sha256="9" * 64)

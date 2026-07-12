@@ -33,13 +33,19 @@ from eth_research.data.lock import (
     verify_dataset_lock,
 )
 from eth_research.data.provenance import sha256_bytes, sha256_file
-from eth_research.environment import RuntimeContract
+from eth_research.environment import (
+    AUTHORITATIVE_RUNTIME_ROLE,
+    ENVIRONMENT_SCHEMA_VERSION,
+    RuntimeContract,
+    current_runtime_snapshot,
+)
 from eth_research.evaluation import (
     CANONICAL_LEDGER_RELPATH,
     EVALUATION_CONFIRM_TOKEN,
     EvaluationError,
     OneTimeTestAuthorization,
     build_benchmark_results,
+    compute_result_bundle_sha256,
     evaluate_train_validation,
     evaluate_train_validation_from_manifest,
     publish_benchmark_reports,
@@ -47,7 +53,7 @@ from eth_research.evaluation import (
     run_authorized_benchmark,
     split_boundaries,
 )
-from eth_research.ledger import LedgerEvent, append_event, read_ledger
+from eth_research.ledger import LEDGER_SCHEMA_VERSION, LedgerEvent, append_event, read_ledger
 from eth_research.protocol import BenchmarkProtocol, build_benchmark_protocol
 
 DAY = pd.Timedelta(days=1)
@@ -348,6 +354,26 @@ def make_git_pipeline(root: Path) -> GitPipeline:
     protocol = build_benchmark_protocol(lock, package_version=eth_research.__version__)
     protocol_path = research / "protocol.json"
     protocol_path.write_bytes(protocol.to_json_bytes())
+    # A committed runtime contract so the guarded path can record its SHA in
+    # the ledger (the inner path hashes it for provenance; semantic runtime
+    # verification is the public wrapper's job, tested separately).
+    snap = current_runtime_snapshot()
+    contract = RuntimeContract(
+        environment_schema_version=ENVIRONMENT_SCHEMA_VERSION,
+        runtime_role=AUTHORITATIVE_RUNTIME_ROLE,
+        package_version=snap.package_version,
+        python_implementation=snap.python_implementation,
+        python_version=snap.python_version,
+        python_cache_tag=snap.python_cache_tag,
+        os_family=snap.os_family,
+        machine=snap.machine,
+        numpy_version=snap.numpy_version,
+        pandas_version=snap.pandas_version,
+        pyarrow_version=snap.pyarrow_version,
+        uv_lock_sha256="0" * 64,
+        pyproject_sha256="0" * 64,
+    )
+    (research / "runtime_contract.json").write_bytes(contract.to_json_bytes())
     ledger_path = research / "test_evaluations.jsonl"
     ledger_path.write_bytes(b"")
 
@@ -430,7 +456,16 @@ class TestGuardedOneTimeEvaluation:
         assert events[0].test_last_open_time == START + 119 * DAY
         assert events[0].code_commit_sha == git_pipeline.head
         published = run.results_path.read_bytes()
-        assert events[1].result_report_sha256 == sha256_bytes(published)
+        report_bytes = run.report_path.read_bytes()
+        assert events[1].results_json_sha256 == sha256_bytes(published)
+        assert events[1].report_markdown_sha256 == sha256_bytes(report_bytes)
+        assert events[1].result_bundle_sha256 == compute_result_bundle_sha256(
+            published, report_bytes
+        )
+        # The holdout identity is recorded on both events and is stable.
+        assert events[0].holdout_id == events[1].holdout_id
+        assert events[0].test_content_fingerprint.startswith("sha256:")
+        assert events[0].test_row_count == 24
         assert run.results.to_json_bytes() == published
         assert run.report_path.read_text(encoding="utf-8") == run.markdown
         assert run.results.test_evaluation_id == "m2b-synthetic-eval-001"
@@ -439,19 +474,31 @@ class TestGuardedOneTimeEvaluation:
         assert "exactly once" in run.markdown
 
     def test_reused_evaluation_id_is_refused(self, git_pipeline: GitPipeline) -> None:
+        # A prior event for a *different* holdout (different instrument and
+        # candles) but the same evaluation id: it must not be a holdout
+        # conflict, so the refusal is specifically the reused-id guard.
         foreign = LedgerEvent(
-            ledger_schema_version=1,
+            ledger_schema_version=LEDGER_SCHEMA_VERSION,
             event="started",
             evaluation_id="m2b-synthetic-eval-001",
+            holdout_id="9" * 64,
             dataset_content_fingerprint="sha256:" + "9" * 64,
-            dataset_lock_sha256="8" * 64,
-            protocol_sha256="7" * 64,
-            code_commit_sha="b" * 40,
+            test_content_fingerprint="sha256:" + "8" * 64,
+            symbol="BTC-USD",
+            venue="OtherVenue",
+            candle_interval=DAY,
             test_first_open_time=START,
             test_last_open_time=START + DAY,
+            test_row_count=2,
+            dataset_lock_sha256="8" * 64,
+            protocol_sha256="7" * 64,
+            runtime_contract_sha256="6" * 64,
+            code_commit_sha="b" * 40,
             reason="a previous unrelated evaluation",
             event_time_utc=T0,
-            result_report_sha256=None,
+            results_json_sha256=None,
+            report_markdown_sha256=None,
+            result_bundle_sha256=None,
             failure_description=None,
         )
         # Write into the tracked ledger and re-commit so the tree stays clean.
@@ -622,7 +669,8 @@ class TestCanonicalLedger:
         # The two-ledgers-double-evaluation attack (possible at head 172253b)
         # is closed: the ledger is the one canonical tracked file, so after the
         # access is consumed and committed, a second run at the new HEAD is
-        # refused because the (dataset lock, protocol) pair is already consumed.
+        # refused because the same holdout (these candles) is already consumed —
+        # a fresh evaluation id does not launder it.
         run_git(git_pipeline, head_auth(git_pipeline))
         _git(git_pipeline.repo_root, "add", "research")
         _git(git_pipeline.repo_root, "commit", "-q", "-m", "record consumed access")
