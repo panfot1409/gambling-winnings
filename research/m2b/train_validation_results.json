@@ -1,0 +1,140 @@
+{
+  "accounting": "independent-segments-v1",
+  "acquisition_evidence_sha256": "27ba6a6013fab67c02361bc3e2b43a761fa5ac0310556d7557859bdcbbbd2d0b",
+  "base_asset": "ETH",
+  "candle_interval": "P1DT0H0M0S",
+  "dataset_content_fingerprint": "sha256:273f89eb07ae882784e40c2bc2ef2be5db93ddb3efa7de6270880ad1b7dd5718",
+  "dataset_first_open_time": "2016-05-23T00:00:00+00:00",
+  "dataset_last_open_time": "2026-07-11T00:00:00+00:00",
+  "dataset_lock_sha256": "6ccd3698f71b25b9cfbab758caeeb4150b2ca257df4f4acedd985da249462a4d",
+  "dataset_manifest_sha256": "58ec9cb9940f76c991db92696e0a72df3365fa2b5d31305fa25f15468ac7b4fd",
+  "dataset_row_count": 3702,
+  "market_type": "spot",
+  "package_version": "0.3.0",
+  "pre_registered_commit_sha": "b89627463775bf32698effb5adea1270a5927890",
+  "protocol_sha256": "a75a9cf508ead459976060ab7518c4e382ecb95e54cc0ee36ec0ff9281f26a81",
+  "quality_report_sha256": "b167df002768469bd5fb17c5a6588edc2c98e3ce910a0995187e1f68ed14f07a",
+  "quality_warnings": [
+    {
+      "code": "extreme_ranges",
+      "count": 50,
+      "first_examples": [
+        "2016-06-17 00:00:00+00:00: 39.30%",
+        "2016-06-18 00:00:00+00:00: 36.70%",
+        "2016-08-02 00:00:00+00:00: 42.48%"
+      ]
+    },
+    {
+      "code": "extreme_returns",
+      "count": 10,
+      "first_examples": [
+        "2016-06-17 00:00:00+00:00: -25.44%",
+        "2016-06-18 00:00:00+00:00: -25.62%",
+        "2017-03-16 00:00:00+00:00: +28.92%"
+      ]
+    }
+  ],
+  "quote_asset": "USD",
+  "results_schema_version": 1,
+  "segments": [
+    {
+      "cagr": 1.0600989927944164,
+      "context_bars": 0,
+      "end_time": "2022-06-22T00:00:00+00:00",
+      "initial_cash": 10000.0,
+      "max_drawdown": -0.940116304238034,
+      "n_bars": 2221,
+      "num_fills": 1,
+      "segment": "train",
+      "sharpe": 1.2104064811105317,
+      "sortino": 1.8653786498887373,
+      "start_time": "2016-05-23T00:00:00+00:00",
+      "strategy": "buy_and_hold",
+      "terminal_equity": 810364.1351952263,
+      "terminal_liquidation_equity": 809148.9941745012,
+      "total_return": 80.03641351952263,
+      "total_traded_notional": 9990.00999000999,
+      "turnover": 0.999000999000999
+    },
+    {
+      "cagr": 0.7330410343883462,
+      "context_bars": 0,
+      "end_time": "2024-07-01T00:00:00+00:00",
+      "initial_cash": 10000.0,
+      "max_drawdown": -0.44582441113490356,
+      "n_bars": 740,
+      "num_fills": 1,
+      "segment": "validation",
+      "sharpe": 1.1816532551136898,
+      "sortino": 1.8336276999057795,
+      "start_time": "2022-06-22T00:00:00+00:00",
+      "strategy": "buy_and_hold",
+      "terminal_equity": 30466.952131020087,
+      "terminal_liquidation_equity": 30421.266936299628,
+      "total_return": 2.0466952131020086,
+      "total_traded_notional": 9990.00999000999,
+      "turnover": 0.999000999000999
+    },
+    {
+      "cagr": 1.6840636828738993,
+      "context_bars": 0,
+      "end_time": "2022-06-22T00:00:00+00:00",
+      "initial_cash": 10000.0,
+      "max_drawdown": -0.6886866239333218,
+      "n_bars": 2221,
+      "num_fills": 38,
+      "segment": "train",
+      "sharpe": 1.6079600997503163,
+      "sortino": 2.6169230072554437,
+      "start_time": "2016-05-23T00:00:00+00:00",
+      "strategy": "sma_20_50",
+      "terminal_equity": 4049384.647418893,
+      "terminal_liquidation_equity": 4049384.647418893,
+      "total_return": 403.9384647418893,
+      "total_traded_notional": 47280489.98922631,
+      "turnover": 4728.048998922631
+    },
+    {
+      "cagr": 0.007260045731706022,
+      "context_bars": 50,
+      "end_time": "2024-07-01T00:00:00+00:00",
+      "initial_cash": 10000.0,
+      "max_drawdown": -0.4527651378323211,
+      "n_bars": 740,
+      "num_fills": 18,
+      "segment": "validation",
+      "sharpe": 0.25243178503913843,
+      "sortino": 0.36592792589083983,
+      "start_time": "2022-06-22T00:00:00+00:00",
+      "strategy": "sma_20_50",
+      "terminal_equity": 10147.63708136255,
+      "terminal_liquidation_equity": 10147.63708136255,
+      "total_return": 0.01476370813625505,
+      "total_traded_notional": 153405.9661308678,
+      "turnover": 15.340596613086781
+    }
+  ],
+  "splits": [
+    {
+      "first_open_time": "2016-05-23T00:00:00+00:00",
+      "last_open_time": "2022-06-21T00:00:00+00:00",
+      "n_bars": 2221,
+      "segment": "train"
+    },
+    {
+      "first_open_time": "2022-06-22T00:00:00+00:00",
+      "last_open_time": "2024-06-30T00:00:00+00:00",
+      "n_bars": 740,
+      "segment": "validation"
+    },
+    {
+      "first_open_time": "2024-07-01T00:00:00+00:00",
+      "last_open_time": "2026-07-11T00:00:00+00:00",
+      "n_bars": 741,
+      "segment": "test"
+    }
+  ],
+  "symbol": "ETH-USD",
+  "test_evaluation_id": null,
+  "venue": "coinbase-exchange"
+}
