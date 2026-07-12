@@ -17,15 +17,19 @@ gap-free.
 
 | file | status | meaning |
 | --- | --- | --- |
-| `test_evaluations.jsonl` | **present, empty — pristine** | Append-only test-access ledger. Empty means **no access to the real test segment has ever occurred**. Any recorded event permanently consumes the one-time evaluation for its dataset lock + protocol pair. |
+| `test_evaluations.jsonl` | **present, empty — pristine** | Append-only test-access ledger (schema v2). Empty means **no access to the real test segment has ever occurred**. Any recorded event permanently consumes the one-time evaluation of that **holdout identity** (the specific test candles) — changing the protocol, lock, version, schema, evaluation id, or wording does not restore freshness. Empty SHA-256 `e3b0c442…b7852b855`. |
 | `acquisition_request_plan.json` | **frozen** | The 13-window request plan tiling `[2016-05-23, 2026-07-12)`; plan SHA-256 `f8f77ddb…ebf83`. |
 | `raw/coinbase/<attempt>/` | **committed** | Exact raw public candle responses + a signed `acquisition_receipt.json` per attempt (`discovery-001` early-history probe; `coinbase-eth-usd-001` the 13-chunk full history). Aggregate well under the 10 MiB cap. |
-| `EARLIEST_CONTINUOUS_DECISION.md` | **recorded** | The evidence-based choice of the 2016-05-23 start (first candle after the last early-history gap) and the 2026-07-12 end. |
+| `discovery_decision.json` / `EARLIEST_CONTINUOUS_DECISION.md` | **machine-verified** | The 2016-05-23 start decision, re-derived and cross-checked from the raw discovery bytes (first candle 2016-05-18; absent 2016-05-21/22; gap-free from 2016-05-23). The Markdown is rendered from the model. |
 | `acquisition_evidence.json` | **frozen** | Deterministic record binding every raw response to the derived OHLCV file; evidence SHA-256 `27ba6a60…bbbd2d0b`. |
+| `dataset_manifest.json` / `quality_report.json` | **byte anchors** | The canonical manifest and quality report, committed byte-for-byte and bound to the lock's `manifest_sha256` / `quality_report_sha256`. |
 | `dataset_lock.json` | **frozen** | Metadata+hash pin of the canonical dataset — content fingerprint `sha256:273f89eb…dd5718`, 3702 rows. |
 | `runtime_contract.json` | **frozen** | The authoritative benchmark runtime — CPython 3.12.3, numpy 2.5.1, pandas 3.0.3, pyarrow 25.0.0 — pinned to the committed `uv.lock`/`pyproject.toml`. |
+| `holdout_identity.json` | **frozen** | The durable identity of the one-time test holdout — instrument, test window `2024-07-01 .. 2026-07-11` (741 rows), and an integrity-only test content fingerprint. |
+| `provenance_v2.json` | **frozen** | The provenance graph anchor: the SHA-256 of every artifact above plus a domain-separated raw-bundle fingerprint. `verify_provenance_graph` authenticates the acquisition receipt, so forged provenance metadata is caught. |
 | `protocol.json` | **pre-registered** | The pinned benchmark protocol bound to the dataset lock; protocol SHA-256 `a75a9cf5…f26a81`. Committed with green CI **before** any train/validation number was computed. |
 | `train_validation_results.json` / `train_validation_report.md` | **recorded** | The train/validation-only benchmark (both strategies), generated purely from the validated result model. The test segment is reported only by its mechanical boundaries. |
+| `validation_decision.json` / `validation_decision.md` | **recorded** | The scientific decision: the fixed SMA(20/50) is `rejected_for_test_promotion` (materially underperformed buy-and-hold in validation); parameter changes none; test accessed false. |
 
 ## Reproduce the ignored derived data on a fresh clone
 
@@ -56,7 +60,16 @@ the full provenance chain, writes `started` to this ledger before any test
 signal exists, and records completion or failure honestly. Reruns are
 refused forever; contamination is recorded, never laundered.
 
-**Next step, requiring independent authorization:** review this frozen
-dossier, then — and only then — run the one-time test evaluation. It is not
-run here. The v0.2.0 remote-tag restriction remains recorded release debt
-and is unrelated to the data work.
+The write-capable acquisition workflow that fetched this data is **retired**
+now that the data is frozen — the branch keeps no dormant data-overwrite
+machine and no workflow can contact Coinbase; a future acquisition needs a
+new, separately reviewed workflow commit.
+
+**Outcome:** real data is frozen and independently replayable. The fixed
+SMA(20/50) materially underperformed buy-and-hold in the validation period
+and was **not** promoted to test, so the one-time test evaluation is
+deliberately **deferred** — validation already supplied enough evidence to
+reject that fixed specification. The holdout remains untouched and sealed
+for genuinely new, pre-registered, non-overlapping future research. The
+v0.2.0 remote-tag restriction remains recorded release debt and is
+unrelated to the data work.

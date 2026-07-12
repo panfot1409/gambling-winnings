@@ -191,18 +191,35 @@ data is **acquired and frozen** — 3702 gap-free daily candles,
 2016-05-23 .. 2026-07-11 — and the train/validation benchmark is recorded;
 the one-time test evaluation is still pending independent authorization.
 
-- **Clean-room acquisition** (`.github/workflows/m2b-acquire.yml`,
-  `eth_research.data.acquire_runner`): the package itself has no
-  networking. A tightly scoped GitHub Actions job performs public,
+- **Clean-room acquisition** (`eth_research.data.acquire_runner`,
+  `eth_research.data.acquisition_plan`): the package itself has no
+  networking. A tightly scoped GitHub Actions job performed public,
   unauthenticated `GET /products/ETH-USD/candles` requests only (no key,
   wallet, secret, or private endpoint), driven by a committed,
-  machine-readable request plan (`eth_research.data.acquisition_plan`),
-  and commits the exact raw response bytes back to the branch. The offline
-  adapter (`eth_research.data.coinbase`) enforces the documented
+  machine-readable request plan, and committed the exact raw response
+  bytes back to the branch. The offline adapter
+  (`eth_research.data.coinbase`) enforces the documented
   `[time, low, high, open, close, volume]` format, strictly monotonic
   rows, half-open windows with counted pre-start exclusions, and a
   gap-free daily series — missing candles abort; nothing is filled or
-  repaired.
+  repaired. The **write-capable acquisition workflow is now retired**: the
+  data is frozen, so the frozen branch retains no data-overwrite machine
+  and no workflow can contact Coinbase; a future acquisition requires a
+  new, separately reviewed workflow commit.
+- **Pre-holdout fortress** (`eth_research.holdout`,
+  `eth_research.provenance_v2`, `eth_research.discovery`,
+  `eth_research.decision`, `eth_research.test_readiness`): the one-time
+  holdout is consumed by a durable `HoldoutIdentity` (dataset + test
+  content fingerprints, instrument, test window) with a conflict policy
+  that refuses a re-run on the same candles even if the protocol, lock,
+  version, schema, evaluation id, or wording changes, and refuses an
+  overlapping test window on the same instrument. A single
+  `verify_provenance_graph` authenticates every dossier artifact —
+  including the acquisition receipt and a domain-separated raw-bundle
+  fingerprint — so forged provenance metadata is caught. The
+  earliest-start decision is machine-verified from the raw discovery
+  bytes, and a read-only `test_readiness` preflight proves readiness
+  without ever touching a test row.
 - **Deterministic offline replay** (`eth_research.replay_m2b`): a fresh
   clone rebuilds the git-ignored derived CSV, canonical Parquet, manifest,
   and quality report from the committed raw bytes alone and verifies them
@@ -239,16 +256,22 @@ the one-time test evaluation is still pending independent authorization.
   results serialize deterministically (undefined ratios as JSON `null`)
   and the Markdown report is generated only from the validated JSON model.
 
-Status: the real dataset, `acquisition_evidence.json`, `dataset_lock.json`,
-`runtime_contract.json`, `protocol.json`, and the train/validation dossier
-(`train_validation_results.json`, `train_validation_report.md`) are
-**frozen and committed**. The train/validation benchmark is recorded and
-honest (SMA(20, 50) beat buy-and-hold on the early-history train segment but
-badly underperformed on validation — committed unchanged). The one-time
-**test** evaluation is **not run**: it is pending independent authorization,
-and the committed test-access ledger is byte-empty (pristine). See
-[research/m2b/README.md](research/m2b/README.md) and
-[docs/M2B_REAL_DATA_PLAN.md](docs/M2B_REAL_DATA_PLAN.md).
+Status: **Real data is frozen and independently replayable. The fixed
+SMA(20/50) materially underperformed buy-and-hold in the validation period
+and was not promoted to test. The holdout remains untouched and sealed for
+future research.** The dataset, its full provenance chain
+(`acquisition_evidence.json`, `dataset_manifest.json`, `quality_report.json`,
+`dataset_lock.json`, `runtime_contract.json`, `holdout_identity.json`,
+`discovery_decision.json`, `provenance_v2.json`, `protocol.json`), the
+train/validation dossier, and the recorded rejection decision
+(`validation_decision.json`) are all committed. The one-time **test**
+evaluation is **not run** — test execution is deferred because validation
+already supplied enough evidence to reject the fixed SMA specification —
+and the committed test-access ledger is byte-empty (SHA-256
+`e3b0c442…b7852b855`, zero events). See
+[research/m2b/README.md](research/m2b/README.md),
+[docs/M2B_REAL_DATA_PLAN.md](docs/M2B_REAL_DATA_PLAN.md), and
+[docs/M2B_PRE_HOLDOUT_FORTRESS.md](docs/M2B_PRE_HOLDOUT_FORTRESS.md).
 
 ## Conventions
 
@@ -313,10 +336,15 @@ src/eth_research/
     gitcheck.py     # read-only git checks binding the test run + running package source to HEAD
     replay_m2b.py   # offline replay: rebuild + verify derived data from committed raw
     m2b_report.py   # deterministic train/validation-only benchmark dossier
+    holdout.py      # durable holdout identity + freshness-conflict policy
+    provenance_v2.py# one authenticated provenance graph over every artifact
+    discovery.py    # machine-verified earliest-continuous-start decision
+    decision.py     # recorded validation-stage SMA rejection decision
+    test_readiness.py # read-only pre-holdout readiness preflight
 .github/workflows/
     ci.yml          # lint/type/test on 3.12/3.13 + authoritative-runtime job
-    m2b-acquire.yml # one-shot clean-room public Coinbase acquisition
     m2b-replay.yml  # fresh-clone reproducibility on authoritative + compat runtimes
+    # (the write-capable m2b-acquire.yml is retired: data is frozen)
 research/m2b/       # committable provenance records, frozen contracts, raw bytes, ledger
 tests/              # unit, hand-calculated ledger, and look-ahead regression tests
 examples/           # runnable end-to-end example

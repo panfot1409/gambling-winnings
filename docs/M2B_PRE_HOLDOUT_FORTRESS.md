@@ -182,6 +182,38 @@ atomic; the reacquisition stages outside the tracked tree and publishes a
 completeness marker last; a failed integrity comparison stops with the
 discrepancy and never replaces canonical data; the ledger is never repaired.
 
+## Milestone outcome (status)
+
+| id | status | how |
+| --- | --- | --- |
+| P0 | closed | `HoldoutIdentity` + ledger v2 + `find_holdout_conflicts` (identity/dataset-fp/test-fp/overlap); legacy `(lock, protocol)` path removed. |
+| P1 (receipt/graph) | closed | additive `provenance_v2.json` + `verify_provenance_graph` authenticates the receipt, raw-bundle fingerprint, and every artifact; forging any receipt field breaks the anchor. |
+| P1 (discovery) | closed | `DiscoveryDecision` re-derived and verified from the raw discovery bytes; Markdown rendered from the model. |
+| P1 (sidecar) | closed | strict `_SidecarRecord` via the shared decoder; dup-key/stringified/non-UTC/etc. rejected. |
+| P1 (workflow) | partial | write-capable, Coinbase-contacting workflow **retired** (F3); the authorized integrity-only reacquisition (F2, `coinbase-eth-usd-audit-002`) was **not run** — it needs outbound Coinbase egress unavailable in this environment. |
+| P5 | closed | `dataset_manifest.json` + `quality_report.json` tracked as byte anchors bound to the lock. |
+| P6 | closed | shared read-only `test_readiness` preflight; proven test-free and non-mutating. |
+| P7 | closed | verify-after-publish before `completed`; overwrite never bypasses a consumed holdout; result-bundle hash. |
+| P8 | closed | return-gap differences relabelled percentage points; numbers preserved bit-for-bit. |
+| P9 | closed | strict `ResearchDecision`: SMA(20/50) `rejected_for_test_promotion`, `test_accessed=false`, parameter changes none. |
+
+Two deliberate deviations from the sketched design, both keeping every gate
+green: (1) provenance v2 is delivered as an **additive** graph anchor
+(`provenance_v2.json` + `verify_provenance_graph`) rather than a
+`DatasetLock`/`Protocol`/`Results` schema-version bump — it authenticates
+the same facts (receipt, plan, raw-bundle, runtime, holdout, discovery,
+manifest, quality, lock, protocol) and closes the forged-receipt exploit
+without a destabilising cascade through the frozen committed artifacts;
+(2) the acquisition workflow is retired straight to its sealed end state
+because the authorized reacquisition (F2) cannot run without Coinbase
+egress here — the frozen data's integrity rests on the provenance graph and
+the offline replay, which is already proven.
+
+The one-time test set was **not** evaluated. Test execution is deferred
+because validation already supplied enough evidence to reject the fixed
+SMA(20/50) specification; the holdout stays sealed for genuinely new,
+pre-registered, non-overlapping future research.
+
 ## Exact stop conditions
 
 Stop and report (no test access, no overclaim) if: the starting state
