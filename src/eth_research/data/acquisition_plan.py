@@ -25,13 +25,16 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass
 from itertools import pairwise
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from eth_research import __version__
+from eth_research._atomic import write_atomic
 from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.coinbase import (
     COINBASE_CANDLES_ENDPOINT,
@@ -587,7 +590,8 @@ class AcquisitionAttemptReceipt:
             unknown = sorted(keys - _ATTEMPT_RECEIPT_KEYS)
             missing = sorted(_ATTEMPT_RECEIPT_KEYS - keys)
             raise ValueError(
-                f"acquisition receipt keys do not match schema: unknown={unknown}, missing={missing}"
+                "acquisition receipt keys do not match schema: "
+                f"unknown={unknown}, missing={missing}"
             )
         responses = payload["responses"]
         if not isinstance(responses, list):
@@ -606,3 +610,82 @@ class AcquisitionAttemptReceipt:
                 AcquisitionResponseReceipt.from_json_dict(entry) for entry in responses
             ),
         )
+
+
+def load_acquisition_plan(path: str | Path) -> AcquisitionRequestPlan:
+    """Strictly parse a request-plan file."""
+    try:
+        return AcquisitionRequestPlan.from_json_bytes(Path(path).read_bytes())
+    except ValueError as exc:
+        raise AcquisitionPlanError(f"invalid acquisition plan {Path(path).name!r}: {exc}") from exc
+
+
+def load_acquisition_receipt(path: str | Path) -> AcquisitionAttemptReceipt:
+    """Strictly parse an acquisition-attempt receipt file."""
+    try:
+        return AcquisitionAttemptReceipt.from_json_bytes(Path(path).read_bytes())
+    except ValueError as exc:
+        raise AcquisitionPlanError(
+            f"invalid acquisition receipt {Path(path).name!r}: {exc}"
+        ) from exc
+
+
+def _parse_utc_midnight(label: str, text: str) -> pd.Timestamp:
+    try:
+        ts = pd.Timestamp(text, tz="UTC")
+    except (ValueError, TypeError) as exc:
+        raise AcquisitionPlanError(f"{label} {text!r} is not a valid UTC date") from exc
+    require_day_aligned_utc(label, ts)
+    return ts
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Offline CLI: generate a request plan from explicit UTC day bounds.
+
+    ``python -m eth_research.data.acquisition_plan --start 2016-05-18
+    --end 2026-01-01 --out research/m2b/acquisition_request_plan.json``.
+    Performs no networking, accepts no host/endpoint override, and never
+    guesses or repairs dates; the endpoint, venue, product, and granularity
+    are fixed by the schema.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="eth_research.data.acquisition_plan")
+    parser.add_argument(
+        "--start", required=True, help="overall_start, inclusive UTC day (YYYY-MM-DD)"
+    )
+    parser.add_argument("--end", required=True, help="overall_end, exclusive UTC day (YYYY-MM-DD)")
+    parser.add_argument("--out", required=True, help="output plan path")
+    parser.add_argument("--max-window-days", type=int, default=MAX_WINDOW_DAYS)
+    parser.add_argument("--filename-prefix", default="coinbase-eth-usd-1d")
+    parser.add_argument("--overwrite", action="store_true")
+    args = parser.parse_args(argv)
+
+    try:
+        start = _parse_utc_midnight("--start", args.start)
+        end = _parse_utc_midnight("--end", args.end)
+        plan = build_acquisition_plan(
+            overall_start=start,
+            overall_end=end,
+            max_window_days=args.max_window_days,
+            filename_prefix=args.filename_prefix,
+        )
+    except (AcquisitionPlanError, ValueError) as exc:
+        print(f"failed to build plan: {exc}", file=sys.stderr)
+        return 1
+
+    out = Path(args.out)
+    if out.exists() and not args.overwrite:
+        print(f"refusing to overwrite existing {out}; pass --overwrite", file=sys.stderr)
+        return 1
+    out.parent.mkdir(parents=True, exist_ok=True)
+    write_atomic(out, plan.to_json_bytes())
+    print(
+        f"wrote {out}: {plan.expected_request_count} window(s), "
+        f"{start.date()}..{end.date()}, plan_sha256 {plan.plan_sha256()}"
+    )
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised via subprocess/CI
+    raise SystemExit(main())

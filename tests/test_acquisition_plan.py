@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -16,6 +17,8 @@ from eth_research.data.acquisition_plan import (
     AcquisitionResponseReceipt,
     AcquisitionWindow,
     build_acquisition_plan,
+    load_acquisition_plan,
+    main,
 )
 from eth_research.data.coinbase import canonical_utc_request
 
@@ -319,3 +322,50 @@ class TestReceipt:
         payload["evil"] = 1
         with pytest.raises(ValueError, match=r"unknown=\['evil'\]"):
             AcquisitionAttemptReceipt.from_json_bytes(json.dumps(payload).encode("utf-8"))
+
+
+class TestPlanGeneratorCLI:
+    def test_generates_valid_plan(self, tmp_path: Path) -> None:
+        out = tmp_path / "acquisition_request_plan.json"
+        rc = main(["--start", "2016-05-18", "--end", "2017-06-18", "--out", str(out)])
+        assert rc == 0
+        plan = load_acquisition_plan(out)
+        assert plan.overall_start == START
+        assert plan.overall_end == END
+        assert (
+            plan.plan_sha256()
+            == build_acquisition_plan(overall_start=START, overall_end=END).plan_sha256()
+        )
+
+    def test_rejects_unaligned_start(self, tmp_path: Path) -> None:
+        rc = main(
+            [
+                "--start",
+                "2016-05-18T06:00",
+                "--end",
+                "2017-06-18",
+                "--out",
+                str(tmp_path / "p.json"),
+            ]
+        )
+        assert rc == 1
+        assert not (tmp_path / "p.json").exists()
+
+    def test_rejects_swapped_bounds(self, tmp_path: Path) -> None:
+        rc = main(
+            ["--start", "2017-06-18", "--end", "2016-05-18", "--out", str(tmp_path / "p.json")]
+        )
+        assert rc == 1
+
+    def test_refuses_overwrite(self, tmp_path: Path) -> None:
+        out = tmp_path / "p.json"
+        assert main(["--start", "2016-05-18", "--end", "2017-06-18", "--out", str(out)]) == 0
+        assert main(["--start", "2016-05-18", "--end", "2017-06-18", "--out", str(out)]) == 1
+
+    def test_overwrite_flag_allows_replacement(self, tmp_path: Path) -> None:
+        out = tmp_path / "p.json"
+        assert main(["--start", "2016-05-18", "--end", "2017-06-18", "--out", str(out)]) == 0
+        assert (
+            main(["--start", "2016-05-18", "--end", "2017-06-18", "--out", str(out), "--overwrite"])
+            == 0
+        )
