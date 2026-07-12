@@ -1,0 +1,41 @@
+{
+  "accounting": "independent-segments-v1",
+  "acquisition_evidence_sha256": "27ba6a6013fab67c02361bc3e2b43a761fa5ac0310556d7557859bdcbbbd2d0b",
+  "annualization": "365.25-day-year-from-interval",
+  "buy_and_hold_context_bars": 0,
+  "dataset_content_fingerprint": "sha256:273f89eb07ae882784e40c2bc2ef2be5db93ddb3efa7de6270880ad1b7dd5718",
+  "dataset_lock_sha256": "6ccd3698f71b25b9cfbab758caeeb4150b2ca257df4f4acedd985da249462a4d",
+  "dataset_manifest_sha256": "58ec9cb9940f76c991db92696e0a72df3365fa2b5d31305fa25f15468ac7b4fd",
+  "fee_rate": 0.001,
+  "initial_cash": 10000.0,
+  "metrics": [
+    "total_return",
+    "cagr",
+    "sharpe",
+    "sortino",
+    "max_drawdown",
+    "total_traded_notional",
+    "turnover",
+    "num_fills",
+    "terminal_equity",
+    "terminal_liquidation_equity"
+  ],
+  "package_version": "0.3.0",
+  "protocol_schema_version": 1,
+  "risk_free_rate": 0.0,
+  "slippage_rate": 0.0005,
+  "sma_context_bars": 50,
+  "split_semantics": "positional-floor-v1",
+  "strategies": [
+    {
+      "name": "buy_and_hold"
+    },
+    {
+      "fast_window": 20,
+      "name": "moving_average_crossover",
+      "slow_window": 50
+    }
+  ],
+  "train_fraction": 0.6,
+  "validation_fraction": 0.2
+}
