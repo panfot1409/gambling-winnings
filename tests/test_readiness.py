@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -33,6 +34,24 @@ requires_clean_tree = pytest.mark.skipif(
 )
 
 
+def _authoritative_python() -> str:
+    contract = json.loads((REPO_ROOT / "research/m2b/runtime_contract.json").read_bytes())
+    version = contract["python_version"]
+    assert isinstance(version, str)
+    return version
+
+
+ON_AUTHORITATIVE_RUNTIME = platform.python_version() == _authoritative_python()
+
+# The integrity-ready half of the honest state is only observable on the
+# authoritative benchmark runtime: on any other interpreter the shared gate
+# honestly refuses with a runtime mismatch (asserted separately below).
+requires_authoritative_runtime = pytest.mark.skipif(
+    not ON_AUTHORITATIVE_RUNTIME,
+    reason="the integrity-ready state requires the authoritative CPython runtime",
+)
+
+
 @pytest.fixture(scope="module")
 def real_manifest(tmp_path_factory: pytest.TempPathFactory) -> Path:
     work = tmp_path_factory.mktemp("m2b_readiness")
@@ -60,6 +79,7 @@ class TestRealRepoStates:
     """The honest current state: integrity-ready, fresh, and NOT test-ready."""
 
     @requires_clean_tree
+    @requires_authoritative_runtime
     def test_reports_the_honest_rejected_state(self, real_manifest: Path) -> None:
         report = test_readiness.preflight_authorized_benchmark(REPO_ROOT, real_manifest)
         assert report.integrity_ready is True
@@ -116,6 +136,28 @@ class TestSyntheticStates:
         assert report.authorized_test_ready is False
 
 
+class TestCompatibilityRuntimeHonesty:
+    """On a non-authoritative interpreter the gate refuses honestly."""
+
+    @requires_clean_tree
+    @pytest.mark.skipif(
+        ON_AUTHORITATIVE_RUNTIME, reason="only meaningful on a compatibility interpreter"
+    )
+    def test_non_authoritative_runtime_reports_an_honest_runtime_mismatch(
+        self, real_manifest: Path
+    ) -> None:
+        report = test_readiness.preflight_authorized_benchmark(REPO_ROOT, real_manifest)
+        assert report.integrity_ready is False
+        assert report.integrity_failure is not None
+        assert "runtime" in report.integrity_failure.lower()
+        assert report.authorized_test_ready is False
+        assert report.ledger_byte_count == 0
+        assert (
+            report.ledger_sha256
+            == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        )
+
+
 class TestReadOnlyAndTestFree:
     @requires_clean_tree
     def test_leaves_ledger_and_tree_byte_identical(self, real_manifest: Path) -> None:
@@ -138,6 +180,7 @@ class TestReadOnlyAndTestFree:
         assert tree_after == tree_before
 
     @requires_clean_tree
+    @requires_authoritative_runtime
     def test_no_test_row_reaches_the_engine(
         self, real_manifest: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -158,6 +201,7 @@ class TestReadOnlyAndTestFree:
 
 class TestCli:
     @requires_clean_tree
+    @requires_authoritative_runtime
     def test_informational_mode_exits_zero_for_the_honest_rejection(
         self, real_manifest: Path
     ) -> None:
@@ -182,6 +226,7 @@ class TestCli:
         assert payload["test_row_count"] == 741
 
     @requires_clean_tree
+    @requires_authoritative_runtime
     def test_require_flag_exits_nonzero_for_the_rejected_candidate(
         self, real_manifest: Path
     ) -> None:
