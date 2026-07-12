@@ -565,6 +565,42 @@ class TestGuardedOneTimeEvaluation:
             run_git(git_pipeline, head_auth(git_pipeline))
         assert read_ledger(git_pipeline.ledger_path) == ()
 
+    def test_verify_after_publish_catches_corruption_and_consumes(
+        self, git_pipeline: GitPipeline, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Corrupt the authoritative JSON after publication; the read-back
+        # verification must fail and leave the holdout consumed (started+failed).
+        real_publish = evaluation.publish_benchmark_reports
+
+        def corrupting(
+            results: Any, markdown: str, directory: Any, *, overwrite: bool = False
+        ) -> Any:
+            results_path, report_path = real_publish(
+                results, markdown, directory, overwrite=overwrite
+            )
+            results_path.write_bytes(results_path.read_bytes() + b" ")
+            return results_path, report_path
+
+        monkeypatch.setattr(evaluation, "publish_benchmark_reports", corrupting)
+        with pytest.raises(EvaluationError, match="after publication"):
+            run_git(git_pipeline, head_auth(git_pipeline))
+        events = read_ledger(git_pipeline.ledger_path)
+        assert [event.event for event in events] == ["started", "failed"]
+
+    def test_overwrite_never_bypasses_a_consumed_holdout(self, git_pipeline: GitPipeline) -> None:
+        run_git(git_pipeline, head_auth(git_pipeline))
+        _git(git_pipeline.repo_root, "add", "research")
+        _git(git_pipeline.repo_root, "commit", "-q", "-m", "record consumed access")
+        new_head = _git(git_pipeline.repo_root, "rev-parse", "HEAD")
+        # Even with overwrite=True and a fresh evaluation id, the same holdout
+        # is refused before any output is touched.
+        with pytest.raises(EvaluationError, match="already consumed"):
+            run_git(
+                git_pipeline,
+                make_authorization("m2b-synthetic-eval-002", code_commit_sha=new_head),
+                overwrite=True,
+            )
+
 
 class TestGitRevisionBinding:
     """R3: bind the evaluation to the real, clean, pre-registered revision."""

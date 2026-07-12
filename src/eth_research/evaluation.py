@@ -779,21 +779,32 @@ def _run_bound_benchmark(
         results_path, report_path = publish_benchmark_reports(
             results, markdown, directory, overwrite=overwrite
         )
-    except BaseException as exc:
-        description = f"{type(exc).__name__}: {exc}"[:500].strip() or type(exc).__name__
-        append_event(ledger_path, event_for(EVENT_FAILED, failure_description=description))
-        raise
-    results_bytes = results.to_json_bytes()
-    report_bytes = markdown.encode("utf-8")
-    append_event(
-        ledger_path,
-        event_for(
+        # Verify-after-publish: read both files back and confirm they are
+        # exactly the validated model before recording completion. Any failure
+        # after 'started' — including this one — leaves the holdout consumed.
+        results_bytes = results.to_json_bytes()
+        report_bytes = markdown.encode("utf-8")
+        if results_path.read_bytes() != results_bytes:
+            raise EvaluationError(
+                "published results JSON does not match the validated model after publication"
+            )
+        if report_path.read_bytes() != report_bytes:
+            raise EvaluationError(
+                "published report does not match the rendered model after publication"
+            )
+        if BenchmarkResults.from_json_bytes(results_bytes).to_json_bytes() != results_bytes:
+            raise EvaluationError("published results JSON does not round-trip")
+        completed_event = event_for(
             EVENT_COMPLETED,
             results_json_sha256=sha256_bytes(results_bytes),
             report_markdown_sha256=sha256_bytes(report_bytes),
             result_bundle_sha256=compute_result_bundle_sha256(results_bytes, report_bytes),
-        ),
-    )
+        )
+    except BaseException as exc:
+        description = f"{type(exc).__name__}: {exc}"[:500].strip() or type(exc).__name__
+        append_event(ledger_path, event_for(EVENT_FAILED, failure_description=description))
+        raise
+    append_event(ledger_path, completed_event)
     return BenchmarkRun(
         results=results,
         markdown=markdown,
