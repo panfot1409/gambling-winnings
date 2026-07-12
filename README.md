@@ -183,20 +183,35 @@ report = audit_ohlcv_file("data/raw/ethusd.csv", expected_interval=identity.inte
   `overwrite=True`. No network access: acquiring real ETH data is
   Milestone 2B.
 
-## Real-data benchmarks (Milestone 2B — infrastructure)
+## Real-data benchmarks (Milestone 2B)
 
-Milestone 2B turns one real Coinbase Exchange ETH-USD daily history into
-a locked, pre-registered benchmark with one-time test-set access:
+Milestone 2B turns one real Coinbase Exchange ETH-USD daily history into a
+locked, pre-registered benchmark with one-time test-set access. The real
+data is **acquired and frozen** — 3702 gap-free daily candles,
+2016-05-23 .. 2026-07-11 — and the train/validation benchmark is recorded;
+the one-time test evaluation is still pending independent authorization.
 
-- **Offline acquisition adapter** (`eth_research.data.coinbase`): parses
-  already-downloaded candle responses (no networking in the package;
-  acquisition is one-time manual `curl` per
-  [docs/M2B_ACQUISITION.md](docs/M2B_ACQUISITION.md)), enforces the
-  documented `[time, low, high, open, close, volume]` format, strictly
-  monotonic rows, half-open request windows with counted pre-start
-  exclusions, and a gap-free daily series — missing candles abort, and
-  nothing is ever filled or repaired. Output is a deterministic CSV plus
-  byte-reproducible acquisition evidence.
+- **Clean-room acquisition** (`.github/workflows/m2b-acquire.yml`,
+  `eth_research.data.acquire_runner`): the package itself has no
+  networking. A tightly scoped GitHub Actions job performs public,
+  unauthenticated `GET /products/ETH-USD/candles` requests only (no key,
+  wallet, secret, or private endpoint), driven by a committed,
+  machine-readable request plan (`eth_research.data.acquisition_plan`),
+  and commits the exact raw response bytes back to the branch. The offline
+  adapter (`eth_research.data.coinbase`) enforces the documented
+  `[time, low, high, open, close, volume]` format, strictly monotonic
+  rows, half-open windows with counted pre-start exclusions, and a
+  gap-free daily series — missing candles abort; nothing is filled or
+  repaired.
+- **Deterministic offline replay** (`eth_research.replay_m2b`): a fresh
+  clone rebuilds the git-ignored derived CSV, canonical Parquet, manifest,
+  and quality report from the committed raw bytes alone and verifies them
+  against the frozen metadata (the reproducibility contract is the content
+  fingerprint, never Parquet container bytes).
+- **Frozen runtime contract** (`eth_research.environment`): the authorized
+  evaluation runs only under the pinned numerical runtime — CPython
+  3.12.3, numpy 2.5.1, pandas 3.0.3, pyarrow 25.0.0, bound to the
+  committed `uv.lock`/`pyproject.toml`.
 - **Dataset lock** (`research/m2b/dataset_lock.json`): a committable
   metadata+hash pin chaining acquisition evidence → derived file →
   canonical dataset → audit report; never market rows, never paths.
@@ -224,11 +239,16 @@ a locked, pre-registered benchmark with one-time test-set access:
   results serialize deterministically (undefined ratios as JSON `null`)
   and the Markdown report is generated only from the validated JSON model.
 
-Status: the real dataset, `dataset_lock.json`, `protocol.json`, and
-`reports/m2b/` are **pending** — this environment cannot reach the
-Coinbase endpoints, and synthetic data is never substituted for a real
-benchmark. The committed test-access ledger is empty (pristine). See
-[research/m2b/README.md](research/m2b/README.md).
+Status: the real dataset, `acquisition_evidence.json`, `dataset_lock.json`,
+`runtime_contract.json`, `protocol.json`, and the train/validation dossier
+(`train_validation_results.json`, `train_validation_report.md`) are
+**frozen and committed**. The train/validation benchmark is recorded and
+honest (SMA(20, 50) beat buy-and-hold on the early-history train segment but
+badly underperformed on validation — committed unchanged). The one-time
+**test** evaluation is **not run**: it is pending independent authorization,
+and the committed test-access ledger is byte-empty (pristine). See
+[research/m2b/README.md](research/m2b/README.md) and
+[docs/M2B_REAL_DATA_PLAN.md](docs/M2B_REAL_DATA_PLAN.md).
 
 ## Conventions
 
@@ -277,6 +297,8 @@ src/eth_research/
         quality.py     # offline data-quality audit (reports, never repairs)
         builder.py     # audited canonical dataset builder + verification
         coinbase.py    # offline Coinbase response adapter + acquisition evidence
+        acquisition_plan.py # machine-readable request plan + receipts + generator CLI
+        acquire_runner.py   # offline driver for the clean-room workflow (emit/verify)
         lock.py        # committable dataset lock: metadata and hashes only
         validation.py  # shared strict JSON validators
     splits.py       # chronological splits + warm-up context helpers
@@ -286,15 +308,23 @@ src/eth_research/
     _json.py        # one strict JSON decoder (dup-key + non-finite rejection)
     protocol.py     # frozen benchmark protocol + deterministic result models
     ledger.py       # append-only one-time test-access ledger
+    environment.py  # authoritative runtime contract (CPython/deps/lockfiles)
     evaluation.py   # guarded benchmark evaluator + report generation
     gitcheck.py     # read-only git checks binding the test run + running package source to HEAD
-research/m2b/       # committable provenance records + pristine test ledger
+    replay_m2b.py   # offline replay: rebuild + verify derived data from committed raw
+    m2b_report.py   # deterministic train/validation-only benchmark dossier
+.github/workflows/
+    ci.yml          # lint/type/test on 3.12/3.13 + authoritative-runtime job
+    m2b-acquire.yml # one-shot clean-room public Coinbase acquisition
+    m2b-replay.yml  # fresh-clone reproducibility on authoritative + compat runtimes
+research/m2b/       # committable provenance records, frozen contracts, raw bytes, ledger
 tests/              # unit, hand-calculated ledger, and look-ahead regression tests
 examples/           # runnable end-to-end example
 docs/PLAN.md        # milestone plan
 docs/M2A_PLAN.md    # Milestone 2A implementation plan
 docs/M2B_PLAN.md    # Milestone 2B implementation plan
-docs/M2B_ACQUISITION.md # manual real-data acquisition procedure (pending)
+docs/M2B_REAL_DATA_PLAN.md # Milestone 2B Part B plan (acquisition + freeze)
+docs/M2B_ACQUISITION.md # real-data acquisition procedure (GitHub Actions clean room)
 docs/REMEDIATION.md # Milestone 1 correctness remediation record
 ```
 

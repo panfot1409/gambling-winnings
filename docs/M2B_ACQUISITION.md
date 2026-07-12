@@ -1,13 +1,20 @@
-# Milestone 2B — Manual Coinbase Acquisition Procedure
+# Milestone 2B — Coinbase Acquisition Procedure
 
-_This session's environment cannot reach `api.exchange.coinbase.com`
-(egress policy denies the CONNECT; policy denials must be reported, not
-worked around), so the real-data steps below are **pending**. They are the
-exact, complete procedure to finish Milestone 2B from a machine with
-ordinary network access. Everything they rely on is already implemented
-and tested on this branch. No downloader is committed by design — the
-commands below are one-time, unauthenticated, manual `curl` requests
-executed outside the package._
+_**Superseded for this repository by the GitHub Actions clean room.** The
+development container cannot reach `api.exchange.coinbase.com`, but the
+`M2B Acquire` workflow (`.github/workflows/m2b-acquire.yml`) already
+performed the real acquisition from a network-capable runner: public,
+unauthenticated `GET /products/ETH-USD/candles` requests only, driven by
+the committed request plan, with the raw response bytes committed back to
+the branch under `research/m2b/raw/coinbase/`. The dataset is frozen (3702
+gap-free daily candles, 2016-05-23 .. 2026-07-11); see
+[`M2B_REAL_DATA_PLAN.md`](M2B_REAL_DATA_PLAN.md) and
+[`../research/m2b/README.md`](../research/m2b/README.md). This document is
+retained as the equivalent manual procedure for finishing Milestone 2B
+from any machine with ordinary network access — the same offline package
+functions verify the result either way. No downloader is committed by
+design; the commands below are one-time, unauthenticated, manual `curl`
+requests executed outside the package._
 
 Hard rules carried over from the milestone charter:
 

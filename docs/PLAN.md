@@ -140,16 +140,20 @@ dataset:
 
 ## 7. Milestone 2B — Real ETH data, frozen and benchmarked
 
-Detailed plan: [M2B_PLAN.md](M2B_PLAN.md); manual acquisition procedure:
+Detailed plans: [M2B_PLAN.md](M2B_PLAN.md) and
+[M2B_REAL_DATA_PLAN.md](M2B_REAL_DATA_PLAN.md); acquisition procedure:
 [M2B_ACQUISITION.md](M2B_ACQUISITION.md).
 
-**Status: infrastructure complete and hardened; the real-data half is
-pending on data acquisition.** The development environment's egress
-policy denies the pinned Coinbase endpoints, so per the milestone's
-honest stop conditions no real dataset was frozen, no protocol was
-pre-registered, no benchmark reports exist, and the committed
-test-access ledger (`research/m2b/test_evaluations.jsonl`) is empty —
-pristine. Never substitute synthetic data for a real benchmark.
+**Status: real data acquired, frozen, protocol pre-registered, and
+train/validation benchmarks recorded; the one-time test evaluation is
+still pending independent authorization.** The development container
+cannot reach Coinbase, so the real acquisition ran from a tightly scoped
+GitHub Actions clean room (public unauthenticated candle GETs only) and
+committed the raw bytes back to the branch; everything downstream is
+reproduced and verified offline. The dataset is 3702 gap-free daily
+candles (2016-05-23 .. 2026-07-11). The **test** segment has never been
+evaluated: the committed ledger (`research/m2b/test_evaluations.jsonl`) is
+byte-empty. Synthetic data is never substituted for a real benchmark.
 
 Delivered (version 0.3.0):
 
