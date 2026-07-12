@@ -120,7 +120,12 @@ def render_report(repo_root: str | Path, results: BenchmarkResults) -> str:
 
 
 def _protocol_commit(repo_root: Path) -> str:
-    """The commit that froze the protocol — a fixed, reproducible reference."""
+    """The commit that froze the protocol — a fixed, reproducible reference.
+
+    Used only to *create* the dossier (locally, with full git history); the
+    value is then recorded in the results model, so verification never needs
+    git history (which is shallow on CI checkouts).
+    """
     result = subprocess.run(
         ["git", "-C", str(repo_root), "log", "-1", "--format=%H", "--", PROTOCOL_RELPATH],
         capture_output=True,
@@ -133,11 +138,28 @@ def _protocol_commit(repo_root: Path) -> str:
     return sha
 
 
-def generate(repo_root: str | Path, manifest_path: str | Path) -> tuple[bytes, str]:
+def committed_pre_registered_commit(repo_root: str | Path) -> str:
+    """Read the pre-registered commit recorded in the committed results.
+
+    Verification regenerates from this stored provenance fact rather than
+    from git history, so ``--check`` is deterministic on any (even shallow)
+    checkout.
+    """
+    results = BenchmarkResults.from_json_bytes((Path(repo_root) / RESULTS_RELPATH).read_bytes())
+    return results.pre_registered_commit_sha
+
+
+def generate(
+    repo_root: str | Path,
+    manifest_path: str | Path,
+    *,
+    pre_registered_commit_sha: str,
+) -> tuple[bytes, str]:
     """Return the deterministic (results JSON bytes, report markdown)."""
     root = Path(repo_root)
-    commit = _protocol_commit(root)
-    results = build_results(root, manifest_path, pre_registered_commit_sha=commit)
+    results = build_results(
+        root, manifest_path, pre_registered_commit_sha=pre_registered_commit_sha
+    )
     return results.to_json_bytes(), render_report(root, results)
 
 
@@ -154,7 +176,10 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.repo_root)
 
     try:
-        results_bytes, report_md = generate(root, args.manifest)
+        # Verification regenerates from the recorded provenance commit (no git
+        # history needed); creation derives it from local git history.
+        commit = committed_pre_registered_commit(root) if args.check else _protocol_commit(root)
+        results_bytes, report_md = generate(root, args.manifest, pre_registered_commit_sha=commit)
     except (RuntimeError, ValueError) as exc:
         print(f"train/validation report generation failed: {exc}", file=sys.stderr)
         return 1
