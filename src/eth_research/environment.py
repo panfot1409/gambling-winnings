@@ -382,3 +382,59 @@ def verify_runtime_contract(
                 f"{relpath} SHA-256 {actual_sha} does not match the contract's {expected_sha} — "
                 "the locked dependency environment differs from the frozen runtime"
             )
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI: verify (or compatibility-parse) the committed runtime contract.
+
+    ``python -m eth_research.environment --repo-root .`` is the authoritative
+    check: it requires the active runtime to match the committed contract. In
+    ``--compat`` mode it only strictly parses the contract (a non-authoritative
+    runtime may confirm the contract is well-formed without claiming to be the
+    benchmark runtime). Before a contract is committed it prints the active
+    snapshot and confirms the interpreter is CPython.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="eth_research.environment")
+    parser.add_argument("--repo-root", default=".")
+    parser.add_argument(
+        "--compat",
+        action="store_true",
+        help="only parse the contract; do not require the active runtime to match",
+    )
+    args = parser.parse_args(argv)
+    root = Path(args.repo_root)
+    contract_path = root / CANONICAL_RUNTIME_CONTRACT_RELPATH
+    snapshot = current_runtime_snapshot()
+    label = (
+        f"{snapshot.python_implementation} {snapshot.python_version} "
+        f"({snapshot.python_cache_tag}, {snapshot.os_family}/{snapshot.machine}); "
+        f"numpy {snapshot.numpy_version}, pandas {snapshot.pandas_version}, "
+        f"pyarrow {snapshot.pyarrow_version}"
+    )
+    if not contract_path.exists():
+        if snapshot.python_implementation != REQUIRED_PYTHON_IMPLEMENTATION:
+            print(
+                f"active runtime is {snapshot.python_implementation}, not "
+                f"{REQUIRED_PYTHON_IMPLEMENTATION}",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"no committed runtime contract yet; active runtime: {label}")
+        return 0
+    try:
+        contract = load_runtime_contract(contract_path)
+        if args.compat:
+            print(f"runtime contract parses (compatibility runtime {label})")
+        else:
+            verify_runtime_contract(contract, repo_root=root)
+            print(f"runtime contract verified against the active runtime: {label}")
+    except RuntimeVerificationError as exc:
+        print(f"runtime verification failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised via subprocess/CI
+    raise SystemExit(main())

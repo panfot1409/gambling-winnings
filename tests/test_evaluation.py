@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -31,6 +33,7 @@ from eth_research.data.lock import (
     verify_dataset_lock,
 )
 from eth_research.data.provenance import sha256_bytes, sha256_file
+from eth_research.environment import RuntimeContract
 from eth_research.evaluation import (
     CANONICAL_LEDGER_RELPATH,
     EVALUATION_CONFIRM_TOKEN,
@@ -782,6 +785,15 @@ def make_real_checkout(tmp_path: Path) -> GitPipeline:
     )
     _git_out(clone, "config", "user.email", "test@example.com")
     _git_out(clone, "config", "user.name", "Test Researcher")
+    # Overlay the working-tree source so the integration test exercises the
+    # *current* package (which may carry uncommitted changes), not merely the
+    # last commit; the clone then commits it as its own authorized source.
+    shutil.copytree(
+        REPO_ROOT / "src",
+        clone / "src",
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
 
     pipe = build_coinbase_pipeline(clone / "data")
     research = clone / "research" / "m2b"
@@ -797,10 +809,14 @@ def make_real_checkout(tmp_path: Path) -> GitPipeline:
     protocol = build_benchmark_protocol(lock, package_version=eth_research.__version__)
     protocol_path = research / "protocol.json"
     protocol_path.write_bytes(protocol.to_json_bytes())
+    # The frozen runtime contract, generated from this checkout's own lockfiles
+    # under the running interpreter, so the runtime gate passes in-checkout.
+    runtime_contract_path = research / "runtime_contract.json"
+    runtime_contract_path.write_bytes(RuntimeContract.for_current_runtime(clone).to_json_bytes())
     (research / "test_evaluations.jsonl").write_bytes(b"")  # pristine, already tracked
 
-    _git_out(clone, "add", "research/m2b")
-    _git_out(clone, "commit", "--quiet", "-m", "pre-register benchmark protocol")
+    _git_out(clone, "add", "src", "research/m2b")
+    _git_out(clone, "commit", "--quiet", "-m", "sync source and pre-register benchmark protocol")
     head = _git_out(clone, "rev-parse", "HEAD")
     return GitPipeline(
         repo_root=clone,
@@ -910,8 +926,6 @@ class TestPackageSourceBinding:
         # A temp repo that DOES contain a committed copy of the package source
         # (same __version__), but the running package is imported from the real
         # repo — a different checkout.
-        import shutil
-
         foreign = tmp_path / "foreign"
         (foreign / "src").mkdir(parents=True)
         shutil.copytree(REPO_ROOT / "src" / "eth_research", foreign / "src" / "eth_research")
@@ -987,6 +1001,74 @@ class TestPackageSourceBinding:
         assert out["ok"] is False
         assert "not clean" in out["msg"] or "differs from its bytes" in out["msg"]
         assert read_ledger(gp.ledger_path) == ()
+
+
+class TestRuntimeEnvironmentBinding:
+    """Runtime gate: the numerical environment must match the frozen contract,
+    verified before the ledger / dataset / any backtest."""
+
+    def _runtime_contract_path(self, gp: GitPipeline) -> Path:
+        return gp.repo_root / "research" / "m2b" / "runtime_contract.json"
+
+    def _recommit(self, gp: GitPipeline, message: str) -> None:
+        _git_out(gp.repo_root, "add", "-A")
+        _git_out(gp.repo_root, "commit", "--quiet", "-m", message)
+        gp.head = _git_out(gp.repo_root, "rev-parse", "HEAD")
+
+    def test_verify_runtime_environment_passes_on_real_checkout(self, tmp_path: Path) -> None:
+        gp = make_real_checkout(tmp_path)
+        # The helper returns None (no raise) on a faithful checkout.
+        evaluation._verify_runtime_environment(gp.repo_root, gp.head)
+
+    def test_missing_runtime_contract_is_rejected(self, tmp_path: Path) -> None:
+        gp = make_real_checkout(tmp_path)
+        self._runtime_contract_path(gp).unlink()
+        self._recommit(gp, "drop runtime contract")
+        with pytest.raises(EvaluationError, match=r"runtime contract .* does not exist"):
+            evaluation._verify_runtime_environment(gp.repo_root, gp.head)
+
+    def test_dirty_uv_lock_is_rejected(self, tmp_path: Path) -> None:
+        gp = make_real_checkout(tmp_path)
+        uv_lock = gp.repo_root / "uv.lock"
+        uv_lock.write_bytes(uv_lock.read_bytes() + b"\n# tampered\n")  # working != committed
+        with pytest.raises(EvaluationError, match=r"uv.lock .* differs from its bytes"):
+            evaluation._verify_runtime_environment(gp.repo_root, gp.head)
+
+    def test_symlinked_runtime_contract_is_rejected(self, tmp_path: Path) -> None:
+        gp = make_real_checkout(tmp_path)
+        contract = self._runtime_contract_path(gp)
+        external = tmp_path / "external_contract.json"
+        external.write_bytes(contract.read_bytes())
+        contract.unlink()
+        contract.symlink_to(external)
+        self._recommit(gp, "symlink runtime contract")
+        with pytest.raises(EvaluationError, match="must be a real tracked file, not a symlink"):
+            evaluation._verify_runtime_environment(gp.repo_root, gp.head)
+
+    def test_wrong_dependency_version_is_rejected(self, tmp_path: Path) -> None:
+        gp = make_real_checkout(tmp_path)
+        contract = self._runtime_contract_path(gp)
+        good = RuntimeContract.from_json_bytes(contract.read_bytes())
+        contract.write_bytes(dataclasses.replace(good, numpy_version="1.0.0").to_json_bytes())
+        self._recommit(gp, "forge runtime contract numpy version")
+        with pytest.raises(EvaluationError, match="runtime mismatch on numpy_version"):
+            evaluation._verify_runtime_environment(gp.repo_root, gp.head)
+
+    def test_wrong_runtime_contract_rejected_before_ledger_via_public_entry(
+        self, tmp_path: Path
+    ) -> None:
+        # Full public entry, in a real checkout subprocess: a forged runtime
+        # contract must be refused after source binding and before the ledger.
+        gp = make_real_checkout(tmp_path)
+        contract = self._runtime_contract_path(gp)
+        good = RuntimeContract.from_json_bytes(contract.read_bytes())
+        contract.write_bytes(dataclasses.replace(good, pandas_version="0.0.1").to_json_bytes())
+        self._recommit(gp, "forge runtime contract pandas version")
+        out = run_in_checkout(gp)
+        assert out["ok"] is False
+        assert "runtime" in out["msg"]
+        assert read_ledger(gp.ledger_path) == ()
+        assert not (gp.output_dir / "benchmark_results.json").exists()
 
 
 class TestMandatoryAcquisitionVerification:

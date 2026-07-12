@@ -45,6 +45,12 @@ from eth_research.data.validation import (
     require_commit_sha,
     require_evaluation_id,
 )
+from eth_research.environment import (
+    CANONICAL_RUNTIME_CONTRACT_RELPATH,
+    RuntimeVerificationError,
+    load_runtime_contract,
+    verify_runtime_contract,
+)
 from eth_research.gitcheck import (
     GitError,
     file_bytes_at_commit,
@@ -438,6 +444,31 @@ def _require_bytes_match_head(repo_root: Path, head: str, path: Path, label: str
         )
 
 
+def _verify_runtime_environment(repo_root: Path, head: str) -> None:
+    """Prove the numerical runtime matches the frozen, committed contract.
+
+    The C1 gate binds the executing *code* to the authorized commit; this
+    gate binds the executing *numerical environment* (CPython patch, cache
+    tag, OS/arch, exact numpy/pandas/pyarrow, and the locked dependency
+    graph) to :data:`CANONICAL_RUNTIME_CONTRACT_RELPATH`. The contract, the
+    ``uv.lock``, and the ``pyproject.toml`` must equal their committed
+    ``head`` bytes, and the active runtime must match the contract exactly.
+    A single-repository reproducibility control, not a cryptographic
+    attestation.
+    """
+    contract_path = repo_root / CANONICAL_RUNTIME_CONTRACT_RELPATH
+    if contract_path.is_symlink():
+        raise EvaluationError("the runtime contract must be a real tracked file, not a symlink")
+    _require_bytes_match_head(repo_root, head, contract_path, "runtime contract")
+    _require_bytes_match_head(repo_root, head, repo_root / "uv.lock", "uv.lock")
+    _require_bytes_match_head(repo_root, head, repo_root / "pyproject.toml", "pyproject.toml")
+    try:
+        contract = load_runtime_contract(contract_path)
+        verify_runtime_contract(contract, repo_root=repo_root)
+    except RuntimeVerificationError as exc:
+        raise EvaluationError(f"runtime verification failed: {exc}") from exc
+
+
 def run_authorized_benchmark(
     *,
     repo_root: str | Path,
@@ -464,9 +495,14 @@ def run_authorized_benchmark(
     ``eth_research`` code is proven to be exactly the ``src/eth_research``
     tree committed at the authorized ``HEAD`` — not a foreign clone,
     site-packages install, shadow module, or modified copy
-    (:func:`eth_research.gitcheck.verify_package_source`). This is a
-    single-repository, single-researcher operational control; it cannot
-    attest a remote or a cryptographic identity.
+    (:func:`eth_research.gitcheck.verify_package_source`). The **second**
+    gate is a runtime-environment binding: the active CPython patch, cache
+    tag, OS/architecture, exact ``numpy``/``pandas``/``pyarrow`` versions,
+    and the committed ``uv.lock``/``pyproject.toml`` must equal the frozen
+    contract at :data:`CANONICAL_RUNTIME_CONTRACT_RELPATH`
+    (:func:`eth_research.environment.verify_runtime_contract`). Both are
+    single-repository, single-researcher operational controls; neither
+    attests a remote or a cryptographic identity.
 
     ``raw_chunk_dir`` and ``derived_csv`` are **mandatory**: the one-time
     run always re-derives the CSV from the raw chunks (C2), so acquisition
@@ -490,6 +526,9 @@ def run_authorized_benchmark(
         verify_package_source(root, head, _running_package_root())
     except GitError as exc:
         raise EvaluationError(f"package source binding failed: {exc}") from exc
+
+    # --- Runtime: prove the numerical environment matches the frozen contract. ---
+    _verify_runtime_environment(root, head)
 
     return _run_bound_benchmark(
         repo_root=repo_root,
