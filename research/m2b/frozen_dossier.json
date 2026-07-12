@@ -14,13 +14,13 @@
   "dossier_schema_version": 3,
   "holdout_identity_sha256": "214ce4a0d8a927c0657074cbf1aa0182eeda85c128d33f8b7854646f5c0f2885",
   "independent_audit": {
-    "audit_attempt_id": null,
-    "audit_raw_bundle_fingerprint": null,
-    "audit_receipt_sha256": null,
-    "audit_request_plan_sha256": null,
-    "reacquisition_audit_sha256": null,
-    "reason": "independent reacquisition not yet performed; it requires the one-shot GitHub Actions audit workflow (direct container egress to Coinbase is denied)",
-    "status": "not_performed"
+    "audit_attempt_id": "coinbase-eth-usd-audit-002",
+    "audit_raw_bundle_fingerprint": "sha256:9bc8d4cd9560ee5e9e983e18833b241b91c394ff8dbbc5d5c986259a7e2b85d3",
+    "audit_receipt_sha256": "3c1192ba51d334e77326f9ae0452192d3106ca92d8403aaa1fc6204b5216be9b",
+    "audit_request_plan_sha256": "f8f77ddbd226287e3561cd169de0b4fada090d66bd6a09d70e045f6b786ebf83",
+    "reacquisition_audit_sha256": "643004e56d65fe1b3ad3ae53e83a92b18dca0d7d27401c37b238e935ca1b3501",
+    "reason": null,
+    "status": "canonical_content_match"
   },
   "package_version": "0.3.0",
   "protocol_registration_commit_sha": "b89627463775bf32698effb5adea1270a5927890",
