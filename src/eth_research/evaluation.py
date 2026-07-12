@@ -681,6 +681,8 @@ def prepare_authorized_evaluation(
     _require_bytes_match_head(root, head, lock_file, "dataset lock")
     _require_bytes_match_head(root, head, evidence_file, "acquisition evidence")
     _require_bytes_match_head(root, head, ledger, "test-access ledger")
+    if dossier_file.is_symlink():
+        raise EvaluationError("the frozen dossier must be a real tracked file, not a symlink")
     _require_bytes_match_head(root, head, dossier_file, "frozen dossier")
     _require_bytes_match_head(root, head, holdout_file, "holdout identity")
     _require_bytes_match_head(root, head, results_file, "train/validation results")
