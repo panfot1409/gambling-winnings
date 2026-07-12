@@ -147,3 +147,101 @@ class TestVerifyFailures:
         staging = stage(tmp_path, json.dumps([[after, 9.0, 12.0, 10.0, 11.0, 100.0]]))
         with pytest.raises(AcquisitionError, match="at or after the declared window end"):
             run_verify(tmp_path, staging)
+
+
+def _good_sidecar(filename: str) -> dict[str, object]:
+    return {
+        "ordinal": 0,
+        "filename": filename,
+        "http_code": 200,
+        "retrieved_at": "2026-07-12T00:00:00Z",
+        "content_type": "application/json",
+    }
+
+
+def _write_raw_sidecar(staging: Path, *lines: str) -> None:
+    (staging / "_responses.jsonl").write_text("".join(line + "\n" for line in lines), "utf-8")
+
+
+class TestStrictSidecar:
+    """P2: the permissive sidecar parse laundered a 500 into a 200 via a
+    duplicate key. Every laundering vector is now rejected."""
+
+    def _staged(self, tmp_path: Path) -> tuple[Path, str]:
+        write_plan(tmp_path)
+        staging = stage(tmp_path, good_body())
+        return staging, load_acquisition_plan(tmp_path / "plan.json").windows[0].filename
+
+    def test_duplicate_http_code_key_is_rejected(self, tmp_path: Path) -> None:
+        staging, fn = self._staged(tmp_path)
+        # A second http_code (200) after a 500 must not launder the failure.
+        _write_raw_sidecar(
+            staging,
+            '{"ordinal":0,"filename":"' + fn + '","http_code":500,'
+            '"retrieved_at":"2026-07-12T00:00:00Z",'
+            '"content_type":"application/json","http_code":200}',
+        )
+        with pytest.raises(AcquisitionError, match="duplicate JSON object key"):
+            run_verify(tmp_path, staging)
+
+    def test_unknown_key_is_rejected(self, tmp_path: Path) -> None:
+        staging, fn = self._staged(tmp_path)
+        record = _good_sidecar(fn) | {"note": "x"}
+        _write_raw_sidecar(staging, json.dumps(record))
+        with pytest.raises(AcquisitionError, match=r"unknown=\['note'\]"):
+            run_verify(tmp_path, staging)
+
+    def test_missing_key_is_rejected(self, tmp_path: Path) -> None:
+        staging, fn = self._staged(tmp_path)
+        record = _good_sidecar(fn)
+        del record["content_type"]
+        _write_raw_sidecar(staging, json.dumps(record))
+        with pytest.raises(AcquisitionError, match=r"missing=\['content_type'\]"):
+            run_verify(tmp_path, staging)
+
+    def test_stringified_http_code_is_rejected(self, tmp_path: Path) -> None:
+        staging, fn = self._staged(tmp_path)
+        _write_raw_sidecar(staging, json.dumps(_good_sidecar(fn) | {"http_code": "200"}))
+        with pytest.raises(AcquisitionError, match="http_code must be an integer"):
+            run_verify(tmp_path, staging)
+
+    def test_boolean_ordinal_is_rejected(self, tmp_path: Path) -> None:
+        staging, fn = self._staged(tmp_path)
+        _write_raw_sidecar(staging, json.dumps(_good_sidecar(fn) | {"ordinal": True}))
+        with pytest.raises(AcquisitionError, match="ordinal must be an integer"):
+            run_verify(tmp_path, staging)
+
+    def test_non_utc_retrieved_at_is_rejected(self, tmp_path: Path) -> None:
+        staging, fn = self._staged(tmp_path)
+        record = _good_sidecar(fn) | {"retrieved_at": "2026-07-12T00:00:00-05:00"}
+        _write_raw_sidecar(staging, json.dumps(record))
+        with pytest.raises(AcquisitionError, match="must be in UTC"):
+            run_verify(tmp_path, staging)
+
+    def test_non_json_content_type_is_rejected(self, tmp_path: Path) -> None:
+        staging, fn = self._staged(tmp_path)
+        _write_raw_sidecar(staging, json.dumps(_good_sidecar(fn) | {"content_type": "text/html"}))
+        with pytest.raises(AcquisitionError, match="content-type"):
+            run_verify(tmp_path, staging)
+
+    def test_filename_mismatch_is_rejected(self, tmp_path: Path) -> None:
+        staging, _ = self._staged(tmp_path)
+        _write_raw_sidecar(staging, json.dumps(_good_sidecar("evil.json")))
+        with pytest.raises(AcquisitionError, match="does not match the plan"):
+            run_verify(tmp_path, staging)
+
+    def test_duplicate_ordinal_line_is_rejected(self, tmp_path: Path) -> None:
+        staging, fn = self._staged(tmp_path)
+        _write_raw_sidecar(staging, json.dumps(_good_sidecar(fn)), json.dumps(_good_sidecar(fn)))
+        with pytest.raises(AcquisitionError, match="duplicate record for ordinal"):
+            run_verify(tmp_path, staging)
+
+    def test_nan_token_is_rejected(self, tmp_path: Path) -> None:
+        staging, fn = self._staged(tmp_path)
+        _write_raw_sidecar(
+            staging,
+            '{"ordinal":0,"filename":"' + fn + '","http_code":NaN,'
+            '"retrieved_at":"2026-07-12T00:00:00Z","content_type":"application/json"}',
+        )
+        with pytest.raises(AcquisitionError, match="not valid strict JSON"):
+            run_verify(tmp_path, staging)

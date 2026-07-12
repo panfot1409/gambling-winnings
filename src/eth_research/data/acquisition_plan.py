@@ -86,7 +86,7 @@ _SAFE_JSON_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.json$")
 a plan value can never be smuggled into a shell command."""
 
 
-def _require_safe_json_filename(label: str, value: object) -> str:
+def require_safe_json_filename(label: str, value: object) -> str:
     text = require_safe_basename(label, value)
     if not _SAFE_JSON_FILENAME_RE.match(text):
         raise ValueError(
@@ -183,7 +183,7 @@ class AcquisitionWindow:
                 f"requested_end must be the canonical UTC open {expected_end!r} (window_end - "
                 f"1 day), got {self.requested_end!r}"
             )
-        _require_safe_json_filename("filename", self.filename)
+        require_safe_json_filename("filename", self.filename)
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -474,7 +474,7 @@ class AcquisitionResponseReceipt:
 
     def __post_init__(self) -> None:
         require_nonnegative_int("ordinal", self.ordinal)
-        _require_safe_json_filename("filename", self.filename)
+        require_safe_json_filename("filename", self.filename)
         if require_int("http_status", self.http_status) != 200:
             raise ValueError(
                 f"http_status must be 200 for a captured response, got {self.http_status}"

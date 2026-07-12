@@ -20,24 +20,90 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
 from eth_research import __version__
 from eth_research._atomic import write_atomic
+from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.acquisition_plan import (
     AcquisitionAttemptReceipt,
     AcquisitionResponseReceipt,
     load_acquisition_plan,
+    require_safe_json_filename,
 )
 from eth_research.data.coinbase import AcquisitionError, parse_candles_chunk
-from eth_research.data.provenance import sha256_bytes
-from eth_research.data.validation import parse_timestamp_field
+from eth_research.data.provenance import require_int, require_nonempty_str, sha256_bytes
+from eth_research.data.validation import (
+    parse_timestamp_field,
+    require_nonnegative_int,
+    require_utc_timestamp,
+)
 
 _RECEIPTS_SIDECAR: str = "_responses.jsonl"
 """The workflow's curl step appends one JSON line per fetched window here."""
+
+_JSON_CONTENT_TYPE_PREFIX: str = "application/json"
+
+_SIDECAR_KEYS: frozenset[str] = frozenset(
+    {"ordinal", "filename", "http_code", "retrieved_at", "content_type"}
+)
+
+
+@dataclass(frozen=True)
+class _SidecarRecord:
+    """One strictly-validated per-window status line from the curl step."""
+
+    ordinal: int
+    filename: str
+    http_code: int
+    retrieved_at: pd.Timestamp
+    content_type: str
+
+
+def _parse_sidecar_line(line: bytes, position: int) -> _SidecarRecord:
+    """Strictly parse one sidecar line, rejecting every laundering vector.
+
+    The permissive ``json.loads`` this replaces silently kept the last of
+    duplicate object keys, so a second ``http_code`` could launder a 500
+    into a 200. The shared strict decoder rejects duplicate keys, NaN, and
+    exponent-overflow tokens; the schema then rejects unknown/missing keys,
+    booleans or strings where an integer is required, a non-UTC or
+    unparseable retrieval time, and an unsafe filename.
+    """
+    try:
+        payload = strict_json_loads(line)
+    except StrictJSONError as exc:
+        raise AcquisitionError(f"sidecar line {position} is not valid strict JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise AcquisitionError(f"sidecar line {position} must be a JSON object")
+    keys = set(payload)
+    if keys != _SIDECAR_KEYS:
+        unknown = sorted(keys - _SIDECAR_KEYS)
+        missing = sorted(_SIDECAR_KEYS - keys)
+        raise AcquisitionError(
+            f"sidecar line {position} keys do not match schema: "
+            f"unknown={unknown}, missing={missing}"
+        )
+    try:
+        ordinal = require_nonnegative_int("ordinal", payload["ordinal"])
+        filename = require_safe_json_filename("filename", payload["filename"])
+        http_code = require_int("http_code", payload["http_code"])
+        retrieved_at = require_utc_timestamp(
+            "retrieved_at", parse_timestamp_field("retrieved_at", payload["retrieved_at"])
+        )
+        content_type = require_nonempty_str("content_type", payload["content_type"])
+    except ValueError as exc:
+        raise AcquisitionError(f"sidecar line {position} is invalid: {exc}") from exc
+    return _SidecarRecord(
+        ordinal=ordinal,
+        filename=filename,
+        http_code=http_code,
+        retrieved_at=retrieved_at,
+        content_type=content_type,
+    )
 
 
 def emit_curl_plan(plan_path: str | Path, out_path: str | Path) -> int:
@@ -70,22 +136,21 @@ def emit_curl_plan(plan_path: str | Path, out_path: str | Path) -> int:
     return 0
 
 
-def _read_sidecar(staging: Path) -> dict[int, dict[str, Any]]:
-    """Parse the curl step's per-window status sidecar, keyed by ordinal."""
+def _read_sidecar(staging: Path) -> dict[int, _SidecarRecord]:
+    """Strictly parse the curl step's per-window status sidecar, by ordinal."""
     path = staging / _RECEIPTS_SIDECAR
     if not path.exists():
         raise AcquisitionError(f"missing response sidecar {path}")
-    records: dict[int, dict[str, Any]] = {}
-    for position, line in enumerate(path.read_bytes().splitlines()):
+    records: dict[int, _SidecarRecord] = {}
+    for position, line in enumerate(path.read_bytes().splitlines(), start=1):
         if not line.strip():
             continue
-        try:
-            entry = json.loads(line)
-        except ValueError as exc:
-            raise AcquisitionError(f"sidecar line {position + 1} is not valid JSON: {exc}") from exc
-        if not isinstance(entry, dict) or "ordinal" not in entry:
-            raise AcquisitionError(f"sidecar line {position + 1} is malformed")
-        records[int(entry["ordinal"])] = entry
+        record = _parse_sidecar_line(line, position)
+        if record.ordinal in records:
+            raise AcquisitionError(
+                f"sidecar line {position}: duplicate record for ordinal {record.ordinal}"
+            )
+        records[record.ordinal] = record
     return records
 
 
@@ -118,10 +183,20 @@ def verify_responses_and_write_receipt(
         record = sidecar.get(window.ordinal)
         if record is None:
             raise AcquisitionError(f"no sidecar record for window {window.ordinal}")
-        status = int(record.get("http_code", 0))
-        if status != 200:
+        if record.filename != window.filename:
             raise AcquisitionError(
-                f"window {window.ordinal} returned HTTP {status}, not 200; refusing to publish"
+                f"window {window.ordinal} sidecar filename {record.filename!r} does not match "
+                f"the plan's {window.filename!r}"
+            )
+        if record.http_code != 200:
+            raise AcquisitionError(
+                f"window {window.ordinal} returned HTTP {record.http_code}, not 200; "
+                "refusing to publish"
+            )
+        if not record.content_type.startswith(_JSON_CONTENT_TYPE_PREFIX):
+            raise AcquisitionError(
+                f"window {window.ordinal} content-type {record.content_type!r} is not "
+                f"{_JSON_CONTENT_TYPE_PREFIX!r}; refusing to publish"
             )
         body_path = staging / window.filename
         if not body_path.exists():
@@ -131,9 +206,6 @@ def verify_responses_and_write_receipt(
             parse_candles_chunk(raw, window_start=window.window_start, window_end=window.window_end)
         except AcquisitionError as exc:
             raise AcquisitionError(f"window {window.ordinal} ({window.filename}): {exc}") from exc
-        retrieved_at = parse_timestamp_field(
-            f"window {window.ordinal} retrieved_at", record.get("retrieved_at")
-        )
         responses.append(
             AcquisitionResponseReceipt(
                 ordinal=window.ordinal,
@@ -141,8 +213,8 @@ def verify_responses_and_write_receipt(
                 http_status=200,
                 byte_length=len(raw),
                 sha256=sha256_bytes(raw),
-                retrieved_at=retrieved_at,
-                content_type=str(record.get("content_type") or "application/json"),
+                retrieved_at=record.retrieved_at,
+                content_type=record.content_type,
             )
         )
 
