@@ -107,3 +107,89 @@ def relative_to_repo(repo_root: Path, target: str | Path) -> str:
     except ValueError as exc:
         raise GitError(f"{target} is outside the repository {repo_root}") from exc
     return relative.as_posix()
+
+
+def list_tree_files(repo_root: Path, commit: str, relpath: str) -> set[str]:
+    """Repo-relative POSIX paths of the files under ``relpath`` at ``commit``."""
+    result = _run_git(repo_root, "ls-tree", "-r", "--name-only", commit, "--", relpath)
+    if result.returncode != 0:
+        raise GitError(
+            f"could not list {relpath!r} at {commit[:12]} in {repo_root}: {result.stderr.strip()}"
+        )
+    return {line for line in result.stdout.splitlines() if line}
+
+
+PACKAGE_RELPATH: str = "src/eth_research"
+"""The src-layout location of the package inside the repository."""
+
+
+def verify_package_source(repo_root: Path, head: str, package_root: Path) -> None:
+    """Prove the running package is the source committed at ``head``.
+
+    ``package_root`` is the filesystem directory the ``eth_research`` package
+    was actually imported from. This is a fail-closed, single-repository
+    control (see the module docstring): it establishes that the code
+    executing the evaluation is exactly the ``src/eth_research`` tree
+    committed at the authorized ``HEAD`` — not a foreign clone, a
+    site-packages install, an untracked shadow module, or a modified working
+    copy. It cannot attest a remote or a cryptographic identity.
+
+    Rejects, via :class:`GitError`:
+
+    * a package imported from anywhere other than
+      ``<repo_root>/src/eth_research``;
+    * a repository with no committed package source at ``head``;
+    * a symlinked package directory or symlinked source file;
+    * an untracked shadow ``*.py`` file under the package;
+    * a tracked source file missing at ``head`` or whose working bytes
+      differ from the ``head`` blob.
+    """
+    src_dir = repo_root / PACKAGE_RELPATH
+    if src_dir.is_symlink():
+        raise GitError(f"package directory {src_dir} is a symlink; refusing to follow it")
+    if not src_dir.is_dir():
+        raise GitError(
+            f"the authorized repository has no {PACKAGE_RELPATH} directory — it carries "
+            "metadata but not the package source"
+        )
+    if package_root.resolve() != src_dir.resolve():
+        raise GitError(
+            f"the running eth_research package is imported from {package_root}, not the "
+            f"authorized repository's {PACKAGE_RELPATH} ({src_dir}); execution and the "
+            "authorized commit are different checkouts"
+        )
+
+    head_py = {
+        rel for rel in list_tree_files(repo_root, head, PACKAGE_RELPATH) if rel.endswith(".py")
+    }
+    if not head_py:
+        raise GitError(
+            f"no committed {PACKAGE_RELPATH} source at {head[:12]} — the running code is not "
+            "the code committed at the authorized revision"
+        )
+
+    working_py: set[str] = set()
+    for path in sorted(src_dir.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        if path.is_symlink():
+            raise GitError(f"package source file {path} is a symlink; refusing to follow it")
+        working_py.add(relative_to_repo(repo_root, path))
+
+    shadow = sorted(working_py - head_py)
+    if shadow:
+        raise GitError(
+            f"untracked package source not committed at {head[:12]}: {shadow} — a shadow "
+            "module could change behaviour"
+        )
+    missing = sorted(head_py - working_py)
+    if missing:
+        raise GitError(f"committed package source missing from the working tree: {missing}")
+
+    for rel in sorted(head_py):
+        working_bytes = (repo_root / rel).read_bytes()
+        if working_bytes != file_bytes_at_commit(repo_root, head, rel):
+            raise GitError(
+                f"package source {rel} differs from its bytes committed at {head[:12]} — "
+                "the running code was modified after the authorized commit"
+            )

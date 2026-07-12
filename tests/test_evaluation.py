@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,7 +24,12 @@ from eth_research.data.builder import (
     load_canonical_dataset,
 )
 from eth_research.data.coinbase import write_acquisition_evidence
-from eth_research.data.lock import DatasetLock, DatasetLockError, build_dataset_lock
+from eth_research.data.lock import (
+    DatasetLock,
+    DatasetLockError,
+    build_dataset_lock,
+    verify_dataset_lock,
+)
 from eth_research.data.provenance import sha256_bytes, sha256_file
 from eth_research.evaluation import (
     CANONICAL_LEDGER_RELPATH,
@@ -370,6 +377,11 @@ def run_git(
     authorization: OneTimeTestAuthorization | None,
     **overrides: Any,
 ) -> Any:
+    # Downstream behaviour tests target the inner function directly: the
+    # synthetic git_pipeline is not a checkout of the running package, so the
+    # public run_authorized_benchmark's package-source binding (C1) would
+    # reject it. The source binding has its own dedicated tests, including a
+    # genuine real-checkout integration test.
     kwargs: dict[str, Any] = {
         "repo_root": gp.repo_root,
         "manifest_path": gp.manifest_path,
@@ -383,7 +395,7 @@ def run_git(
         "clock": make_clock(),
     }
     kwargs.update(overrides)
-    return run_authorized_benchmark(**kwargs)
+    return evaluation._run_bound_benchmark(**kwargs)
 
 
 def head_auth(
@@ -564,6 +576,8 @@ class TestGitRevisionBinding:
                 lock_path=gp.lock_path,
                 acquisition_evidence_path=gp.evidence_path,
                 output_dir=tmp_path / "out",
+                raw_chunk_dir=gp.raw_chunk_dir,
+                derived_csv=gp.derived_csv,
                 authorization=head_auth(gp),
                 clock=make_clock(),
             )
@@ -719,3 +733,336 @@ class TestActiveRedTeam:
         run_git(repo_b, make_authorization(code_commit_sha=repo_b.head))
         assert len(read_ledger(repo_a.ledger_path)) == 2
         assert len(read_ledger(repo_b.ledger_path)) == 2
+
+
+class TestPackageSourceBindingRepro:
+    """C1 reproduction: a repo with committed metadata but no package source
+    currently performs an authorized evaluation using code from a foreign
+    checkout. It must be rejected."""
+
+    def test_metadata_without_source_is_rejected(self, git_pipeline: GitPipeline) -> None:
+        # git_pipeline commits research/m2b/* but no src/eth_research; the
+        # running package is imported from the real repo, not this checkout.
+        with pytest.raises(EvaluationError, match="source"):
+            run_authorized_benchmark(
+                repo_root=git_pipeline.repo_root,
+                manifest_path=git_pipeline.manifest_path,
+                protocol_path=git_pipeline.protocol_path,
+                lock_path=git_pipeline.lock_path,
+                acquisition_evidence_path=git_pipeline.evidence_path,
+                output_dir=git_pipeline.output_dir,
+                authorization=head_auth(git_pipeline),
+                raw_chunk_dir=git_pipeline.raw_chunk_dir,
+                derived_csv=git_pipeline.derived_csv,
+                clock=make_clock(),
+            )
+        assert read_ledger(git_pipeline.ledger_path) == ()
+
+
+# --- C1 source-binding: negatives in-process + a real-checkout integration test ---
+
+REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
+
+
+def _git_out(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def make_real_checkout(tmp_path: Path) -> GitPipeline:
+    """A self-contained clone of the running repository with committed M2B
+    artifacts, so its own src/eth_research is the authorized package."""
+    clone = tmp_path / "checkout"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--local", "--no-hardlinks", str(REPO_ROOT), str(clone)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    _git_out(clone, "config", "user.email", "test@example.com")
+    _git_out(clone, "config", "user.name", "Test Researcher")
+
+    pipe = build_coinbase_pipeline(clone / "data")
+    research = clone / "research" / "m2b"
+    evidence_path = research / "acquisition_evidence.json"
+    write_acquisition_evidence(pipe.evidence, evidence_path)
+    lock = build_dataset_lock(
+        pipe.build.manifest,
+        manifest_sha256=pipe.manifest_sha256,
+        acquisition_evidence_sha256=sha256_file(evidence_path),
+    )
+    lock_path = research / "dataset_lock.json"
+    lock_path.write_bytes(lock.to_json_bytes())
+    protocol = build_benchmark_protocol(lock, package_version=eth_research.__version__)
+    protocol_path = research / "protocol.json"
+    protocol_path.write_bytes(protocol.to_json_bytes())
+    (research / "test_evaluations.jsonl").write_bytes(b"")  # pristine, already tracked
+
+    _git_out(clone, "add", "research/m2b")
+    _git_out(clone, "commit", "--quiet", "-m", "pre-register benchmark protocol")
+    head = _git_out(clone, "rev-parse", "HEAD")
+    return GitPipeline(
+        repo_root=clone,
+        manifest_path=pipe.build.manifest_path,
+        protocol_path=protocol_path,
+        lock_path=lock_path,
+        evidence_path=evidence_path,
+        ledger_path=research / "test_evaluations.jsonl",
+        output_dir=clone / "reports" / "m2b",
+        raw_chunk_dir=pipe.chunk_dir,
+        derived_csv=pipe.derived_csv,
+        head=head,
+        protocol=protocol,
+        lock=lock,
+    )
+
+
+_DRIVER = """
+import json, sys
+sys.path.insert(0, {src!r})
+import eth_research
+from eth_research.evaluation import (
+    EVALUATION_CONFIRM_TOKEN, OneTimeTestAuthorization, run_authorized_benchmark,
+)
+{prelude}
+out = {{"package_file": eth_research.__file__}}
+try:
+    run = run_authorized_benchmark(
+        repo_root={repo!r},
+        manifest_path={manifest!r},
+        protocol_path={protocol!r},
+        lock_path={lock!r},
+        acquisition_evidence_path={evidence!r},
+        output_dir={outdir!r},
+        raw_chunk_dir={raw!r},
+        derived_csv={derived!r},
+        authorization=OneTimeTestAuthorization(
+            evaluation_id="m2b-integration-eval-001",
+            reason="genuine real-checkout integration test",
+            code_commit_sha={head!r},
+            confirm_token=EVALUATION_CONFIRM_TOKEN,
+        ),
+    )
+    out["ok"] = True
+    out["results_path"] = str(run.results_path)
+    out["test_evaluation_id"] = run.results.test_evaluation_id
+except Exception as exc:  # noqa: BLE001
+    out["ok"] = False
+    out["error"] = type(exc).__name__
+    out["msg"] = str(exc)
+print(json.dumps(out))
+"""
+
+
+def run_in_checkout(gp: GitPipeline, *, prelude: str = "") -> dict[str, Any]:
+    driver = _DRIVER.format(
+        src=str(gp.repo_root / "src"),
+        prelude=prelude,
+        repo=str(gp.repo_root),
+        manifest=str(gp.manifest_path),
+        protocol=str(gp.protocol_path),
+        lock=str(gp.lock_path),
+        evidence=str(gp.evidence_path),
+        outdir=str(gp.output_dir),
+        raw=str(gp.raw_chunk_dir),
+        derived=str(gp.derived_csv),
+        head=gp.head,
+    )
+    script = gp.repo_root / "_driver.py"
+    script.write_text(driver, encoding="utf-8")
+    env = {"PYTHONPATH": str(gp.repo_root / "src"), "PATH": os.environ.get("PATH", "")}
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        cwd=str(gp.repo_root),
+        env=env,
+        check=False,
+    )
+    script.unlink()
+    assert result.returncode == 0, f"driver crashed: {result.stderr}"
+    return dict(json.loads(result.stdout.strip().splitlines()[-1]))
+
+
+class TestPackageSourceBinding:
+    """C1: prove the running package is the code committed at the authorized HEAD."""
+
+    def test_metadata_without_source_is_rejected(self, git_pipeline: GitPipeline) -> None:
+        with pytest.raises(EvaluationError, match="metadata but not the package source"):
+            run_authorized_benchmark(
+                repo_root=git_pipeline.repo_root,
+                manifest_path=git_pipeline.manifest_path,
+                protocol_path=git_pipeline.protocol_path,
+                lock_path=git_pipeline.lock_path,
+                acquisition_evidence_path=git_pipeline.evidence_path,
+                output_dir=git_pipeline.output_dir,
+                raw_chunk_dir=git_pipeline.raw_chunk_dir,
+                derived_csv=git_pipeline.derived_csv,
+                authorization=head_auth(git_pipeline),
+                clock=make_clock(),
+            )
+        assert read_ledger(git_pipeline.ledger_path) == ()
+
+    def test_foreign_checkout_same_version_is_rejected(
+        self, git_pipeline: GitPipeline, tmp_path: Path
+    ) -> None:
+        # A temp repo that DOES contain a committed copy of the package source
+        # (same __version__), but the running package is imported from the real
+        # repo — a different checkout.
+        import shutil
+
+        foreign = tmp_path / "foreign"
+        (foreign / "src").mkdir(parents=True)
+        shutil.copytree(REPO_ROOT / "src" / "eth_research", foreign / "src" / "eth_research")
+        _git_out(foreign, "init", "-q")
+        _git_out(foreign, "config", "user.email", "t@example.com")
+        _git_out(foreign, "config", "user.name", "T")
+        # bring the M2B artifacts over so only the source-identity check can fail
+        shutil.copytree(git_pipeline.repo_root / "research", foreign / "research")
+        (foreign / ".gitignore").write_text("data/\nreports/\n", encoding="utf-8")
+        _git_out(foreign, "add", "-A")
+        _git_out(foreign, "commit", "-q", "-m", "foreign checkout")
+        foreign_head = _git_out(foreign, "rev-parse", "HEAD")
+        with pytest.raises(EvaluationError, match=r"different checkouts|imported from"):
+            run_authorized_benchmark(
+                repo_root=foreign,
+                manifest_path=git_pipeline.manifest_path,
+                protocol_path=foreign / "research" / "m2b" / "protocol.json",
+                lock_path=foreign / "research" / "m2b" / "dataset_lock.json",
+                acquisition_evidence_path=foreign
+                / "research"
+                / "m2b"
+                / "acquisition_evidence.json",
+                output_dir=foreign / "reports" / "m2b",
+                raw_chunk_dir=git_pipeline.raw_chunk_dir,
+                derived_csv=git_pipeline.derived_csv,
+                authorization=make_authorization(code_commit_sha=foreign_head),
+                clock=make_clock(),
+            )
+
+    def test_source_binding_happens_before_any_backtest(
+        self, git_pipeline: GitPipeline, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        called = {"n": 0}
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            called["n"] += 1
+            return real_run_backtest(*args, **kwargs)
+
+        monkeypatch.setattr(evaluation, "run_backtest", spy)
+        with pytest.raises(EvaluationError, match="package source binding failed"):
+            run_authorized_benchmark(
+                repo_root=git_pipeline.repo_root,
+                manifest_path=git_pipeline.manifest_path,
+                protocol_path=git_pipeline.protocol_path,
+                lock_path=git_pipeline.lock_path,
+                acquisition_evidence_path=git_pipeline.evidence_path,
+                output_dir=git_pipeline.output_dir,
+                raw_chunk_dir=git_pipeline.raw_chunk_dir,
+                derived_csv=git_pipeline.derived_csv,
+                authorization=head_auth(git_pipeline),
+                clock=make_clock(),
+            )
+        assert called["n"] == 0  # no strategy/backtest was reached
+        assert read_ledger(git_pipeline.ledger_path) == ()
+
+    def test_real_checkout_executes_its_own_package_successfully(self, tmp_path: Path) -> None:
+        gp = make_real_checkout(tmp_path)
+        out = run_in_checkout(gp)
+        assert out["ok"] is True, out
+        # the executed code really came from the checkout, not the parent repo
+        assert str(gp.repo_root) in out["package_file"]
+        assert out["test_evaluation_id"] == "m2b-integration-eval-001"
+        events = read_ledger(gp.ledger_path)
+        assert [event.event for event in events] == ["started", "completed"]
+        assert (gp.output_dir / "benchmark_results.json").exists()
+
+    def test_real_checkout_with_dirty_package_source_is_rejected(self, tmp_path: Path) -> None:
+        gp = make_real_checkout(tmp_path)
+        # Modify a tracked package source file in the checkout's working tree.
+        target = gp.repo_root / "src" / "eth_research" / "evaluation.py"
+        target.write_bytes(target.read_bytes() + b"\n# tampered\n")
+        out = run_in_checkout(gp)
+        assert out["ok"] is False
+        assert "not clean" in out["msg"] or "differs from its bytes" in out["msg"]
+        assert read_ledger(gp.ledger_path) == ()
+
+
+class TestMandatoryAcquisitionVerification:
+    """C2: raw_chunk_dir and derived_csv are mandatory; verification cannot be skipped."""
+
+    def test_omitting_both_is_a_type_error(self, git_pipeline: GitPipeline) -> None:
+        # Both are required parameters — they cannot be omitted from the call.
+        with pytest.raises(TypeError):
+            run_authorized_benchmark(  # type: ignore[call-arg]
+                repo_root=git_pipeline.repo_root,
+                manifest_path=git_pipeline.manifest_path,
+                protocol_path=git_pipeline.protocol_path,
+                lock_path=git_pipeline.lock_path,
+                acquisition_evidence_path=git_pipeline.evidence_path,
+                output_dir=git_pipeline.output_dir,
+                authorization=head_auth(git_pipeline),
+                clock=make_clock(),
+            )
+
+    def test_explicit_none_is_refused_at_runtime(self, git_pipeline: GitPipeline) -> None:
+        with pytest.raises(EvaluationError, match="requires both raw_chunk_dir and derived_csv"):
+            run_git(git_pipeline, head_auth(git_pipeline), raw_chunk_dir=None)
+        assert read_ledger(git_pipeline.ledger_path) == ()
+
+    def test_explicit_none_derived_csv_is_refused(self, git_pipeline: GitPipeline) -> None:
+        with pytest.raises(EvaluationError, match="requires both raw_chunk_dir and derived_csv"):
+            run_git(git_pipeline, head_auth(git_pipeline), derived_csv=None)
+        assert read_ledger(git_pipeline.ledger_path) == ()
+
+    def test_mutated_raw_chunk_is_refused(self, git_pipeline: GitPipeline) -> None:
+        chunk = next(iter(git_pipeline.raw_chunk_dir.glob("*.json")))
+        chunk.write_bytes(chunk.read_bytes().replace(b"100.0", b"123.0", 1))
+        with pytest.raises((EvaluationError, DatasetLockError), match=r"acquisition|derive|SHA"):
+            run_git(git_pipeline, head_auth(git_pipeline))
+        assert read_ledger(git_pipeline.ledger_path) == ()
+
+    def test_missing_chunk_directory_is_refused(
+        self, git_pipeline: GitPipeline, tmp_path: Path
+    ) -> None:
+        with pytest.raises((EvaluationError, DatasetLockError)):
+            run_git(git_pipeline, head_auth(git_pipeline), raw_chunk_dir=tmp_path / "nope")
+        assert read_ledger(git_pipeline.ledger_path) == ()
+
+    def test_non_reconstructing_derived_csv_is_refused(self, git_pipeline: GitPipeline) -> None:
+        git_pipeline.derived_csv.write_bytes(
+            git_pipeline.derived_csv.read_bytes().replace(b"105.0", b"106.0", 1)
+        )
+        with pytest.raises((EvaluationError, DatasetLockError), match=r"derive|SHA|does not"):
+            run_git(git_pipeline, head_auth(git_pipeline))
+        assert read_ledger(git_pipeline.ledger_path) == ()
+
+    def test_valid_chain_still_succeeds(self, git_pipeline: GitPipeline) -> None:
+        run = run_git(git_pipeline, head_auth(git_pipeline))
+        assert (git_pipeline.output_dir / "benchmark_results.json").exists()
+        assert run.results.test_evaluation_id == "m2b-synthetic-eval-001"
+
+
+class TestVerifyDatasetLockXor:
+    """C2: verify_dataset_lock rejects exactly one acquisition argument."""
+
+    def test_only_chunk_dir_is_rejected(self, coinbase_pipeline: CoinbasePipeline) -> None:
+        lock = make_lock(coinbase_pipeline)
+        with pytest.raises(DatasetLockError, match="must be supplied together"):
+            verify_dataset_lock(
+                lock,
+                manifest_path=coinbase_pipeline.build.manifest_path,
+                acquisition_evidence_path=coinbase_pipeline.evidence_path,
+                raw_chunk_dir=coinbase_pipeline.chunk_dir,
+            )
+
+    def test_only_derived_csv_is_rejected(self, coinbase_pipeline: CoinbasePipeline) -> None:
+        lock = make_lock(coinbase_pipeline)
+        with pytest.raises(DatasetLockError, match="must be supplied together"):
+            verify_dataset_lock(
+                lock,
+                manifest_path=coinbase_pipeline.build.manifest_path,
+                acquisition_evidence_path=coinbase_pipeline.evidence_path,
+                derived_csv=coinbase_pipeline.derived_csv,
+            )

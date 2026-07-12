@@ -265,11 +265,20 @@ def verify_dataset_lock(
     (the manifest's raw file must be exactly the evidence's derived file).
     Returns the parsed manifest and evidence on success.
 
-    When both ``raw_chunk_dir`` and ``derived_csv`` are supplied, the full
-    semantic acquisition verification is also run — proving the derived
-    CSV re-derives byte-for-byte from the raw chunks
+    Acquisition arguments are all-or-nothing: supplying **both**
+    ``raw_chunk_dir`` and ``derived_csv`` additionally runs the full
+    semantic acquisition verification — proving the derived CSV re-derives
+    byte-for-byte from the raw chunks
     (:func:`eth_research.data.coinbase.verify_acquisition_evidence`).
+    Supplying exactly one is a hard error, never a silent downgrade;
+    supplying neither performs only the metadata/hash cross-check. The
+    one-time evaluator always supplies both.
     """
+    if (raw_chunk_dir is None) != (derived_csv is None):
+        raise DatasetLockError(
+            "raw_chunk_dir and derived_csv must be supplied together (or both omitted); "
+            "supplying exactly one would silently skip semantic acquisition verification"
+        )
     manifest_file = Path(manifest_path)
     if not manifest_file.exists():
         raise DatasetLockError(f"manifest {manifest_file} does not exist")

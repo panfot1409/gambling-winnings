@@ -53,6 +53,7 @@ from eth_research.gitcheck import (
     relative_to_repo,
     resolve_repo_root,
     tracked_tree_is_clean,
+    verify_package_source,
 )
 from eth_research.ledger import (
     EVENT_COMPLETED,
@@ -406,6 +407,16 @@ def publish_benchmark_reports(
     return results_path, report_path
 
 
+def _running_package_root() -> Path:
+    """The filesystem directory the running ``eth_research`` package lives in."""
+    import eth_research
+
+    location = eth_research.__file__
+    if location is None:  # pragma: no cover - namespace package, not our layout
+        raise EvaluationError("the running eth_research package has no filesystem location")
+    return Path(location).resolve().parent
+
+
 def _require_bytes_match_head(repo_root: Path, head: str, path: Path, label: str) -> None:
     """The working bytes of a tracked file must equal its bytes at ``head``."""
     try:
@@ -435,10 +446,10 @@ def run_authorized_benchmark(
     lock_path: str | Path,
     acquisition_evidence_path: str | Path,
     output_dir: str | Path,
+    raw_chunk_dir: str | Path,
+    derived_csv: str | Path,
     authorization: OneTimeTestAuthorization | None = None,
     ledger_path: str | Path | None = None,
-    raw_chunk_dir: str | Path | None = None,
-    derived_csv: str | Path | None = None,
     clock: Callable[[], pd.Timestamp] | None = None,
     overwrite: bool = False,
 ) -> BenchmarkRun:
@@ -448,31 +459,88 @@ def run_authorized_benchmark(
     :class:`OneTimeTestAuthorization` carrying the confirmation token whose
     ``code_commit_sha`` equals the repository's actual ``HEAD``.
 
-    Trust boundary (single-repository, single-researcher operational
-    control — see :mod:`eth_research.gitcheck` for its honest limits):
+    The **first** gate is a package-source binding (C1): before the ledger
+    is read, the dataset loaded, or any signal computed, the running
+    ``eth_research`` code is proven to be exactly the ``src/eth_research``
+    tree committed at the authorized ``HEAD`` — not a foreign clone,
+    site-packages install, shadow module, or modified copy
+    (:func:`eth_research.gitcheck.verify_package_source`). This is a
+    single-repository, single-researcher operational control; it cannot
+    attest a remote or a cryptographic identity.
 
-    * the repository ``HEAD`` is resolved with git; the authorization SHA
-      must equal it, name a real commit, and the tracked working tree must
-      be clean;
-    * the tracked inputs (protocol, dataset lock, acquisition evidence, and
-      the pristine ledger at the canonical path
-      ``research/m2b/test_evaluations.jsonl``) are read from disk and their
-      bytes must equal their blobs committed at ``HEAD``;
-    * the dataset is **reloaded and re-verified internally** with
-      :func:`load_canonical_dataset` (Parquet, manifest, fingerprint,
-      quality-report hash + strict parse + cross-checks) — no
-      caller-supplied :class:`LoadedDataset` is trusted;
-    * the dataset lock, protocol, and — when ``raw_chunk_dir`` and
-      ``derived_csv`` are supplied — the full semantic acquisition
-      re-derivation are verified;
-    * the ``started`` event is appended before any test signal or P&L is
-      computed; completion or failure is recorded honestly; any access
-      permanently consumes the one-time evaluation.
+    ``raw_chunk_dir`` and ``derived_csv`` are **mandatory**: the one-time
+    run always re-derives the CSV from the raw chunks (C2), so acquisition
+    verification can never be silently skipped. The remaining boundary
+    (git-revision binding, canonical ledger, internal dataset reload, and
+    honest ``started``/``completed``/``failed`` recording) is unchanged.
     """
     if authorization is None:
         raise EvaluationError(
             "test evaluation refused: no authorization was provided. The real test segment "
             "is evaluated exactly once, with an explicit OneTimeTestAuthorization."
+        )
+    try:
+        root = resolve_repo_root(repo_root)
+        head = head_commit(root)
+    except GitError as exc:
+        raise EvaluationError(f"could not establish the repository revision: {exc}") from exc
+
+    # --- C1: prove the running code IS the code committed at HEAD, first. ---
+    try:
+        verify_package_source(root, head, _running_package_root())
+    except GitError as exc:
+        raise EvaluationError(f"package source binding failed: {exc}") from exc
+
+    return _run_bound_benchmark(
+        repo_root=repo_root,
+        manifest_path=manifest_path,
+        protocol_path=protocol_path,
+        lock_path=lock_path,
+        acquisition_evidence_path=acquisition_evidence_path,
+        output_dir=output_dir,
+        raw_chunk_dir=raw_chunk_dir,
+        derived_csv=derived_csv,
+        authorization=authorization,
+        ledger_path=ledger_path,
+        clock=clock,
+        overwrite=overwrite,
+    )
+
+
+def _run_bound_benchmark(
+    *,
+    repo_root: str | Path,
+    manifest_path: str | Path,
+    protocol_path: str | Path,
+    lock_path: str | Path,
+    acquisition_evidence_path: str | Path,
+    output_dir: str | Path,
+    raw_chunk_dir: str | Path,
+    derived_csv: str | Path,
+    authorization: OneTimeTestAuthorization | None = None,
+    ledger_path: str | Path | None = None,
+    clock: Callable[[], pd.Timestamp] | None = None,
+    overwrite: bool = False,
+) -> BenchmarkRun:
+    """The authorized evaluation after the package-source binding has passed.
+
+    Performs the git-revision identity + clean-tree checks, the canonical
+    ledger and committed-bytes checks, the mandatory raw→derived
+    acquisition verification, the internal dataset reload, and the
+    guarded one-time run. Callers must go through
+    :func:`run_authorized_benchmark`; this is separated only so the
+    source-binding gate has dedicated tests (it is exercised in production
+    exclusively through the public entry point).
+    """
+    if authorization is None:
+        raise EvaluationError(
+            "test evaluation refused: no authorization was provided. The real test segment "
+            "is evaluated exactly once, with an explicit OneTimeTestAuthorization."
+        )
+    if raw_chunk_dir is None or derived_csv is None:
+        raise EvaluationError(
+            "the one-time evaluation requires both raw_chunk_dir and derived_csv so the "
+            "derived CSV is always re-derived from the raw chunks; neither may be omitted"
         )
     tick = clock if clock is not None else _default_clock
 
