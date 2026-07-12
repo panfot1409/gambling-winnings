@@ -60,6 +60,13 @@ _REJECTION_RATIONALE: str = (
     "buy-and-hold is itself an alpha strategy (it is the benchmark)."
 )
 
+_ELIGIBLE_RATIONALE: str = (
+    "This fixed SMA specification did not underperform buy-and-hold in the "
+    "validation period, so under the pre-declared criterion it is eligible for the "
+    "one-time test, pending independent authorization. Eligibility is not a "
+    "profitability claim; buy-and-hold remains the benchmark, not an alpha strategy."
+)
+
 _DECISION_KEYS: frozenset[str] = frozenset(
     {
         "decision_schema_version",
@@ -147,6 +154,11 @@ class ResearchDecision:
                 "a rejected_for_test_promotion decision requires the candidate to "
                 "underperform the benchmark in validation"
             )
+        if self.decision == ELIGIBLE_FOR_TEST_PROMOTION and candidate < benchmark:
+            raise ValueError(
+                "an eligible_for_test_promotion decision requires the candidate not to "
+                "underperform the benchmark in validation"
+            )
         require_hex64("protocol_sha256", self.protocol_sha256)
         require_fingerprint("dataset_content_fingerprint", self.dataset_content_fingerprint)
         require_commit_sha("pre_registered_commit_sha", self.pre_registered_commit_sha)
@@ -212,13 +224,16 @@ def _validation_return(results: BenchmarkResults, strategy: str) -> float:
 
 
 def build_research_decision_from_results(results: BenchmarkResults) -> ResearchDecision:
-    """Derive the rejection decision from the committed train/validation results.
+    """Deterministically derive the promotion decision from the results.
 
     Reads the exact validation total returns for the candidate and the
     benchmark straight from the validated results model, so every number is
-    preserved bit-for-bit; computes the percentage-point gap; and binds the
-    protocol, dataset fingerprint, and pre-registered commit the results
-    already carry.
+    preserved bit-for-bit; applies the pre-declared criterion (rejected if
+    and only if the candidate underperformed the benchmark in validation);
+    computes the percentage-point gap; and binds the protocol, dataset
+    fingerprint, and pre-registered commit the results already carry.
+    There is no discretionary input: the same results always rebuild the
+    same decision bytes, so an edited verdict can never match a rebuild.
     """
     if results.test_evaluation_id is not None:
         raise ResearchDecisionError(
@@ -226,12 +241,13 @@ def build_research_decision_from_results(results: BenchmarkResults) -> ResearchD
         )
     benchmark = _validation_return(results, BENCHMARK_STRATEGY)
     candidate = _validation_return(results, CANDIDATE_STRATEGY)
+    rejected = candidate < benchmark
     return ResearchDecision(
         decision_schema_version=DECISION_SCHEMA_VERSION,
         subject=CANDIDATE_STRATEGY,
-        decision=REJECTED_FOR_TEST_PROMOTION,
+        decision=REJECTED_FOR_TEST_PROMOTION if rejected else ELIGIBLE_FOR_TEST_PROMOTION,
         criterion=PROMOTION_CRITERION,
-        rationale=_REJECTION_RATIONALE,
+        rationale=_REJECTION_RATIONALE if rejected else _ELIGIBLE_RATIONALE,
         validation_benchmark_return=benchmark,
         validation_candidate_return=candidate,
         validation_gap_pp=(candidate - benchmark) * 100.0,
@@ -248,8 +264,13 @@ def render_research_decision(decision: ResearchDecision) -> str:
     benchmark_pct = f"{decision.validation_benchmark_return * 100:+.2f}%"
     candidate_pct = f"{decision.validation_candidate_return * 100:+.2f}%"
     gap = f"{decision.validation_gap_pp:+.2f} pp"
+    title = (
+        "# Validation-stage decision: fixed SMA(20/50) eligible for the one-time test"
+        if decision.decision == ELIGIBLE_FOR_TEST_PROMOTION
+        else "# Validation-stage decision: fixed SMA(20/50) not promoted to test"
+    )
     lines = [
-        "# Validation-stage decision: fixed SMA(20/50) not promoted to test",
+        title,
         "",
         f"- Subject: `{decision.subject}` (fixed 20/50 windows — nothing tuned)",
         f"- Decision: **{decision.decision}**",

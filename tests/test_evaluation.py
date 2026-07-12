@@ -8,7 +8,6 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +16,13 @@ import pytest
 
 import eth_research
 import eth_research._atomic
-from conftest import CoinbasePipeline, build_coinbase_pipeline
+from conftest import (
+    CoinbasePipeline,
+    GitPipeline,
+    _git,
+    build_coinbase_pipeline,
+    make_git_pipeline,
+)
 from eth_research import evaluation
 from eth_research.backtest import run_backtest as real_run_backtest
 from eth_research.data.builder import (
@@ -34,10 +39,7 @@ from eth_research.data.lock import (
 )
 from eth_research.data.provenance import sha256_bytes, sha256_file
 from eth_research.environment import (
-    AUTHORITATIVE_RUNTIME_ROLE,
-    ENVIRONMENT_SCHEMA_VERSION,
     RuntimeContract,
-    current_runtime_snapshot,
 )
 from eth_research.evaluation import (
     CANONICAL_LEDGER_RELPATH,
@@ -305,100 +307,9 @@ class TestResultAssemblyAndRendering:
             publish_benchmark_reports(results, "# hand-edited report\n", tmp_path / "reports")
 
 
-def _git(repo: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
-    )
-    return result.stdout.strip()
-
-
-@dataclass
-class GitPipeline:
-    """An isolated git repo with committed M2B artifacts and ignored data."""
-
-    repo_root: Path
-    manifest_path: Path
-    protocol_path: Path
-    lock_path: Path
-    evidence_path: Path
-    ledger_path: Path
-    output_dir: Path
-    raw_chunk_dir: Path
-    derived_csv: Path
-    head: str
-    protocol: BenchmarkProtocol
-    lock: DatasetLock
-
-
-def make_git_pipeline(root: Path) -> GitPipeline:
-    repo = root / "repo"
-    repo.mkdir(parents=True)
-    _git(repo, "init", "-q")
-    _git(repo, "config", "user.email", "test@example.com")
-    _git(repo, "config", "user.name", "Test Researcher")
-    (repo / ".gitignore").write_text("data/\nreports/\n", encoding="utf-8")
-
-    pipe = build_coinbase_pipeline(repo / "data")
-    research = repo / "research" / "m2b"
-    research.mkdir(parents=True)
-
-    evidence_path = research / "acquisition_evidence.json"
-    write_acquisition_evidence(pipe.evidence, evidence_path)
-    lock = build_dataset_lock(
-        pipe.build.manifest,
-        manifest_sha256=pipe.manifest_sha256,
-        acquisition_evidence_sha256=sha256_file(evidence_path),
-    )
-    lock_path = research / "dataset_lock.json"
-    lock_path.write_bytes(lock.to_json_bytes())
-    protocol = build_benchmark_protocol(lock, package_version=eth_research.__version__)
-    protocol_path = research / "protocol.json"
-    protocol_path.write_bytes(protocol.to_json_bytes())
-    # A committed runtime contract so the guarded path can record its SHA in
-    # the ledger (the inner path hashes it for provenance; semantic runtime
-    # verification is the public wrapper's job, tested separately).
-    snap = current_runtime_snapshot()
-    contract = RuntimeContract(
-        environment_schema_version=ENVIRONMENT_SCHEMA_VERSION,
-        runtime_role=AUTHORITATIVE_RUNTIME_ROLE,
-        package_version=snap.package_version,
-        python_implementation=snap.python_implementation,
-        python_version=snap.python_version,
-        python_cache_tag=snap.python_cache_tag,
-        os_family=snap.os_family,
-        machine=snap.machine,
-        numpy_version=snap.numpy_version,
-        pandas_version=snap.pandas_version,
-        pyarrow_version=snap.pyarrow_version,
-        uv_lock_sha256="0" * 64,
-        pyproject_sha256="0" * 64,
-    )
-    (research / "runtime_contract.json").write_bytes(contract.to_json_bytes())
-    ledger_path = research / "test_evaluations.jsonl"
-    ledger_path.write_bytes(b"")
-
-    _git(repo, "add", ".gitignore", "research")
-    _git(repo, "commit", "-q", "-m", "pre-register benchmark protocol")
-    head = _git(repo, "rev-parse", "HEAD")
-    return GitPipeline(
-        repo_root=repo,
-        manifest_path=pipe.build.manifest_path,
-        protocol_path=protocol_path,
-        lock_path=lock_path,
-        evidence_path=evidence_path,
-        ledger_path=ledger_path,
-        output_dir=repo / "reports" / "m2b",
-        raw_chunk_dir=pipe.chunk_dir,
-        derived_csv=pipe.derived_csv,
-        head=head,
-        protocol=protocol,
-        lock=lock,
-    )
-
-
-@pytest.fixture
-def git_pipeline(tmp_path: Path) -> GitPipeline:
-    return make_git_pipeline(tmp_path)
+# The synthetic dossier repository fixture (GitPipeline / make_git_pipeline /
+# git_pipeline / rejected_git_pipeline) lives in conftest.py and is shared
+# with the readiness and architecture tests.
 
 
 def run_git(
@@ -919,6 +830,7 @@ def make_real_checkout(tmp_path: Path) -> GitPipeline:
         raw_chunk_dir=pipe.chunk_dir,
         derived_csv=pipe.derived_csv,
         head=head,
+        registration_head=head,
         protocol=protocol,
         lock=lock,
     )
@@ -995,6 +907,11 @@ class TestPackageSourceBinding:
     """C1: prove the running package is the code committed at the authorized HEAD."""
 
     def test_metadata_without_source_is_rejected(self, git_pipeline: GitPipeline) -> None:
+        # Strip the fixture's committed package source: a repo carrying only
+        # metadata must be rejected with the dedicated message.
+        _git(git_pipeline.repo_root, "rm", "-q", "-r", "src")
+        _git(git_pipeline.repo_root, "commit", "-q", "-m", "drop source")
+        new_head = _git(git_pipeline.repo_root, "rev-parse", "HEAD")
         with pytest.raises(EvaluationError, match="metadata but not the package source"):
             run_authorized_benchmark(
                 repo_root=git_pipeline.repo_root,
@@ -1005,7 +922,7 @@ class TestPackageSourceBinding:
                 output_dir=git_pipeline.output_dir,
                 raw_chunk_dir=git_pipeline.raw_chunk_dir,
                 derived_csv=git_pipeline.derived_csv,
-                authorization=head_auth(git_pipeline),
+                authorization=make_authorization(code_commit_sha=new_head),
                 clock=make_clock(),
             )
         assert read_ledger(git_pipeline.ledger_path) == ()
