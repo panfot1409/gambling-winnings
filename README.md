@@ -260,17 +260,21 @@ the one-time test evaluation is still pending independent authorization.
   results serialize deterministically (undefined ratios as JSON `null`)
   and the Markdown report is generated only from the validated JSON model.
 
-Status: **Real data is frozen and independently replayable. The fixed
-SMA(20/50) materially underperformed buy-and-hold in the validation period
-and was not promoted to test. The holdout remains untouched and sealed for
-future research.** The dataset, its full provenance chain
+Status: **Real data is frozen, independently replayable, and independently
+reacquired with a bit-identical canonical content match (audit-002,
+GitHub Actions run 29206830064). The fixed SMA(20/50) materially
+underperformed buy-and-hold in the validation period (-203.19 pp) and is
+recorded `rejected_for_test_promotion` — scientifically ineligible, so the
+authorized test is honestly not ready. The holdout remains untouched and
+sealed.** The dataset, its full provenance chain
 (`acquisition_evidence.json`, `dataset_manifest.json`, `quality_report.json`,
 `dataset_lock.json`, `runtime_contract.json`, `holdout_identity.json`,
-`discovery_decision.json`, `frozen_dossier.json`, `protocol.json`), the
-train/validation dossier, and the recorded rejection decision
-(`validation_decision.json`) are all committed. The one-time **test**
-evaluation is **not run** — test execution is deferred because validation
-already supplied enough evidence to reject the fixed SMA specification —
+`discovery_decision.json`, `frozen_dossier.json`,
+`reacquisition_audit.json`, `protocol.json`), the train/validation dossier,
+and the recorded rejection decision (`validation_decision.json`) are all
+committed, and the production evaluator itself verifies the complete
+frozen-dossier graph before the ledger boundary. The one-time **test**
+evaluation is **not run** — the committed scientific decision refuses it —
 and the committed test-access ledger is byte-empty (SHA-256
 `e3b0c442…b7852b855`, zero events). See
 [research/m2b/README.md](research/m2b/README.md),

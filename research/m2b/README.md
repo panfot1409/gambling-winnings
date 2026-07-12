@@ -7,7 +7,7 @@ canonical Parquet are reproducible and live under the git-ignored `data/`
 tree. The remaining files here are metadata, hashes, the frozen contracts,
 the train/validation dossier, and the test-access history.
 
-## Status: real data acquired and frozen; test evaluation still pending
+## Status: data frozen and independently reacquired; candidate rejected; test not run
 
 Real ETH-USD daily history was acquired through a tightly scoped GitHub
 Actions clean room (public, unauthenticated `GET /products/ETH-USD/candles`
@@ -17,15 +17,16 @@ gap-free.
 
 | file | status | meaning |
 | --- | --- | --- |
-| `test_evaluations.jsonl` | **present, empty — pristine** | Append-only test-access ledger (schema v2). Empty means **no access to the real test segment has ever occurred**. Any recorded event permanently consumes the one-time evaluation of that **holdout identity** (the specific test candles) — changing the protocol, lock, version, schema, evaluation id, or wording does not restore freshness. Empty SHA-256 `e3b0c442…b7852b855`. |
+| `test_evaluations.jsonl` | **present, empty — pristine** | Append-only test-access ledger (schema v3: every event also pins the frozen dossier, holdout identity, validation decision, train/validation results, the protocol-registration commit, and the authorized evaluation code commit). Empty means **no access to the real test segment has ever occurred**. Any recorded event permanently consumes the one-time evaluation of that **holdout identity** (the specific test candles) — changing the protocol, lock, version, schema, evaluation id, or wording does not restore freshness. Empty SHA-256 `e3b0c442…b7852b855`. |
 | `acquisition_request_plan.json` | **frozen** | The 13-window request plan tiling `[2016-05-23, 2026-07-12)`; plan SHA-256 `f8f77ddb…ebf83`. |
-| `raw/coinbase/<attempt>/` | **committed** | Exact raw public candle responses + a signed `acquisition_receipt.json` per attempt (`discovery-001` early-history probe; `coinbase-eth-usd-001` the 13-chunk full history). Aggregate well under the 10 MiB cap. |
+| `raw/coinbase/<attempt>/` | **committed** | Exact raw public candle responses + a strict `acquisition_receipt.json` per attempt (`discovery-001` early-history probe; `coinbase-eth-usd-001` the frozen canonical 13-chunk history; `coinbase-eth-usd-audit-002` the independent integrity reacquisition). Aggregate well under the 10 MiB cap. |
 | `discovery_decision.json` / `EARLIEST_CONTINUOUS_DECISION.md` | **machine-verified** | The 2016-05-23 start decision, re-derived and cross-checked from the raw discovery bytes (first candle 2016-05-18; absent 2016-05-21/22; gap-free from 2016-05-23). The Markdown is rendered from the model. |
 | `acquisition_evidence.json` | **frozen** | Deterministic record binding every raw response to the derived OHLCV file; evidence SHA-256 `27ba6a60…bbbd2d0b`. |
 | `dataset_manifest.json` / `quality_report.json` | **byte anchors** | The canonical manifest and quality report, committed byte-for-byte and bound to the lock's `manifest_sha256` / `quality_report_sha256`. |
 | `dataset_lock.json` | **frozen** | Metadata+hash pin of the canonical dataset — content fingerprint `sha256:273f89eb…dd5718`, 3702 rows. |
 | `runtime_contract.json` | **frozen** | The authoritative benchmark runtime — CPython 3.12.3, numpy 2.5.1, pandas 3.0.3, pyarrow 25.0.0 — pinned to the committed `uv.lock`/`pyproject.toml`. |
 | `holdout_identity.json` | **frozen** | The durable identity of the one-time test holdout — instrument, test window `2024-07-01 .. 2026-07-11` (741 rows), and an integrity-only test content fingerprint. |
+| `reacquisition_audit.json` | **recorded** | The independent integrity reacquisition (audit-002): GitHub Actions run 29206830064 fulfilled the unchanged canonical plan as a distinct attempt; the offline comparison found a `canonical_content_match` — 3702 rows, identical bounds, byte-identical derived CSV, identical content fingerprint, zero differing candles — and the canonical data was **not** replaced. |
 | `frozen_dossier.json` | **frozen** | The single graph manifest (dossier schema v3): the SHA-256 of every artifact above and below, both raw-bundle fingerprints (discovery + primary), the protocol-registration commit, and an explicit independent-audit status object. `verify_frozen_dossier` re-derives the graph semantically — hash-bound and tamper-evident, not cryptographic authentication. |
 | `protocol.json` | **pre-registered** | The pinned benchmark protocol bound to the dataset lock; protocol SHA-256 `a75a9cf5…f26a81`. Committed with green CI **before** any train/validation number was computed. |
 | `train_validation_results.json` / `train_validation_report.md` | **recorded** | The train/validation-only benchmark (both strategies), generated purely from the validated result model. The test segment is reported only by its mechanical boundaries. |
@@ -54,10 +55,16 @@ plot, or price summary may be computed on the test segment, and nobody
 looks at test rows to change parameters. Train and validation may be
 evaluated repeatedly; the SMA windows stay 20/50 regardless. The one-time
 evaluation runs only through
-`eth_research.evaluation.run_authorized_benchmark`, which proves the running
-package and numerical runtime match the frozen commit and contract, verifies
-the full provenance chain, writes `started` to this ledger before any test
-signal exists, and records completion or failure honestly. Reruns are
+`eth_research.evaluation.run_authorized_benchmark`, whose pre-ledger checks
+are the one shared preparation path (`prepare_authorized_evaluation`, also
+behind the read-only readiness command): it proves the running package and
+numerical runtime match the frozen commit and contract, refuses a candidate
+whose committed validation decision is not `eligible_for_test_promotion`,
+verifies the complete frozen-dossier graph semantically (anchors, discovery
+re-verified from raw, raw-to-derived reconstruction, holdout identity
+recomputed byte-for-byte, and the train/validation results, report, and
+decision regenerated byte-for-byte), writes `started` to this ledger before
+any test signal exists, and records completion or failure honestly. Reruns are
 refused forever; contamination is recorded, never laundered.
 
 The write-capable acquisition workflow that fetched this data is **retired**
@@ -65,11 +72,33 @@ now that the data is frozen — the branch keeps no dormant data-overwrite
 machine and no workflow can contact Coinbase; a future acquisition needs a
 new, separately reviewed workflow commit.
 
-**Outcome:** real data is frozen and independently replayable. The fixed
-SMA(20/50) materially underperformed buy-and-hold in the validation period
-and was **not** promoted to test, so the one-time test evaluation is
-deliberately **deferred** — validation already supplied enough evidence to
-reject that fixed specification. The holdout remains untouched and sealed
-for genuinely new, pre-registered, non-overlapping future research. The
-v0.2.0 remote-tag restriction remains recorded release debt and is
-unrelated to the data work.
+**Outcome:** real data is frozen, independently replayable, and now also
+independently **reacquired**: audit-002 (run 29206830064) fulfilled the
+unchanged canonical plan and matched the canonical content bit-for-bit.
+The fixed SMA(20/50) materially underperformed buy-and-hold in the
+validation period (candidate minus benchmark: **-203.19 pp**) and is
+`rejected_for_test_promotion` — scientifically ineligible, so
+`authorized_test_ready` is honestly **false** and the one-time test
+evaluation was **not run**. Two distinct commits are recorded and never
+conflated: the protocol-registration commit
+`b89627463775bf32698effb5adea1270a5927890` (when `protocol.json` was
+frozen, before any train/validation number existed) and, only if a test
+evaluation ever runs, the authorized evaluation code commit (the HEAD the
+evaluator executes from).
+
+**Holdout policy.** This untouched holdout may be consumed at most once,
+and only for a genuinely new candidate: developed exclusively on
+pre-holdout (train/validation) data, under a new pre-registered protocol
+and promotion criterion committed in advance, with demonstrated robustness
+on pre-holdout data and an independent authorization. Strictly-later
+(post-2026-07-11) data becomes mandatory only **after** this holdout is
+consumed, or for any prospective evaluation program.
+
+**Limitation (stated plainly).** Computational sealing is not epistemic
+sealing: the 2024-07-01 .. 2026-07-11 test window lies in the human past,
+and anyone working today carries knowledge of that period. The gates prove
+no code touched the test rows; they cannot erase human memory. Conclusions
+from any future consumption of this holdout must be discounted
+accordingly — which is why a prospective program on strictly-later data is
+the stronger design. The v0.2.0 remote-tag restriction remains recorded
+release debt and is unrelated to the data work.

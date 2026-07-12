@@ -144,3 +144,30 @@ reaches a strategy or engine; the ledger changes; any gate or final CI
 stays red. Never: run the real authorized benchmark, override the rejected
 decision, generate a test report, tune parameters, replace canonical data,
 merge PR #3, mark it ready for review, or tag v0.3.0.
+
+## Execution outcome (recorded after the fact)
+
+Every defect B1-B7 is closed on this branch: one shared fail-closed
+preparation gate serves production and readiness; the committed scientific
+rejection refuses production before any strategy, signal, or backtest; the
+committed holdout identity is recomputed byte-for-byte inside the gate;
+`frozen_dossier.json` (schema v3) is the single graph manifest, verified
+semantically (61 checks on the real dossier) and enforced in production;
+the ledger is at schema v3 with the full authorization context; the
+registration commit `b89627463775bf32698effb5adea1270a5927890` is bound to
+git history so a relabelled registration cannot verify.
+
+audit-002 was executed for real: the temporary hardened workflow ran once
+as <https://github.com/panfot1409/gambling-winnings/actions/runs/29206830064>
+(source commit `9bb824b`), committed attempt `coinbase-eth-usd-audit-002`,
+and the offline comparison recorded `canonical_content_match` — 3702 rows,
+2016-05-23 .. 2026-07-11, byte-identical derived CSV, identical content
+fingerprint, zero differing candles; even every raw body matched
+byte-for-byte, which is stronger than required. The canonical data was not
+replaced, and the workflow and trigger were retired again immediately.
+
+Terminal state: integrity ready; holdout fresh; SMA(20/50)
+`rejected_for_test_promotion` (-203.19 pp vs buy-and-hold in validation);
+`authorized_test_ready` **false**; the test-access ledger byte-empty
+(SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`).
+No test row ever reached a strategy or the engine.

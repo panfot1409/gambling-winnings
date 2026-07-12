@@ -1,5 +1,18 @@
 # Milestone 2B — Pre-Holdout Fortress, Provenance V2, and Scientific Decision Gate
 
+> **Superseded in part.** This document records the pre-holdout fortress
+> milestone as executed. The follow-up closure
+> (`docs/M2B_FINAL_CLOSURE.md`) later replaced the additive
+> `provenance_v2.json` anchor with the single `frozen_dossier.json` graph
+> manifest (schema v3, verified semantically and enforced inside the
+> production gate), corrected the commit terminology
+> (`protocol_registration_commit_sha` = `b89627463775bf32698effb5adea1270a5927890`
+> vs. the runtime `authorized_evaluation_code_commit_sha`), and executed
+> the independent reacquisition audit-002. Where this file says a graph
+> "authenticates" artifacts, read: hash-bound and tamper-evident within
+> this repository — there is no signing key and no external attestation.
+
+
 The real Coinbase ETH-USD dataset is frozen and independently replayable
 (3702 gap-free daily candles, 2016-05-23 .. 2026-07-11, content fingerprint
 `sha256:273f89eb…dd5718`). Before the one-time test holdout can ever be
@@ -190,7 +203,7 @@ discrepancy and never replaces canonical data; the ledger is never repaired.
 | P1 (receipt/graph) | closed | additive `provenance_v2.json` + `verify_provenance_graph` authenticates the receipt, raw-bundle fingerprint, and every artifact; forging any receipt field breaks the anchor. |
 | P1 (discovery) | closed | `DiscoveryDecision` re-derived and verified from the raw discovery bytes; Markdown rendered from the model. |
 | P1 (sidecar) | closed | strict `_SidecarRecord` via the shared decoder; dup-key/stringified/non-UTC/etc. rejected. |
-| P1 (workflow) | partial | write-capable, Coinbase-contacting workflow **retired** (F3); the authorized integrity-only reacquisition (F2, `coinbase-eth-usd-audit-002`) was **not run** — it needs outbound Coinbase egress unavailable in this environment. |
+| P1 (workflow) | closed (final closure) | write-capable workflow **retired** (F3). The integrity-only reacquisition (F2, `coinbase-eth-usd-audit-002`) was later **executed** through a temporary hardened one-shot GitHub Actions workflow — run 29206830064 — with a `canonical_content_match`; the temporary workflow was retired again immediately (see `docs/M2B_FINAL_CLOSURE.md` and `research/m2b/reacquisition_audit.json`). |
 | P5 | closed | `dataset_manifest.json` + `quality_report.json` tracked as byte anchors bound to the lock. |
 | P6 | closed | shared read-only `test_readiness` preflight; proven test-free and non-mutating. |
 | P7 | closed | verify-after-publish before `completed`; overwrite never bypasses a consumed holdout; result-bundle hash. |
@@ -204,10 +217,12 @@ green: (1) provenance v2 is delivered as an **additive** graph anchor
 the same facts (receipt, plan, raw-bundle, runtime, holdout, discovery,
 manifest, quality, lock, protocol) and closes the forged-receipt exploit
 without a destabilising cascade through the frozen committed artifacts;
-(2) the acquisition workflow is retired straight to its sealed end state
-because the authorized reacquisition (F2) cannot run without Coinbase
-egress here — the frozen data's integrity rests on the provenance graph and
-the offline replay, which is already proven.
+(2) at the time of this milestone the acquisition workflow was retired
+straight to its sealed end state and the reacquisition (F2) was recorded as
+not performed. That deferral was based on an insufficient claim (direct
+container egress denial), and the **final closure corrected it**: audit-002
+was executed through GitHub Actions (run 29206830064) and matched the
+canonical content bit-for-bit — see `docs/M2B_FINAL_CLOSURE.md`.
 
 The one-time test set was **not** evaluated. Test execution is deferred
 because validation already supplied enough evidence to reject the fixed
