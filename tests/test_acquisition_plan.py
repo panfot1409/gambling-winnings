@@ -88,12 +88,28 @@ class TestWindowValidation:
             valid_window(filename="chunk_0000.txt")
 
     def test_non_utc_window_is_rejected(self) -> None:
+        # Construct directly: a naive window_start must be refused by the
+        # window itself (the requested params are never reached).
         with pytest.raises(ValueError, match="window_start"):
-            valid_window(window_start=pd.Timestamp("2016-05-18"))  # naive
+            AcquisitionWindow(
+                ordinal=0,
+                window_start=pd.Timestamp("2016-05-18"),  # naive
+                window_end=START + 100 * DAY,
+                requested_start="2016-05-18T00:00:00Z",
+                requested_end="2016-08-25T00:00:00Z",
+                filename="chunk_0000.json",
+            )
 
     def test_unaligned_window_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="window_start"):
-            valid_window(window_start=pd.Timestamp("2016-05-18T06:00:00Z"))
+            AcquisitionWindow(
+                ordinal=0,
+                window_start=pd.Timestamp("2016-05-18T06:00:00Z"),  # not day-aligned
+                window_end=START + 100 * DAY,
+                requested_start="2016-05-18T06:00:00Z",
+                requested_end="2016-08-25T00:00:00Z",
+                filename="chunk_0000.json",
+            )
 
     def test_swapped_window_bounds_are_rejected(self) -> None:
         with pytest.raises(ValueError, match="must precede"):
