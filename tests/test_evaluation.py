@@ -795,8 +795,14 @@ def make_real_checkout(tmp_path: Path) -> GitPipeline:
         ignore=shutil.ignore_patterns("__pycache__"),
     )
 
-    pipe = build_coinbase_pipeline(clone / "data")
+    # The real repo now carries frozen M2B artifacts; drop them from the clone
+    # so this integration checkout stands on its own synthetic dataset.
     research = clone / "research" / "m2b"
+    if research.exists():
+        shutil.rmtree(research)
+    research.mkdir(parents=True)
+
+    pipe = build_coinbase_pipeline(clone / "data")
     evidence_path = research / "acquisition_evidence.json"
     write_acquisition_evidence(pipe.evidence, evidence_path)
     lock = build_dataset_lock(
@@ -815,7 +821,7 @@ def make_real_checkout(tmp_path: Path) -> GitPipeline:
     runtime_contract_path.write_bytes(RuntimeContract.for_current_runtime(clone).to_json_bytes())
     (research / "test_evaluations.jsonl").write_bytes(b"")  # pristine, already tracked
 
-    _git_out(clone, "add", "src", "research/m2b")
+    _git_out(clone, "add", "-A", "src", "research/m2b")
     _git_out(clone, "commit", "--quiet", "-m", "sync source and pre-register benchmark protocol")
     head = _git_out(clone, "rev-parse", "HEAD")
     return GitPipeline(
