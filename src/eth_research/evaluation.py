@@ -36,7 +36,7 @@ from eth_research import __version__
 from eth_research._atomic import publish_atomically
 from eth_research.backtest import BacktestResult, CostModel, run_backtest
 from eth_research.data.builder import LoadedDataset, load_canonical_dataset
-from eth_research.data.lock import DatasetLock, load_dataset_lock, verify_dataset_lock
+from eth_research.data.lock import DatasetLock
 from eth_research.data.provenance import (
     content_fingerprint,
     require_nonempty_str,
@@ -49,8 +49,11 @@ from eth_research.data.validation import (
 from eth_research.decision import (
     ELIGIBLE_FOR_TEST_PROMOTION,
     ResearchDecision,
-    build_research_decision_from_results,
-    render_research_decision,
+)
+from eth_research.dossier import (
+    FROZEN_DOSSIER_RELPATH,
+    DossierError,
+    verify_frozen_dossier,
 )
 from eth_research.environment import (
     CANONICAL_RUNTIME_CONTRACT_RELPATH,
@@ -71,7 +74,6 @@ from eth_research.gitcheck import (
 from eth_research.holdout import (
     HoldoutConflict,
     HoldoutIdentity,
-    build_holdout_identity,
     find_holdout_conflicts,
 )
 from eth_research.ledger import (
@@ -93,9 +95,7 @@ from eth_research.protocol import (
     QualityWarningSummary,
     SegmentMetrics,
     SplitBoundary,
-    verify_protocol,
 )
-from eth_research.provenance_v2 import ProvenanceV2Error, verify_provenance_graph
 from eth_research.splits import DataSplits, chronological_split
 from eth_research.strategies import BuyAndHold, MovingAverageCrossover, Strategy
 
@@ -502,8 +502,6 @@ def _verify_runtime_environment(repo_root: Path, head: str) -> None:
         raise EvaluationError(f"runtime verification failed: {exc}") from exc
 
 
-FROZEN_DOSSIER_RELPATH: str = "research/m2b/provenance_v2.json"
-"""The committed provenance/dossier manifest every access is bound to."""
 HOLDOUT_IDENTITY_RELPATH: str = "research/m2b/holdout_identity.json"
 VALIDATION_DECISION_RELPATH: str = "research/m2b/validation_decision.json"
 VALIDATION_DECISION_MD_RELPATH: str = "research/m2b/validation_decision.md"
@@ -580,29 +578,32 @@ def prepare_authorized_evaluation(
     4. verify the frozen runtime contract and committed lockfiles;
     5. require a clean tracked tree;
     6. require canonical, non-symlinked, committed-at-``HEAD`` tracked
-       inputs (protocol, lock, evidence, ledger, holdout identity,
-       train/validation results + report, validation decision JSON + MD);
+       inputs (protocol, lock, evidence, ledger, frozen dossier, holdout
+       identity, train/validation results + report, validation decision
+       JSON + MD);
     7. read the canonical ledger strictly;
     8. parse the committed validation decision and — in production mode —
        refuse a non-eligible verdict *before any strategy, signal, or
        backtest exists* (a forged "eligible" verdict is re-proven and
-       refused at step 14, still before any ledger append);
-    9. run the complete provenance-graph verifier;
-    10. semantically reconstruct the raw responses into the derived OHLCV
-        data and verify the dataset lock + evidence chain;
-    11. load the canonical dataset internally and recompute its content
-        fingerprint against the protocol/lock bindings;
-    12. recompute the :class:`HoldoutIdentity` from the verified dataset +
-        protocol and require exact byte equality with the committed
-        ``holdout_identity.json``;
-    13. run the holdout conflict policy against the canonical ledger and
-        check output collisions (both refuse, in production mode, before
-        any engine work);
-    14. regenerate the train/validation-only results and report and require
-        exact byte equality with the committed artifacts, then rebuild the
-        validation decision from those exact results and require exact byte
-        equality with the committed decision JSON and Markdown;
-    15. return the immutable prepared context.
+       refused at step 11, still before any ledger append);
+    9. parse the committed holdout identity, run the conflict policy
+       against the canonical ledger, and — in production mode — refuse a
+       consumed holdout before any engine work;
+    10. check output collisions (production refusal, still before any
+        engine work);
+    11. run the complete frozen-dossier graph verifier — the single graph
+        implementation, shared verbatim with :mod:`eth_research.dossier`:
+        every artifact anchor, the discovery decision re-verified from its
+        raw response, the semantic raw→derived reconstruction, the dataset
+        reload with fingerprint/protocol bindings, the holdout identity
+        recomputed and byte-compared against the committed file, the
+        protocol-registration commit, byte-exact regeneration of the
+        train/validation results and report, the validation decision
+        rebuilt byte-exactly (JSON and Markdown), the explicit independent
+        audit section, and one package-version chain;
+    12. re-run the conflict scan on the recomputed holdout identity and
+        return the immutable prepared context assembled from the
+        verifier's verified models.
     """
     production = authorization_commit is not None
     if raw_chunk_dir is None or derived_csv is None:
@@ -665,23 +666,31 @@ def prepare_authorized_evaluation(
             f"the canonical ledger resolves outside the repository: {exc}"
         ) from exc
 
+    from eth_research import m2b_report  # local import: m2b_report imports this module
+
     protocol_file = Path(protocol_path)
     lock_file = Path(lock_path)
     evidence_file = Path(acquisition_evidence_path)
+    dossier_file = root / FROZEN_DOSSIER_RELPATH
     holdout_file = root / HOLDOUT_IDENTITY_RELPATH
+    results_file = root / m2b_report.RESULTS_RELPATH
+    report_file = root / m2b_report.REPORT_RELPATH
     decision_file = root / VALIDATION_DECISION_RELPATH
     decision_md_file = root / VALIDATION_DECISION_MD_RELPATH
     _require_bytes_match_head(root, head, protocol_file, "protocol")
     _require_bytes_match_head(root, head, lock_file, "dataset lock")
     _require_bytes_match_head(root, head, evidence_file, "acquisition evidence")
     _require_bytes_match_head(root, head, ledger, "test-access ledger")
+    _require_bytes_match_head(root, head, dossier_file, "frozen dossier")
     _require_bytes_match_head(root, head, holdout_file, "holdout identity")
+    _require_bytes_match_head(root, head, results_file, "train/validation results")
+    _require_bytes_match_head(root, head, report_file, "train/validation report")
     _require_bytes_match_head(root, head, decision_file, "validation decision")
     _require_bytes_match_head(root, head, decision_md_file, "validation decision report")
     events = read_ledger(ledger)
 
     # 8. The committed scientific decision gates production before ANY
-    # strategy, signal, or backtest — including the permitted
+    # strategy, signal, or backtest — including the dossier verifier's
     # train/validation regeneration below.
     try:
         committed_decision = ResearchDecision.from_json_bytes(decision_file.read_bytes())
@@ -695,63 +704,29 @@ def prepare_authorized_evaluation(
             "authorization object cannot override the recorded decision."
         )
 
-    # 9. The complete provenance graph — never optional, in either mode.
-    try:
-        verify_provenance_graph(root).raise_for_status()
-    except ProvenanceV2Error as exc:
-        raise EvaluationError(f"provenance graph verification failed: {exc}") from exc
-    except (OSError, ValueError) as exc:
-        raise EvaluationError(f"provenance graph could not be verified: {exc}") from exc
+    # 9. Freshness against the committed identity — refused (in production)
+    # before any engine work, so no refusal ever runs a strategy or
+    # backtest. The dossier verifier below proves this exact committed
+    # identity recomputes byte-for-byte from the verified dataset, and the
+    # scan re-runs on the recomputed identity afterwards.
+    def _refuse_consumed(found: tuple[HoldoutConflict, ...]) -> None:
+        if production and found:
+            first = found[0]
+            raise EvaluationError(
+                f"test evaluation refused: this holdout was already consumed by evaluation "
+                f"id {first.evaluation_id!r} ({first.event!r}) — {'; '.join(first.reasons)}. "
+                "The one-time test holdout is permanently consumed; changing the protocol, "
+                "lock, package version, schema, evaluation id, commit, or wording does not "
+                "restore it. Design a genuinely new, non-overlapping holdout instead."
+            )
 
-    # 10. Lock + evidence + semantic raw→derived reconstruction.
-    lock = load_dataset_lock(lock_file)
     try:
-        protocol = BenchmarkProtocol.from_json_bytes(protocol_file.read_bytes())
+        committed_holdout = HoldoutIdentity.from_json_bytes(holdout_file.read_bytes())
     except ValueError as exc:
-        raise EvaluationError(f"invalid protocol {protocol_file.name!r}: {exc}") from exc
-    manifest, _evidence = verify_dataset_lock(
-        lock,
-        manifest_path=manifest_path,
-        acquisition_evidence_path=evidence_file,
-        raw_chunk_dir=raw_chunk_dir,
-        derived_csv=derived_csv,
-    )
+        raise EvaluationError(f"invalid committed holdout identity: {exc}") from exc
+    _refuse_consumed(find_holdout_conflicts(events, committed_holdout))
 
-    # 11. Internal dataset reload + fingerprint/protocol bindings.
-    dataset = load_canonical_dataset(manifest_path)
-    if dataset.manifest != manifest:
-        raise EvaluationError("the reloaded dataset's manifest is not the manifest the lock pins")
-    verify_protocol(protocol, lock)
-    _verify_dataset_matches_protocol(dataset, protocol)
-    _recheck_frame_fingerprint(dataset)
-    if content_fingerprint(dataset.frame) != protocol.dataset_content_fingerprint:
-        raise EvaluationError(
-            "the reloaded frame's recomputed fingerprint is not the protocol's dataset "
-            "fingerprint — refusing to run the one-time evaluation on unverified data"
-        )
-
-    # 12. The committed holdout identity must recompute exactly from the
-    # verified dataset + protocol — hashing the file is not enough.
-    holdout = build_holdout_identity(dataset, protocol)
-    if holdout.to_json_bytes() != holdout_file.read_bytes():
-        raise EvaluationError(
-            "the committed holdout_identity.json does not recompute from the verified "
-            "dataset and protocol — refusing to treat a hand-edited holdout identity as "
-            "the sealed one"
-        )
-
-    # 13. Freshness and output collisions — refused (in production) before
-    # any engine work, so no refusal ever runs a strategy or backtest.
-    conflicts = find_holdout_conflicts(events, holdout)
-    if production and conflicts:
-        first = conflicts[0]
-        raise EvaluationError(
-            f"test evaluation refused: this holdout was already consumed by evaluation id "
-            f"{first.evaluation_id!r} ({first.event!r}) — {'; '.join(first.reasons)}. The "
-            "one-time test holdout is permanently consumed; changing the protocol, lock, "
-            "package version, schema, evaluation id, commit, or wording does not restore it. "
-            "Design a genuinely new, non-overlapping holdout instead."
-        )
+    # 10. Output collisions — also refused before any engine work.
     directory = Path(output_dir)
     existing = [
         path
@@ -766,49 +741,48 @@ def prepare_authorized_evaluation(
             f"{directory} would not be overwritten. Resolve the output location first."
         )
 
-    # 14. Development evidence must regenerate byte-for-byte: the
-    # train/validation results, the report, and the research decision are
-    # re-derived and compared against the committed artifacts, so a forged
-    # verdict or edited number can never survive to the ledger boundary.
-    from eth_research import m2b_report  # local import: m2b_report imports this module
+    # 11. The complete frozen-dossier graph — never optional, in either
+    # mode, and the single graph implementation: every artifact anchor, the
+    # discovery decision re-verified from raw, the semantic raw→derived
+    # reconstruction, the dataset reload + fingerprint/protocol bindings,
+    # the holdout identity recomputed and byte-compared, the registration
+    # commit, byte-exact regeneration of the train/validation results and
+    # report, the decision rebuilt byte-exactly, and the audit section. A
+    # forged verdict or edited number can never survive to the ledger
+    # boundary.
+    try:
+        verification = verify_frozen_dossier(
+            root,
+            manifest_path=manifest_path,
+            raw_chunk_dir=raw_chunk_dir,
+            derived_csv=derived_csv,
+        )
+        verification.raise_for_status()
+    except DossierError as exc:
+        raise EvaluationError(str(exc)) from exc
+    except (OSError, ValueError) as exc:
+        raise EvaluationError(f"the frozen dossier could not be verified: {exc}") from exc
+    if (
+        verification.protocol is None
+        or verification.lock is None
+        or verification.dataset is None
+        or verification.holdout is None
+        or verification.decision is None
+        or verification.train_validation is None
+        or verification.protocol_registration_commit_sha is None
+    ):  # pragma: no cover - a passing verification always carries its models
+        raise EvaluationError("frozen dossier verification returned an incomplete context")
+    protocol = verification.protocol
+    lock = verification.lock
+    dataset = verification.dataset
+    holdout = verification.holdout
+    rebuilt_decision = verification.decision
+    train_validation = verification.train_validation
+    registration = verification.protocol_registration_commit_sha
 
-    registration = m2b_report.committed_protocol_registration_commit(root)
-    if not is_commit_object(root, registration):
-        raise EvaluationError(
-            f"the recorded protocol-registration commit {registration!r} is not a real "
-            "commit in this repository"
-        )
-    train_validation = evaluate_train_validation(dataset, protocol)
-    results = build_benchmark_results(
-        dataset,
-        protocol,
-        train_validation,
-        protocol_registration_commit_sha=registration,
-        test_evaluation_id=None,
-    )
-    if results.to_json_bytes() != (root / m2b_report.RESULTS_RELPATH).read_bytes():
-        raise EvaluationError(
-            "the committed train/validation results do not regenerate byte-for-byte from "
-            "the verified dataset and protocol"
-        )
-    if m2b_report.render_report(root, results) != (root / m2b_report.REPORT_RELPATH).read_text(
-        encoding="utf-8"
-    ):
-        raise EvaluationError(
-            "the committed train/validation report does not regenerate byte-for-byte from "
-            "the regenerated results"
-        )
-    rebuilt_decision = build_research_decision_from_results(results)
-    if rebuilt_decision.to_json_bytes() != decision_file.read_bytes():
-        raise EvaluationError(
-            "the committed validation decision does not rebuild byte-for-byte from the "
-            "regenerated results — an edited verdict or number cannot authorize anything"
-        )
-    if render_research_decision(rebuilt_decision) != decision_md_file.read_text(encoding="utf-8"):
-        raise EvaluationError(
-            "the committed validation decision report does not rebuild byte-for-byte from "
-            "the decision model"
-        )
+    # 12. Defence in depth: the scan again, on the recomputed identity.
+    conflicts = find_holdout_conflicts(events, holdout)
+    _refuse_consumed(conflicts)
 
     return PreparedEvaluation(
         repo_root=root,
@@ -827,12 +801,10 @@ def prepare_authorized_evaluation(
         runtime_contract_sha256=sha256_bytes(
             (root / CANONICAL_RUNTIME_CONTRACT_RELPATH).read_bytes()
         ),
-        frozen_dossier_sha256=sha256_bytes((root / FROZEN_DOSSIER_RELPATH).read_bytes()),
+        frozen_dossier_sha256=sha256_bytes(dossier_file.read_bytes()),
         holdout_identity_sha256=sha256_bytes(holdout_file.read_bytes()),
         validation_decision_sha256=sha256_bytes(decision_file.read_bytes()),
-        train_validation_results_sha256=sha256_bytes(
-            (root / m2b_report.RESULTS_RELPATH).read_bytes()
-        ),
+        train_validation_results_sha256=sha256_bytes(results_file.read_bytes()),
         protocol_registration_commit_sha=registration,
         output_collision=output_collision,
     )

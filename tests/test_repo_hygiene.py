@@ -189,12 +189,26 @@ def test_raw_aggregate_size_is_bounded() -> None:
     assert total <= RAW_AGGREGATE_CAP_BYTES, f"raw aggregate {total} exceeds the 10 MiB cap"
 
 
-def test_provenance_graph_verifies_at_head() -> None:
-    """The committed provenance-v2 graph must verify against every artifact."""
-    from eth_research.provenance_v2 import verify_provenance_graph
+def test_frozen_dossier_anchors_every_artifact() -> None:
+    """The committed frozen dossier must equal a fresh build byte-for-byte.
 
-    result = verify_provenance_graph(REPO_ROOT)
-    assert result.ok, result.errors
+    Byte equality with :func:`build_frozen_dossier` proves every artifact
+    hash, both raw-bundle fingerprints, and the registration commit without
+    reconstructing the dataset; the full *semantic* graph (re-derivation,
+    holdout recompute, byte-exact evidence regeneration) runs in
+    ``test_dossier.py`` and inside every shared-gate preparation.
+    """
+    from eth_research.dossier import build_frozen_dossier
+
+    committed = (REPO_ROOT / "research/m2b/frozen_dossier.json").read_bytes()
+    assert committed == build_frozen_dossier(REPO_ROOT).to_json_bytes()
+
+
+def test_exactly_one_graph_manifest_is_tracked() -> None:
+    """The frozen dossier is the single graph file — no competing anchors."""
+    assert _tracked_files("research/m2b/frozen_dossier.json")
+    assert not (REPO_ROOT / "research/m2b/provenance_v2.json").exists()
+    assert _tracked_files("research/m2b/provenance_v2.json") == []
 
 
 def test_committed_manifest_and_quality_anchor_the_lock() -> None:

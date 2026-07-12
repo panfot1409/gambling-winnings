@@ -672,7 +672,9 @@ class TestInternalDatasetReverification:
         tampered = quality_path.read_bytes().replace(b'"row_count"', b'"row_kount"', 1)
         assert tampered != quality_path.read_bytes()
         quality_path.write_bytes(tampered)
-        with pytest.raises(DatasetVerificationError, match="quality report"):
+        # The shared gate surfaces the dataset-layer refusal as its own
+        # structured error; the reason text is preserved verbatim.
+        with pytest.raises(EvaluationError, match="quality report"):
             run_git(git_pipeline, head_auth(git_pipeline))
         assert read_ledger(git_pipeline.ledger_path) == ()
 

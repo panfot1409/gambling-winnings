@@ -119,12 +119,15 @@ def render_report(repo_root: str | Path, results: BenchmarkResults) -> str:
     return core + "\n" + "\n".join(lines)
 
 
-def _protocol_commit(repo_root: Path) -> str:
-    """The commit that froze the protocol — a fixed, reproducible reference.
+def protocol_commit_from_history(repo_root: str | Path) -> str:
+    """The commit that actually froze the protocol, from git history.
 
-    Used only to *create* the dossier (locally, with full git history); the
-    value is then recorded in the results model, so verification never needs
-    git history (which is shallow on CI checkouts).
+    The last commit touching ``research/m2b/protocol.json`` — the honest
+    source of the registration commit. Creation records this value in the
+    results model; the dossier verifier requires the recorded value to
+    equal this history-derived one, so the registration label cannot be
+    quietly repointed at some other commit. Requires full git history
+    (CI checkouts fetch with ``fetch-depth: 0``).
     """
     result = subprocess.run(
         ["git", "-C", str(repo_root), "log", "-1", "--format=%H", "--", PROTOCOL_RELPATH],
@@ -141,9 +144,10 @@ def _protocol_commit(repo_root: Path) -> str:
 def committed_protocol_registration_commit(repo_root: str | Path) -> str:
     """Read the pre-registered commit recorded in the committed results.
 
-    Verification regenerates from this stored provenance fact rather than
-    from git history, so ``--check`` is deterministic on any (even shallow)
-    checkout.
+    The stored provenance fact: ``--check`` regenerates from it on any
+    checkout. The dossier verifier additionally requires it to equal
+    :func:`protocol_commit_from_history`, so the label and the history can
+    never quietly diverge.
     """
     results = BenchmarkResults.from_json_bytes((Path(repo_root) / RESULTS_RELPATH).read_bytes())
     return results.protocol_registration_commit_sha
@@ -176,10 +180,12 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.repo_root)
 
     try:
-        # Verification regenerates from the recorded provenance commit (no git
-        # history needed); creation derives it from local git history.
+        # Verification regenerates from the recorded provenance commit;
+        # creation derives it from local git history.
         commit = (
-            committed_protocol_registration_commit(root) if args.check else _protocol_commit(root)
+            committed_protocol_registration_commit(root)
+            if args.check
+            else protocol_commit_from_history(root)
         )
         results_bytes, report_md = generate(
             root, args.manifest, protocol_registration_commit_sha=commit

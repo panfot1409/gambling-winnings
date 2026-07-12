@@ -381,7 +381,7 @@ def commit_synthetic_dossier(repo: Path, pipe: CoinbasePipeline) -> GitPipeline:
     The repository must already contain its package source and lockfiles
     (either a fixture copy or a real clone). Two commits are produced: the
     pre-registration commit (all inputs) and the development-evidence
-    commit (results, report, decision, provenance anchor) — mirroring the
+    commit (results, report, decision, frozen dossier) — mirroring the
     real repository's history shape.
     """
     from eth_research import m2b_report
@@ -392,10 +392,10 @@ def commit_synthetic_dossier(repo: Path, pipe: CoinbasePipeline) -> GitPipeline:
         render_research_decision,
     )
     from eth_research.discovery import build_discovery_decision, render_discovery_decision
+    from eth_research.dossier import build_frozen_dossier
     from eth_research.environment import RuntimeContract
     from eth_research.holdout import build_holdout_identity
     from eth_research.protocol import BenchmarkResults, build_benchmark_protocol
-    from eth_research.provenance_v2 import build_provenance_v2
 
     research = repo / "research" / "m2b"
     research.mkdir(parents=True, exist_ok=True)
@@ -453,9 +453,9 @@ def commit_synthetic_dossier(repo: Path, pipe: CoinbasePipeline) -> GitPipeline:
     (research / "validation_decision.md").write_text(
         render_research_decision(research_decision), encoding="utf-8"
     )
-    (research / "provenance_v2.json").write_bytes(build_provenance_v2(repo).to_json_bytes())
+    (research / "frozen_dossier.json").write_bytes(build_frozen_dossier(repo).to_json_bytes())
     _git(repo, "add", "-A")
-    _git(repo, "commit", "-q", "-m", "record development evidence and provenance anchor")
+    _git(repo, "commit", "-q", "-m", "record development evidence and frozen dossier")
     head = _git(repo, "rev-parse", "HEAD")
 
     return GitPipeline(

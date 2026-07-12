@@ -1,6 +1,6 @@
 """One shared fail-closed preparation gate for production and readiness.
 
-Regression suite for the closure defects: the provenance graph is now a
+Regression suite for the closure defects: the dossier graph is now a
 production gate (B1), production and readiness run the identical shared
 preparation (B2), the committed holdout identity must recompute exactly
 (B3, production side), and the committed scientific rejection refuses the
@@ -18,10 +18,10 @@ import pytest
 from conftest import GitPipeline, _git
 from eth_research import evaluation, test_readiness
 from eth_research.backtest import run_backtest as real_run_backtest
+from eth_research.dossier import DossierError
+from eth_research.dossier import verify_frozen_dossier as real_verify_graph
 from eth_research.evaluation import EvaluationError
 from eth_research.ledger import read_ledger
-from eth_research.provenance_v2 import ProvenanceV2Error
-from eth_research.provenance_v2 import verify_provenance_graph as real_verify_graph
 from test_evaluation import head_auth, make_authorization, prepare_git, run_git
 
 
@@ -58,7 +58,7 @@ class TestForgedReceiptStopsProduction:
         head = _commit_all(git_pipeline, "forge receipt metadata")
 
         called = _engine_spy(monkeypatch)
-        with pytest.raises(EvaluationError, match="provenance graph"):
+        with pytest.raises(EvaluationError, match="frozen dossier verification failed"):
             run_git(git_pipeline, make_authorization(code_commit_sha=head))
         assert called["n"] == 0
         assert git_pipeline.ledger_path.read_bytes() == b""
@@ -73,11 +73,11 @@ class TestSharedGateArchitecture:
     ) -> None:
         calls = {"n": 0}
 
-        def counting(root: Any) -> Any:
+        def counting(root: Any, **kwargs: Any) -> Any:
             calls["n"] += 1
-            return real_verify_graph(root)
+            return real_verify_graph(root, **kwargs)
 
-        monkeypatch.setattr(evaluation, "verify_provenance_graph", counting)
+        monkeypatch.setattr(evaluation, "verify_frozen_dossier", counting)
 
         # Readiness path.
         with mock.patch.object(
@@ -102,10 +102,10 @@ class TestSharedGateArchitecture:
     def test_a_check_added_to_the_shared_gate_affects_both_paths(
         self, git_pipeline: GitPipeline, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        def poisoned(root: Any) -> Any:
-            raise ProvenanceV2Error("injected shared-gate check")
+        def poisoned(root: Any, **kwargs: Any) -> Any:
+            raise DossierError("injected shared-gate check")
 
-        monkeypatch.setattr(evaluation, "verify_provenance_graph", poisoned)
+        monkeypatch.setattr(evaluation, "verify_frozen_dossier", poisoned)
 
         with mock.patch.object(
             test_readiness,
@@ -142,7 +142,7 @@ class TestHoldoutIdentityMustRecompute:
     def test_forged_identity_with_refreshed_anchor_is_refused(
         self, git_pipeline: GitPipeline, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from eth_research.provenance_v2 import build_provenance_v2
+        from eth_research.dossier import build_frozen_dossier
 
         holdout_file = git_pipeline.repo_root / "research/m2b/holdout_identity.json"
         payload = json.loads(holdout_file.read_bytes())
@@ -150,10 +150,10 @@ class TestHoldoutIdentityMustRecompute:
         holdout_file.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-        # The attacker also refreshes the anchor so every hash check passes.
-        anchor = git_pipeline.repo_root / "research/m2b/provenance_v2.json"
-        anchor.write_bytes(build_provenance_v2(git_pipeline.repo_root).to_json_bytes())
-        head = _commit_all(git_pipeline, "forge holdout identity + refresh anchor")
+        # The attacker also refreshes the dossier so every hash check passes.
+        anchor = git_pipeline.repo_root / "research/m2b/frozen_dossier.json"
+        anchor.write_bytes(build_frozen_dossier(git_pipeline.repo_root).to_json_bytes())
+        head = _commit_all(git_pipeline, "forge holdout identity + refresh dossier")
 
         called = _engine_spy(monkeypatch)
         with pytest.raises(EvaluationError, match="does not recompute"):

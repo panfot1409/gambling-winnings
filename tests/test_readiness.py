@@ -108,7 +108,7 @@ class TestSyntheticStates:
     def test_integrity_failure_is_reported_not_raised(self, git_pipeline: GitPipeline) -> None:
         # Tamper a committed artifact: readiness must degrade to an honest
         # integrity_ready=False report, never a crash.
-        anchor = git_pipeline.repo_root / "research/m2b/provenance_v2.json"
+        anchor = git_pipeline.repo_root / "research/m2b/frozen_dossier.json"
         anchor.write_bytes(anchor.read_bytes().replace(b"sha256:", b"sha256:", 1) + b"\n")
         report = _synthetic_report(git_pipeline)
         assert report.integrity_ready is False
