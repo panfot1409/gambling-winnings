@@ -1,0 +1,170 @@
+{
+  "acquisition_schema_version": 1,
+  "adapter_algorithm": "coinbase-candles-v1",
+  "chunks": [
+    {
+      "filename": "coinbase-eth-usd-1d_0000_20160523_20170318.json",
+      "requested_end": "2017-03-17T00:00:00Z",
+      "requested_start": "2016-05-23T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:47+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "43f65217211a667dbc1f6298888ad201d2a86fa581674bae2d2442fc077449c3",
+      "window_end": "2017-03-18T00:00:00+00:00",
+      "window_start": "2016-05-23T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0001_20170318_20180111.json",
+      "requested_end": "2018-01-10T00:00:00Z",
+      "requested_start": "2017-03-18T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:48+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "504c65ac9cc929714d2c8600907121e77df680d275aa41bf36dda2f720185fe3",
+      "window_end": "2018-01-11T00:00:00+00:00",
+      "window_start": "2017-03-18T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0002_20180111_20181106.json",
+      "requested_end": "2018-11-05T00:00:00Z",
+      "requested_start": "2018-01-11T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:49+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "3f6ec33f8482ddebdbfe6d444de7e8710e59ef4c81f58c081e852e6f4b759c6c",
+      "window_end": "2018-11-06T00:00:00+00:00",
+      "window_start": "2018-01-11T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0003_20181106_20190901.json",
+      "requested_end": "2019-08-31T00:00:00Z",
+      "requested_start": "2018-11-06T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:50+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "d28ba4dc2a293ed8e557e6c3236134730f6a406179302d5eeef2b026bb28687f",
+      "window_end": "2019-09-01T00:00:00+00:00",
+      "window_start": "2018-11-06T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0004_20190901_20200626.json",
+      "requested_end": "2020-06-25T00:00:00Z",
+      "requested_start": "2019-09-01T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:52+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "f274559511928389ed2ff669e53a8116475d0e188562c8a452ba781fa0a28328",
+      "window_end": "2020-06-26T00:00:00+00:00",
+      "window_start": "2019-09-01T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0005_20200626_20210421.json",
+      "requested_end": "2021-04-20T00:00:00Z",
+      "requested_start": "2020-06-26T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:53+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "c7c486cfaf1de0e03732c2a8559a0c8d38c5a2e3d18c79fbc7fa4c2319d8941a",
+      "window_end": "2021-04-21T00:00:00+00:00",
+      "window_start": "2020-06-26T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0006_20210421_20220214.json",
+      "requested_end": "2022-02-13T00:00:00Z",
+      "requested_start": "2021-04-21T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:54+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "51ae02af5e44292513161095e489c57d966805f6b67967968b1c1cca405a3fd9",
+      "window_end": "2022-02-14T00:00:00+00:00",
+      "window_start": "2021-04-21T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0007_20220214_20221210.json",
+      "requested_end": "2022-12-09T00:00:00Z",
+      "requested_start": "2022-02-14T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:55+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "1ea541210b51c0daacba7b6c54f828c771a5d8ac251955eda0ac78b59942c3d2",
+      "window_end": "2022-12-10T00:00:00+00:00",
+      "window_start": "2022-02-14T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0008_20221210_20231005.json",
+      "requested_end": "2023-10-04T00:00:00Z",
+      "requested_start": "2022-12-10T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:56+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "b35868677429cdcd86cea171f0d983d738eb50ee24dd6cc86bc13a64ccfa924c",
+      "window_end": "2023-10-05T00:00:00+00:00",
+      "window_start": "2022-12-10T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0009_20231005_20240730.json",
+      "requested_end": "2024-07-29T00:00:00Z",
+      "requested_start": "2023-10-05T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:58+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "fb584af24f52e60f560ed253e4101c4cf4acc350094026690d9f00e0777c16c3",
+      "window_end": "2024-07-30T00:00:00+00:00",
+      "window_start": "2023-10-05T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0010_20240730_20250525.json",
+      "requested_end": "2025-05-24T00:00:00Z",
+      "requested_start": "2024-07-30T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:10:59+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "2b7c62fa8dec9c9014cc1c1c693ccd81d5fec615564facf7c7ad395bad6fa90e",
+      "window_end": "2025-05-25T00:00:00+00:00",
+      "window_start": "2024-07-30T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0011_20250525_20260320.json",
+      "requested_end": "2026-03-19T00:00:00Z",
+      "requested_start": "2025-05-25T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:11:00+00:00",
+      "row_count": 299,
+      "rows_before_window": 0,
+      "sha256": "f91f36cbb5bf04dad3234c2b0be604f90892a251489c5e8d898dbb5913d8bde1",
+      "window_end": "2026-03-20T00:00:00+00:00",
+      "window_start": "2025-05-25T00:00:00+00:00"
+    },
+    {
+      "filename": "coinbase-eth-usd-1d_0012_20260320_20260712.json",
+      "requested_end": "2026-07-11T00:00:00Z",
+      "requested_start": "2026-03-20T00:00:00Z",
+      "retrieved_at": "2026-07-12T05:11:02+00:00",
+      "row_count": 114,
+      "rows_before_window": 0,
+      "sha256": "4304b18088bd969dc723bc36b72ab22fde8589b2ee978a8591576c89c6330bb7",
+      "window_end": "2026-07-12T00:00:00+00:00",
+      "window_start": "2026-03-20T00:00:00+00:00"
+    }
+  ],
+  "derived_filename": "coinbase-eth-usd-1d.csv",
+  "derived_row_count": 3702,
+  "derived_sha256": "90872962bd7a9a96df9de33384b23067f4254374c0cfac741a0a018fac422d86",
+  "documentation_url": "https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles",
+  "endpoint": "https://api.exchange.coinbase.com/products/ETH-USD/candles",
+  "first_open_time": "2016-05-23T00:00:00+00:00",
+  "granularity_seconds": 86400,
+  "last_open_time": "2026-07-11T00:00:00+00:00",
+  "no_repair": true,
+  "overall_end": "2026-07-12T00:00:00+00:00",
+  "overall_start": "2016-05-23T00:00:00+00:00",
+  "package_version": "0.3.0",
+  "product": "ETH-USD",
+  "total_rows_before_window": 0,
+  "transformations": [
+    "map Coinbase candle arrays [time, low, high, open, close, volume] to columns timestamp, open, high, low, close, volume",
+    "reverse a strictly descending response to chronological order",
+    "exclude response rows before the request's declared window start (counted per chunk)",
+    "serialize to CSV with ISO-8601 UTC open times and round-trip float formatting"
+  ],
+  "venue": "coinbase-exchange"
+}
