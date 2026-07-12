@@ -14,11 +14,16 @@ access is public and permanent:
   malformed or truncated line is loud contamination evidence, never
   silently skipped.
 
-Schema v2 records the **holdout identity** the access consumed
+Schema v3 records the **holdout identity** the access consumed
 (``holdout_id``, ``test_content_fingerprint``, instrument, test window) so
-that freshness is a property of the candles evaluated, not of a mutable
-``(dataset_lock, protocol)`` pair. The production ledger is byte-empty, so
-v2 is adopted before the first real event; there is no v1↔v2 migration.
+that freshness is a property of the candles evaluated, plus the complete
+authorization context: the frozen dossier-manifest hash, the committed
+holdout-identity/validation-decision/train-validation-results hashes, and
+the two distinct commit concepts — ``protocol_registration_commit_sha``
+(the immutable registration fact) and
+``authorized_evaluation_code_commit_sha`` (the reviewed revision the
+evaluation actually ran at). The production ledger is byte-empty, so v3 is
+adopted before the first real event; there is no migration or repair path.
 
 ``append_event`` strictly re-validates the entire ledger before every
 append, then appends the new line with a single write and fsync, so a
@@ -53,7 +58,7 @@ from eth_research.data.validation import (
     require_positive_int,
 )
 
-LEDGER_SCHEMA_VERSION: int = 2
+LEDGER_SCHEMA_VERSION: int = 3
 
 EVENT_STARTED: str = "started"
 EVENT_COMPLETED: str = "completed"
@@ -84,7 +89,12 @@ _EVENT_KEYS: frozenset[str] = frozenset(
         "dataset_lock_sha256",
         "protocol_sha256",
         "runtime_contract_sha256",
-        "code_commit_sha",
+        "frozen_dossier_sha256",
+        "holdout_identity_sha256",
+        "validation_decision_sha256",
+        "train_validation_results_sha256",
+        "protocol_registration_commit_sha",
+        "authorized_evaluation_code_commit_sha",
         "reason",
         "event_time_utc",
         "results_json_sha256",
@@ -108,7 +118,12 @@ _SHARED_FIELDS: tuple[str, ...] = (
     "dataset_lock_sha256",
     "protocol_sha256",
     "runtime_contract_sha256",
-    "code_commit_sha",
+    "frozen_dossier_sha256",
+    "holdout_identity_sha256",
+    "validation_decision_sha256",
+    "train_validation_results_sha256",
+    "protocol_registration_commit_sha",
+    "authorized_evaluation_code_commit_sha",
     "reason",
 )
 """Fields that must be identical across all events of one evaluation id."""
@@ -137,7 +152,12 @@ class LedgerEvent:
     dataset_lock_sha256: str
     protocol_sha256: str
     runtime_contract_sha256: str
-    code_commit_sha: str
+    frozen_dossier_sha256: str
+    holdout_identity_sha256: str
+    validation_decision_sha256: str
+    train_validation_results_sha256: str
+    protocol_registration_commit_sha: str
+    authorized_evaluation_code_commit_sha: str
     reason: str
     event_time_utc: pd.Timestamp
     results_json_sha256: str | None
@@ -187,7 +207,16 @@ class LedgerEvent:
         require_hex64("dataset_lock_sha256", self.dataset_lock_sha256)
         require_hex64("protocol_sha256", self.protocol_sha256)
         require_hex64("runtime_contract_sha256", self.runtime_contract_sha256)
-        require_commit_sha("code_commit_sha", self.code_commit_sha)
+        require_hex64("frozen_dossier_sha256", self.frozen_dossier_sha256)
+        require_hex64("holdout_identity_sha256", self.holdout_identity_sha256)
+        require_hex64("validation_decision_sha256", self.validation_decision_sha256)
+        require_hex64("train_validation_results_sha256", self.train_validation_results_sha256)
+        require_commit_sha(
+            "protocol_registration_commit_sha", self.protocol_registration_commit_sha
+        )
+        require_commit_sha(
+            "authorized_evaluation_code_commit_sha", self.authorized_evaluation_code_commit_sha
+        )
         require_nonempty_str("reason", self.reason)
         require_aware_timestamp("event_time_utc", self.event_time_utc)
         if event == EVENT_COMPLETED:
@@ -220,7 +249,12 @@ class LedgerEvent:
             "dataset_lock_sha256": self.dataset_lock_sha256,
             "protocol_sha256": self.protocol_sha256,
             "runtime_contract_sha256": self.runtime_contract_sha256,
-            "code_commit_sha": self.code_commit_sha,
+            "frozen_dossier_sha256": self.frozen_dossier_sha256,
+            "holdout_identity_sha256": self.holdout_identity_sha256,
+            "validation_decision_sha256": self.validation_decision_sha256,
+            "train_validation_results_sha256": self.train_validation_results_sha256,
+            "protocol_registration_commit_sha": self.protocol_registration_commit_sha,
+            "authorized_evaluation_code_commit_sha": self.authorized_evaluation_code_commit_sha,
             "reason": self.reason,
             "event_time_utc": self.event_time_utc.isoformat(),
             "results_json_sha256": self.results_json_sha256,
@@ -274,7 +308,12 @@ class LedgerEvent:
             dataset_lock_sha256=payload["dataset_lock_sha256"],
             protocol_sha256=payload["protocol_sha256"],
             runtime_contract_sha256=payload["runtime_contract_sha256"],
-            code_commit_sha=payload["code_commit_sha"],
+            frozen_dossier_sha256=payload["frozen_dossier_sha256"],
+            holdout_identity_sha256=payload["holdout_identity_sha256"],
+            validation_decision_sha256=payload["validation_decision_sha256"],
+            train_validation_results_sha256=payload["train_validation_results_sha256"],
+            protocol_registration_commit_sha=payload["protocol_registration_commit_sha"],
+            authorized_evaluation_code_commit_sha=payload["authorized_evaluation_code_commit_sha"],
             reason=payload["reason"],
             event_time_utc=parse_timestamp_field("event_time_utc", payload["event_time_utc"]),
             results_json_sha256=payload["results_json_sha256"],

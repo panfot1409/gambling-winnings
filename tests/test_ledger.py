@@ -45,7 +45,12 @@ def make_event(
         "dataset_lock_sha256": "2" * 64,
         "protocol_sha256": "3" * 64,
         "runtime_contract_sha256": "6" * 64,
-        "code_commit_sha": "a" * 40,
+        "frozen_dossier_sha256": "a" * 64,
+        "holdout_identity_sha256": "b" * 64,
+        "validation_decision_sha256": "c" * 64,
+        "train_validation_results_sha256": "d" * 64,
+        "protocol_registration_commit_sha": "9" * 40,
+        "authorized_evaluation_code_commit_sha": "a" * 40,
         "reason": "authorized one-time Milestone 2B test evaluation",
         "event_time_utc": T0 + pd.Timedelta(minutes=minutes),
         "results_json_sha256": "4" * 64 if completed else None,
@@ -113,9 +118,10 @@ class TestEventModel:
         with pytest.raises(ValueError, match="bool is rejected"):
             make_event(ledger_schema_version=True)
 
-    def test_stale_v1_schema_version_is_rejected(self) -> None:
+    @pytest.mark.parametrize("stale", [1, 2])
+    def test_stale_schema_versions_are_rejected(self, stale: int) -> None:
         with pytest.raises(ValueError, match="unsupported ledger schema version"):
-            make_event(ledger_schema_version=1)
+            make_event(ledger_schema_version=stale)
 
     def test_naive_event_time_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="timezone-aware"):
@@ -187,6 +193,12 @@ class TestReadLedger:
         completed = make_event("completed", minutes=1, protocol_sha256="9" * 64)
         ledger_path.write_bytes(make_event("started").to_json_line() + completed.to_json_line())
         with pytest.raises(LedgerError, match="'protocol_sha256' disagrees"):
+            read_ledger(ledger_path)
+
+    def test_dossier_hash_disagreement_with_started_is_rejected(self, ledger_path: Path) -> None:
+        completed = make_event("completed", minutes=1, frozen_dossier_sha256="e" * 64)
+        ledger_path.write_bytes(make_event("started").to_json_line() + completed.to_json_line())
+        with pytest.raises(LedgerError, match="'frozen_dossier_sha256' disagrees"):
             read_ledger(ledger_path)
 
     def test_holdout_id_disagreement_with_started_is_rejected(self, ledger_path: Path) -> None:

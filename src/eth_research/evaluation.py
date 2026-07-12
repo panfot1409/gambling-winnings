@@ -502,6 +502,8 @@ def _verify_runtime_environment(repo_root: Path, head: str) -> None:
         raise EvaluationError(f"runtime verification failed: {exc}") from exc
 
 
+FROZEN_DOSSIER_RELPATH: str = "research/m2b/provenance_v2.json"
+"""The committed provenance/dossier manifest every access is bound to."""
 HOLDOUT_IDENTITY_RELPATH: str = "research/m2b/holdout_identity.json"
 VALIDATION_DECISION_RELPATH: str = "research/m2b/validation_decision.json"
 VALIDATION_DECISION_MD_RELPATH: str = "research/m2b/validation_decision.md"
@@ -531,6 +533,10 @@ class PreparedEvaluation:
     protocol_sha256: str
     lock_sha256: str
     runtime_contract_sha256: str
+    frozen_dossier_sha256: str
+    holdout_identity_sha256: str
+    validation_decision_sha256: str
+    train_validation_results_sha256: str
     protocol_registration_commit_sha: str
     output_collision: bool
 
@@ -821,6 +827,12 @@ def prepare_authorized_evaluation(
         runtime_contract_sha256=sha256_bytes(
             (root / CANONICAL_RUNTIME_CONTRACT_RELPATH).read_bytes()
         ),
+        frozen_dossier_sha256=sha256_bytes((root / FROZEN_DOSSIER_RELPATH).read_bytes()),
+        holdout_identity_sha256=sha256_bytes(holdout_file.read_bytes()),
+        validation_decision_sha256=sha256_bytes(decision_file.read_bytes()),
+        train_validation_results_sha256=sha256_bytes(
+            (root / m2b_report.RESULTS_RELPATH).read_bytes()
+        ),
         protocol_registration_commit_sha=registration,
         output_collision=output_collision,
     )
@@ -975,7 +987,12 @@ def _run_bound_benchmark(
             dataset_lock_sha256=lock_sha,
             protocol_sha256=protocol_sha,
             runtime_contract_sha256=runtime_sha,
-            code_commit_sha=authorization.code_commit_sha,
+            frozen_dossier_sha256=prepared.frozen_dossier_sha256,
+            holdout_identity_sha256=prepared.holdout_identity_sha256,
+            validation_decision_sha256=prepared.validation_decision_sha256,
+            train_validation_results_sha256=prepared.train_validation_results_sha256,
+            protocol_registration_commit_sha=prepared.protocol_registration_commit_sha,
+            authorized_evaluation_code_commit_sha=authorization.code_commit_sha,
             reason=authorization.reason,
             event_time_utc=tick(),
             results_json_sha256=extra.get("results_json_sha256"),

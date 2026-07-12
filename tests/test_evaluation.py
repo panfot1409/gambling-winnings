@@ -385,7 +385,8 @@ class TestGuardedOneTimeEvaluation:
         assert [event.event for event in events] == ["started", "completed"]
         assert events[0].test_first_open_time == START + 96 * DAY
         assert events[0].test_last_open_time == START + 119 * DAY
-        assert events[0].code_commit_sha == git_pipeline.head
+        assert events[0].authorized_evaluation_code_commit_sha == git_pipeline.head
+        assert events[0].protocol_registration_commit_sha == git_pipeline.registration_head
         published = run.results_path.read_bytes()
         report_bytes = run.report_path.read_bytes()
         assert events[1].results_json_sha256 == sha256_bytes(published)
@@ -427,7 +428,12 @@ class TestGuardedOneTimeEvaluation:
             dataset_lock_sha256="8" * 64,
             protocol_sha256="7" * 64,
             runtime_contract_sha256="6" * 64,
-            code_commit_sha="b" * 40,
+            frozen_dossier_sha256="5" * 64,
+            holdout_identity_sha256="4" * 64,
+            validation_decision_sha256="3" * 64,
+            train_validation_results_sha256="2" * 64,
+            protocol_registration_commit_sha="c" * 40,
+            authorized_evaluation_code_commit_sha="b" * 40,
             reason="a previous unrelated evaluation",
             event_time_utc=T0,
             results_json_sha256=None,
