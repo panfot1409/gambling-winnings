@@ -21,6 +21,7 @@ from conftest import (
     GitPipeline,
     _git,
     build_coinbase_pipeline,
+    commit_synthetic_dossier,
     make_git_pipeline,
 )
 from eth_research import evaluation
@@ -30,14 +31,13 @@ from eth_research.data.builder import (
     LoadedDataset,
     load_canonical_dataset,
 )
-from eth_research.data.coinbase import write_acquisition_evidence
 from eth_research.data.lock import (
     DatasetLock,
     DatasetLockError,
     build_dataset_lock,
     verify_dataset_lock,
 )
-from eth_research.data.provenance import sha256_bytes, sha256_file
+from eth_research.data.provenance import sha256_bytes
 from eth_research.environment import (
     RuntimeContract,
 )
@@ -317,11 +317,12 @@ def run_git(
     authorization: OneTimeTestAuthorization | None,
     **overrides: Any,
 ) -> Any:
-    # Downstream behaviour tests target the inner function directly: the
-    # synthetic git_pipeline is not a checkout of the running package, so the
-    # public run_authorized_benchmark's package-source binding (C1) would
-    # reject it. The source binding has its own dedicated tests, including a
-    # genuine real-checkout integration test.
+    # Downstream behaviour tests target the inner function directly, binding
+    # the package source to the fixture's own committed copy of
+    # src/eth_research — the identical shared preparation path then executes
+    # end-to-end against the synthetic repository. The production wiring of
+    # the *interpreter's* import root is covered by the dedicated
+    # real-checkout integration tests of run_authorized_benchmark.
     kwargs: dict[str, Any] = {
         "repo_root": gp.repo_root,
         "manifest_path": gp.manifest_path,
@@ -333,9 +334,28 @@ def run_git(
         "raw_chunk_dir": gp.raw_chunk_dir,
         "derived_csv": gp.derived_csv,
         "clock": make_clock(),
+        "running_package_root": gp.package_source_root,
     }
     kwargs.update(overrides)
     return evaluation._run_bound_benchmark(**kwargs)
+
+
+def prepare_git(gp: GitPipeline, **overrides: Any) -> Any:
+    """Run the shared preparation path read-only against a fixture repo."""
+    kwargs: dict[str, Any] = {
+        "repo_root": gp.repo_root,
+        "manifest_path": gp.manifest_path,
+        "protocol_path": gp.protocol_path,
+        "lock_path": gp.lock_path,
+        "acquisition_evidence_path": gp.evidence_path,
+        "output_dir": gp.output_dir,
+        "raw_chunk_dir": gp.raw_chunk_dir,
+        "derived_csv": gp.derived_csv,
+        "running_package_root": gp.package_source_root,
+        "authorization_commit": None,
+    }
+    kwargs.update(overrides)
+    return evaluation.prepare_authorized_evaluation(**kwargs)
 
 
 def head_auth(
@@ -790,50 +810,16 @@ def make_real_checkout(tmp_path: Path) -> GitPipeline:
         ignore=shutil.ignore_patterns("__pycache__"),
     )
 
-    # The real repo now carries frozen M2B artifacts; drop them from the clone
-    # so this integration checkout stands on its own synthetic dataset.
+    # The real repo carries the frozen REAL dossier; drop it so this
+    # integration checkout stands on its own synthetic dossier, built and
+    # committed by the same shared fixture path the synthetic repos use.
     research = clone / "research" / "m2b"
     if research.exists():
         shutil.rmtree(research)
-    research.mkdir(parents=True)
-
-    pipe = build_coinbase_pipeline(clone / "data")
-    evidence_path = research / "acquisition_evidence.json"
-    write_acquisition_evidence(pipe.evidence, evidence_path)
-    lock = build_dataset_lock(
-        pipe.build.manifest,
-        manifest_sha256=pipe.manifest_sha256,
-        acquisition_evidence_sha256=sha256_file(evidence_path),
-    )
-    lock_path = research / "dataset_lock.json"
-    lock_path.write_bytes(lock.to_json_bytes())
-    protocol = build_benchmark_protocol(lock, package_version=eth_research.__version__)
-    protocol_path = research / "protocol.json"
-    protocol_path.write_bytes(protocol.to_json_bytes())
-    # The frozen runtime contract, generated from this checkout's own lockfiles
-    # under the running interpreter, so the runtime gate passes in-checkout.
-    runtime_contract_path = research / "runtime_contract.json"
-    runtime_contract_path.write_bytes(RuntimeContract.for_current_runtime(clone).to_json_bytes())
-    (research / "test_evaluations.jsonl").write_bytes(b"")  # pristine, already tracked
-
-    _git_out(clone, "add", "-A", "src", "research/m2b")
-    _git_out(clone, "commit", "--quiet", "-m", "sync source and pre-register benchmark protocol")
-    head = _git_out(clone, "rev-parse", "HEAD")
-    return GitPipeline(
-        repo_root=clone,
-        manifest_path=pipe.build.manifest_path,
-        protocol_path=protocol_path,
-        lock_path=lock_path,
-        evidence_path=evidence_path,
-        ledger_path=research / "test_evaluations.jsonl",
-        output_dir=clone / "reports" / "m2b",
-        raw_chunk_dir=pipe.chunk_dir,
-        derived_csv=pipe.derived_csv,
-        head=head,
-        registration_head=head,
-        protocol=protocol,
-        lock=lock,
-    )
+    _git_out(clone, "add", "-A", "src", "research")
+    _git_out(clone, "commit", "--quiet", "-m", "sync working source; clear real dossier")
+    pipe = build_coinbase_pipeline(clone / "data", decline_from_row=72)
+    return commit_synthetic_dossier(clone, pipe)
 
 
 _DRIVER = """

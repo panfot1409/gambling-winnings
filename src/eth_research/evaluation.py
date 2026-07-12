@@ -36,7 +36,7 @@ from eth_research import __version__
 from eth_research._atomic import publish_atomically
 from eth_research.backtest import BacktestResult, CostModel, run_backtest
 from eth_research.data.builder import LoadedDataset, load_canonical_dataset
-from eth_research.data.lock import load_dataset_lock, verify_dataset_lock
+from eth_research.data.lock import DatasetLock, load_dataset_lock, verify_dataset_lock
 from eth_research.data.provenance import (
     content_fingerprint,
     require_nonempty_str,
@@ -45,6 +45,12 @@ from eth_research.data.provenance import (
 from eth_research.data.validation import (
     require_commit_sha,
     require_evaluation_id,
+)
+from eth_research.decision import (
+    ELIGIBLE_FOR_TEST_PROMOTION,
+    ResearchDecision,
+    build_research_decision_from_results,
+    render_research_decision,
 )
 from eth_research.environment import (
     CANONICAL_RUNTIME_CONTRACT_RELPATH,
@@ -62,7 +68,12 @@ from eth_research.gitcheck import (
     tracked_tree_is_clean,
     verify_package_source,
 )
-from eth_research.holdout import build_holdout_identity, find_holdout_conflicts
+from eth_research.holdout import (
+    HoldoutConflict,
+    HoldoutIdentity,
+    build_holdout_identity,
+    find_holdout_conflicts,
+)
 from eth_research.ledger import (
     EVENT_COMPLETED,
     EVENT_FAILED,
@@ -83,6 +94,7 @@ from eth_research.protocol import (
     SplitBoundary,
     verify_protocol,
 )
+from eth_research.provenance_v2 import ProvenanceV2Error, verify_provenance_graph
 from eth_research.splits import DataSplits, chronological_split
 from eth_research.strategies import BuyAndHold, MovingAverageCrossover, Strategy
 
@@ -487,6 +499,330 @@ def _verify_runtime_environment(repo_root: Path, head: str) -> None:
         raise EvaluationError(f"runtime verification failed: {exc}") from exc
 
 
+HOLDOUT_IDENTITY_RELPATH: str = "research/m2b/holdout_identity.json"
+VALIDATION_DECISION_RELPATH: str = "research/m2b/validation_decision.json"
+VALIDATION_DECISION_MD_RELPATH: str = "research/m2b/validation_decision.md"
+
+
+@dataclass(frozen=True)
+class PreparedEvaluation:
+    """The frozen, fully verified context every pre-ledger check produced.
+
+    Built exclusively by :func:`prepare_authorized_evaluation` — the single
+    shared preparation implementation behind both the production evaluator
+    and the read-only readiness command. Contains only verified models,
+    hashes, and states; never a test signal, return, or metric.
+    """
+
+    repo_root: Path
+    head: str
+    protocol: BenchmarkProtocol
+    lock: DatasetLock
+    dataset: LoadedDataset
+    holdout: HoldoutIdentity
+    events: tuple[LedgerEvent, ...]
+    conflicts: tuple[HoldoutConflict, ...]
+    decision: ResearchDecision
+    train_validation: tuple[SegmentMetrics, ...]
+    ledger_path: Path
+    protocol_sha256: str
+    lock_sha256: str
+    runtime_contract_sha256: str
+    protocol_registration_commit_sha: str
+    output_collision: bool
+
+    @property
+    def holdout_fresh(self) -> bool:
+        """No recorded access conflicts with this holdout."""
+        return not self.conflicts
+
+    @property
+    def promotion_eligible(self) -> bool:
+        """The committed, re-derived scientific decision permits promotion."""
+        return self.decision.decision == ELIGIBLE_FOR_TEST_PROMOTION
+
+
+def prepare_authorized_evaluation(
+    *,
+    repo_root: str | Path,
+    manifest_path: str | Path,
+    protocol_path: str | Path,
+    lock_path: str | Path,
+    acquisition_evidence_path: str | Path,
+    output_dir: str | Path,
+    raw_chunk_dir: str | Path,
+    derived_csv: str | Path,
+    running_package_root: Path,
+    authorization_commit: str | None,
+    overwrite: bool = False,
+) -> PreparedEvaluation:
+    """The one side-effect-free preparation path behind every pre-ledger check.
+
+    Both public entry points call exactly this function: the production
+    evaluator (with ``authorization_commit`` set) and the read-only
+    readiness command (with ``authorization_commit=None``). It mutates
+    nothing — no ledger append, no publication — and performs, in order:
+
+    1. resolve the real repository root and real ``HEAD``;
+    2. (production) require the authorization revision to name a real
+       commit equal to ``HEAD``;
+    3. verify the running package source equals ``src/eth_research`` at
+       ``HEAD``;
+    4. verify the frozen runtime contract and committed lockfiles;
+    5. require a clean tracked tree;
+    6. require canonical, non-symlinked, committed-at-``HEAD`` tracked
+       inputs (protocol, lock, evidence, ledger, holdout identity,
+       train/validation results + report, validation decision JSON + MD);
+    7. read the canonical ledger strictly;
+    8. parse the committed validation decision and — in production mode —
+       refuse a non-eligible verdict *before any strategy, signal, or
+       backtest exists* (a forged "eligible" verdict is re-proven and
+       refused at step 14, still before any ledger append);
+    9. run the complete provenance-graph verifier;
+    10. semantically reconstruct the raw responses into the derived OHLCV
+        data and verify the dataset lock + evidence chain;
+    11. load the canonical dataset internally and recompute its content
+        fingerprint against the protocol/lock bindings;
+    12. recompute the :class:`HoldoutIdentity` from the verified dataset +
+        protocol and require exact byte equality with the committed
+        ``holdout_identity.json``;
+    13. run the holdout conflict policy against the canonical ledger and
+        check output collisions (both refuse, in production mode, before
+        any engine work);
+    14. regenerate the train/validation-only results and report and require
+        exact byte equality with the committed artifacts, then rebuild the
+        validation decision from those exact results and require exact byte
+        equality with the committed decision JSON and Markdown;
+    15. return the immutable prepared context.
+    """
+    production = authorization_commit is not None
+    if raw_chunk_dir is None or derived_csv is None:
+        raise EvaluationError(
+            "preparation requires both raw_chunk_dir and derived_csv so the derived CSV is "
+            "always re-derived from the raw chunks; neither may be omitted"
+        )
+
+    # 1. The real repository and revision.
+    try:
+        root = resolve_repo_root(repo_root)
+        head = head_commit(root)
+    except GitError as exc:
+        raise EvaluationError(f"could not establish the repository revision: {exc}") from exc
+
+    # 2. Production only: the authorized revision names this exact HEAD.
+    if authorization_commit is not None:
+        if not is_commit_object(root, authorization_commit):
+            raise EvaluationError(
+                f"authorization code_commit_sha {authorization_commit!r} is not a real "
+                "commit in this repository"
+            )
+        if authorization_commit != head:
+            raise EvaluationError(
+                f"authorization code_commit_sha {authorization_commit!r} is not the "
+                f"repository HEAD {head!r}; the frozen evaluation must run from the "
+                "pre-registered revision"
+            )
+
+    # 3. The running package is the source committed at HEAD (C1).
+    try:
+        verify_package_source(root, head, running_package_root)
+    except GitError as exc:
+        raise EvaluationError(f"package source binding failed: {exc}") from exc
+
+    # 4. The frozen numerical runtime and committed lockfiles.
+    _verify_runtime_environment(root, head)
+
+    # 5. A clean tracked tree.
+    try:
+        clean = tracked_tree_is_clean(root)
+    except GitError as exc:
+        raise EvaluationError(f"could not check the working tree: {exc}") from exc
+    if not clean:
+        raise EvaluationError(
+            "the tracked working tree is not clean; commit or discard tracked changes before "
+            "the one-time evaluation (ignored raw/canonical data may remain)"
+        )
+
+    # 6-7. Canonical, committed-at-HEAD inputs and the canonical ledger.
+    ledger = root / CANONICAL_LEDGER_RELPATH
+    if ledger.is_symlink():
+        raise EvaluationError(
+            "the canonical test-access ledger must be a real tracked file, not a symlink"
+        )
+    try:
+        relative_to_repo(root, ledger)  # resolved path must remain inside the repo
+    except GitError as exc:
+        raise EvaluationError(
+            f"the canonical ledger resolves outside the repository: {exc}"
+        ) from exc
+
+    protocol_file = Path(protocol_path)
+    lock_file = Path(lock_path)
+    evidence_file = Path(acquisition_evidence_path)
+    holdout_file = root / HOLDOUT_IDENTITY_RELPATH
+    decision_file = root / VALIDATION_DECISION_RELPATH
+    decision_md_file = root / VALIDATION_DECISION_MD_RELPATH
+    _require_bytes_match_head(root, head, protocol_file, "protocol")
+    _require_bytes_match_head(root, head, lock_file, "dataset lock")
+    _require_bytes_match_head(root, head, evidence_file, "acquisition evidence")
+    _require_bytes_match_head(root, head, ledger, "test-access ledger")
+    _require_bytes_match_head(root, head, holdout_file, "holdout identity")
+    _require_bytes_match_head(root, head, decision_file, "validation decision")
+    _require_bytes_match_head(root, head, decision_md_file, "validation decision report")
+    events = read_ledger(ledger)
+
+    # 8. The committed scientific decision gates production before ANY
+    # strategy, signal, or backtest — including the permitted
+    # train/validation regeneration below.
+    try:
+        committed_decision = ResearchDecision.from_json_bytes(decision_file.read_bytes())
+    except ValueError as exc:
+        raise EvaluationError(f"invalid committed validation decision: {exc}") from exc
+    if production and committed_decision.decision != ELIGIBLE_FOR_TEST_PROMOTION:
+        raise EvaluationError(
+            "test evaluation refused: the committed validation decision records "
+            f"{committed_decision.decision!r} for {committed_decision.subject!r}. The "
+            "candidate is scientifically ineligible for the one-time test; a runtime "
+            "authorization object cannot override the recorded decision."
+        )
+
+    # 9. The complete provenance graph — never optional, in either mode.
+    try:
+        verify_provenance_graph(root).raise_for_status()
+    except ProvenanceV2Error as exc:
+        raise EvaluationError(f"provenance graph verification failed: {exc}") from exc
+    except (OSError, ValueError) as exc:
+        raise EvaluationError(f"provenance graph could not be verified: {exc}") from exc
+
+    # 10. Lock + evidence + semantic raw→derived reconstruction.
+    lock = load_dataset_lock(lock_file)
+    try:
+        protocol = BenchmarkProtocol.from_json_bytes(protocol_file.read_bytes())
+    except ValueError as exc:
+        raise EvaluationError(f"invalid protocol {protocol_file.name!r}: {exc}") from exc
+    manifest, _evidence = verify_dataset_lock(
+        lock,
+        manifest_path=manifest_path,
+        acquisition_evidence_path=evidence_file,
+        raw_chunk_dir=raw_chunk_dir,
+        derived_csv=derived_csv,
+    )
+
+    # 11. Internal dataset reload + fingerprint/protocol bindings.
+    dataset = load_canonical_dataset(manifest_path)
+    if dataset.manifest != manifest:
+        raise EvaluationError("the reloaded dataset's manifest is not the manifest the lock pins")
+    verify_protocol(protocol, lock)
+    _verify_dataset_matches_protocol(dataset, protocol)
+    _recheck_frame_fingerprint(dataset)
+    if content_fingerprint(dataset.frame) != protocol.dataset_content_fingerprint:
+        raise EvaluationError(
+            "the reloaded frame's recomputed fingerprint is not the protocol's dataset "
+            "fingerprint — refusing to run the one-time evaluation on unverified data"
+        )
+
+    # 12. The committed holdout identity must recompute exactly from the
+    # verified dataset + protocol — hashing the file is not enough.
+    holdout = build_holdout_identity(dataset, protocol)
+    if holdout.to_json_bytes() != holdout_file.read_bytes():
+        raise EvaluationError(
+            "the committed holdout_identity.json does not recompute from the verified "
+            "dataset and protocol — refusing to treat a hand-edited holdout identity as "
+            "the sealed one"
+        )
+
+    # 13. Freshness and output collisions — refused (in production) before
+    # any engine work, so no refusal ever runs a strategy or backtest.
+    conflicts = find_holdout_conflicts(events, holdout)
+    if production and conflicts:
+        first = conflicts[0]
+        raise EvaluationError(
+            f"test evaluation refused: this holdout was already consumed by evaluation id "
+            f"{first.evaluation_id!r} ({first.event!r}) — {'; '.join(first.reasons)}. The "
+            "one-time test holdout is permanently consumed; changing the protocol, lock, "
+            "package version, schema, evaluation id, commit, or wording does not restore it. "
+            "Design a genuinely new, non-overlapping holdout instead."
+        )
+    directory = Path(output_dir)
+    existing = [
+        path
+        for path in (directory / RESULTS_FILENAME, directory / REPORT_FILENAME)
+        if path.exists()
+    ]
+    output_collision = bool(existing)
+    if production and existing and not overwrite:
+        names = ", ".join(path.name for path in existing)
+        raise EvaluationError(
+            f"refusing to start the one-time evaluation: existing report(s) {names} in "
+            f"{directory} would not be overwritten. Resolve the output location first."
+        )
+
+    # 14. Development evidence must regenerate byte-for-byte: the
+    # train/validation results, the report, and the research decision are
+    # re-derived and compared against the committed artifacts, so a forged
+    # verdict or edited number can never survive to the ledger boundary.
+    from eth_research import m2b_report  # local import: m2b_report imports this module
+
+    registration = m2b_report.committed_pre_registered_commit(root)
+    if not is_commit_object(root, registration):
+        raise EvaluationError(
+            f"the recorded protocol-registration commit {registration!r} is not a real "
+            "commit in this repository"
+        )
+    train_validation = evaluate_train_validation(dataset, protocol)
+    results = build_benchmark_results(
+        dataset,
+        protocol,
+        train_validation,
+        pre_registered_commit_sha=registration,
+        test_evaluation_id=None,
+    )
+    if results.to_json_bytes() != (root / m2b_report.RESULTS_RELPATH).read_bytes():
+        raise EvaluationError(
+            "the committed train/validation results do not regenerate byte-for-byte from "
+            "the verified dataset and protocol"
+        )
+    if m2b_report.render_report(root, results) != (root / m2b_report.REPORT_RELPATH).read_text(
+        encoding="utf-8"
+    ):
+        raise EvaluationError(
+            "the committed train/validation report does not regenerate byte-for-byte from "
+            "the regenerated results"
+        )
+    rebuilt_decision = build_research_decision_from_results(results)
+    if rebuilt_decision.to_json_bytes() != decision_file.read_bytes():
+        raise EvaluationError(
+            "the committed validation decision does not rebuild byte-for-byte from the "
+            "regenerated results — an edited verdict or number cannot authorize anything"
+        )
+    if render_research_decision(rebuilt_decision) != decision_md_file.read_text(encoding="utf-8"):
+        raise EvaluationError(
+            "the committed validation decision report does not rebuild byte-for-byte from "
+            "the decision model"
+        )
+
+    return PreparedEvaluation(
+        repo_root=root,
+        head=head,
+        protocol=protocol,
+        lock=lock,
+        dataset=dataset,
+        holdout=holdout,
+        events=events,
+        conflicts=conflicts,
+        decision=rebuilt_decision,
+        train_validation=train_validation,
+        ledger_path=ledger,
+        protocol_sha256=sha256_bytes(protocol.to_json_bytes()),
+        lock_sha256=sha256_bytes(lock.to_json_bytes()),
+        runtime_contract_sha256=sha256_bytes(
+            (root / CANONICAL_RUNTIME_CONTRACT_RELPATH).read_bytes()
+        ),
+        protocol_registration_commit_sha=registration,
+        output_collision=output_collision,
+    )
+
+
 def run_authorized_benchmark(
     *,
     repo_root: str | Path,
@@ -508,46 +844,15 @@ def run_authorized_benchmark(
     :class:`OneTimeTestAuthorization` carrying the confirmation token whose
     ``code_commit_sha`` equals the repository's actual ``HEAD``.
 
-    The **first** gate is a package-source binding (C1): before the ledger
-    is read, the dataset loaded, or any signal computed, the running
-    ``eth_research`` code is proven to be exactly the ``src/eth_research``
-    tree committed at the authorized ``HEAD`` — not a foreign clone,
-    site-packages install, shadow module, or modified copy
-    (:func:`eth_research.gitcheck.verify_package_source`). The **second**
-    gate is a runtime-environment binding: the active CPython patch, cache
-    tag, OS/architecture, exact ``numpy``/``pandas``/``pyarrow`` versions,
-    and the committed ``uv.lock``/``pyproject.toml`` must equal the frozen
-    contract at :data:`CANONICAL_RUNTIME_CONTRACT_RELPATH`
-    (:func:`eth_research.environment.verify_runtime_contract`). Both are
-    single-repository, single-researcher operational controls; neither
-    attests a remote or a cryptographic identity.
-
-    ``raw_chunk_dir`` and ``derived_csv`` are **mandatory**: the one-time
-    run always re-derives the CSV from the raw chunks (C2), so acquisition
-    verification can never be silently skipped. The remaining boundary
-    (git-revision binding, canonical ledger, internal dataset reload, and
-    honest ``started``/``completed``/``failed`` recording) is unchanged.
+    Every pre-ledger verification runs through
+    :func:`prepare_authorized_evaluation` — the same single implementation
+    the read-only readiness command uses, so production and readiness can
+    never drift. The production-only steps after preparation are: the
+    explicit confirmation token (validated at construction), the scientific
+    eligibility gate, the single-use evaluation id, ``started``, the test
+    segments, transactional publication with read-back verification, and
+    ``completed``.
     """
-    if authorization is None:
-        raise EvaluationError(
-            "test evaluation refused: no authorization was provided. The real test segment "
-            "is evaluated exactly once, with an explicit OneTimeTestAuthorization."
-        )
-    try:
-        root = resolve_repo_root(repo_root)
-        head = head_commit(root)
-    except GitError as exc:
-        raise EvaluationError(f"could not establish the repository revision: {exc}") from exc
-
-    # --- C1: prove the running code IS the code committed at HEAD, first. ---
-    try:
-        verify_package_source(root, head, _running_package_root())
-    except GitError as exc:
-        raise EvaluationError(f"package source binding failed: {exc}") from exc
-
-    # --- Runtime: prove the numerical environment matches the frozen contract. ---
-    _verify_runtime_environment(root, head)
-
     return _run_bound_benchmark(
         repo_root=repo_root,
         manifest_path=manifest_path,
@@ -561,6 +866,7 @@ def run_authorized_benchmark(
         ledger_path=ledger_path,
         clock=clock,
         overwrite=overwrite,
+        running_package_root=_running_package_root(),
     )
 
 
@@ -574,20 +880,19 @@ def _run_bound_benchmark(
     output_dir: str | Path,
     raw_chunk_dir: str | Path,
     derived_csv: str | Path,
+    running_package_root: Path,
     authorization: OneTimeTestAuthorization | None = None,
     ledger_path: str | Path | None = None,
     clock: Callable[[], pd.Timestamp] | None = None,
     overwrite: bool = False,
 ) -> BenchmarkRun:
-    """The authorized evaluation after the package-source binding has passed.
+    """The authorized evaluation around the shared preparation path.
 
-    Performs the git-revision identity + clean-tree checks, the canonical
-    ledger and committed-bytes checks, the mandatory raw→derived
-    acquisition verification, the internal dataset reload, and the
-    guarded one-time run. Callers must go through
-    :func:`run_authorized_benchmark`; this is separated only so the
-    source-binding gate has dedicated tests (it is exercised in production
-    exclusively through the public entry point).
+    Callers must go through :func:`run_authorized_benchmark`, which binds
+    ``running_package_root`` to the interpreter's actual import location;
+    this seam exists so the synthetic fixture repositories (which commit
+    their own copy of the package source) can exercise the identical
+    preparation path end-to-end.
     """
     if authorization is None:
         raise EvaluationError(
@@ -601,130 +906,54 @@ def _run_bound_benchmark(
         )
     tick = clock if clock is not None else _default_clock
 
-    # --- R3: bind to the actual, clean, pre-registered git revision. ---
+    # The caller may not select an alternate ledger; the canonical tracked
+    # file is resolved (and re-verified) inside the shared preparation.
     try:
-        root = resolve_repo_root(repo_root)
-        head = head_commit(root)
+        canonical_ledger = resolve_repo_root(repo_root) / CANONICAL_LEDGER_RELPATH
     except GitError as exc:
         raise EvaluationError(f"could not establish the repository revision: {exc}") from exc
-    if not is_commit_object(root, authorization.code_commit_sha):
-        raise EvaluationError(
-            f"authorization code_commit_sha {authorization.code_commit_sha!r} is not a real "
-            "commit in this repository"
-        )
-    if authorization.code_commit_sha != head:
-        raise EvaluationError(
-            f"authorization code_commit_sha {authorization.code_commit_sha!r} is not the "
-            f"repository HEAD {head!r}; the frozen evaluation must run from the pre-registered "
-            "revision"
-        )
-    try:
-        clean = tracked_tree_is_clean(root)
-    except GitError as exc:
-        raise EvaluationError(f"could not check the working tree: {exc}") from exc
-    if not clean:
-        raise EvaluationError(
-            "the tracked working tree is not clean; commit or discard tracked changes before "
-            "the one-time evaluation (ignored raw/canonical data may remain)"
-        )
-
-    # --- R2: the ledger is the canonical tracked file, not caller-selected. ---
-    ledger = root / CANONICAL_LEDGER_RELPATH
-    if ledger.is_symlink():
-        raise EvaluationError(
-            "the canonical test-access ledger must be a real tracked file, not a symlink"
-        )
-    try:
-        relative_to_repo(root, ledger)  # resolved path must remain inside the repo
-    except GitError as exc:
-        raise EvaluationError(
-            f"the canonical ledger resolves outside the repository: {exc}"
-        ) from exc
-    if ledger_path is not None and Path(ledger_path).resolve() != ledger.resolve():
+    if ledger_path is not None and Path(ledger_path).resolve() != canonical_ledger.resolve():
         raise EvaluationError(
             f"ledger path {Path(ledger_path)} is not the canonical tracked ledger "
             f"{CANONICAL_LEDGER_RELPATH!r}; an alternate, copied, or path-outside-repo ledger "
             "is refused"
         )
 
-    # --- R3: every tracked input must equal its committed bytes at HEAD. ---
-    protocol_file = Path(protocol_path)
-    lock_file = Path(lock_path)
-    evidence_file = Path(acquisition_evidence_path)
-    _require_bytes_match_head(root, head, protocol_file, "protocol")
-    _require_bytes_match_head(root, head, lock_file, "dataset lock")
-    _require_bytes_match_head(root, head, evidence_file, "acquisition evidence")
-    _require_bytes_match_head(root, head, ledger, "test-access ledger")
-
-    # --- R4: load lock/protocol from the verified bytes; reload the dataset. ---
-    lock = load_dataset_lock(lock_file)
-    try:
-        protocol = BenchmarkProtocol.from_json_bytes(protocol_file.read_bytes())
-    except ValueError as exc:
-        raise EvaluationError(f"invalid protocol {protocol_file.name!r}: {exc}") from exc
-
-    manifest, _evidence = verify_dataset_lock(
-        lock,
+    prepared = prepare_authorized_evaluation(
+        repo_root=repo_root,
         manifest_path=manifest_path,
-        acquisition_evidence_path=evidence_file,
+        protocol_path=protocol_path,
+        lock_path=lock_path,
+        acquisition_evidence_path=acquisition_evidence_path,
+        output_dir=output_dir,
         raw_chunk_dir=raw_chunk_dir,
         derived_csv=derived_csv,
+        running_package_root=running_package_root,
+        authorization_commit=authorization.code_commit_sha,
+        overwrite=overwrite,
     )
-    dataset = load_canonical_dataset(manifest_path)
-    if dataset.manifest != manifest:
-        raise EvaluationError("the reloaded dataset's manifest is not the manifest the lock pins")
-    verify_protocol(protocol, lock)
-    _verify_dataset_matches_protocol(dataset, protocol)
-    _recheck_frame_fingerprint(dataset)
-    if content_fingerprint(dataset.frame) != protocol.dataset_content_fingerprint:
+    if not prepared.promotion_eligible:  # defense in depth; prepare already refused
         raise EvaluationError(
-            "the reloaded frame's recomputed fingerprint is not the protocol's dataset "
-            "fingerprint — refusing to run the one-time evaluation on unverified data"
+            "test evaluation refused: the verified validation decision does not record "
+            "eligible_for_test_promotion"
         )
-
-    protocol_sha = sha256_bytes(protocol.to_json_bytes())
-    lock_sha = sha256_bytes(lock.to_json_bytes())
-    runtime_sha = sha256_bytes((root / CANONICAL_RUNTIME_CONTRACT_RELPATH).read_bytes())
-
-    # Derive the durable holdout identity — an integrity-only operation that
-    # reads/hashes the test candles but runs no strategy, engine, or metric.
-    # Freshness is a property of *these candles*, not of the mutable
-    # (dataset_lock, protocol) pair, so changing the protocol/lock/version/
-    # schema/eval-id/commit/runtime cannot launder a second access.
-    holdout = build_holdout_identity(dataset, protocol)
-
-    events = read_ledger(ledger)
-    conflicts = find_holdout_conflicts(events, holdout)
-    if conflicts:
-        first = conflicts[0]
-        raise EvaluationError(
-            f"test evaluation refused: this holdout was already consumed by evaluation id "
-            f"{first.evaluation_id!r} ({first.event!r}) — {'; '.join(first.reasons)}. The "
-            "one-time test holdout is permanently consumed; changing the protocol, lock, "
-            "package version, schema, evaluation id, commit, or wording does not restore it. "
-            "Design a genuinely new, non-overlapping holdout instead."
-        )
-    if any(event.evaluation_id == authorization.evaluation_id for event in events):
+    if any(event.evaluation_id == authorization.evaluation_id for event in prepared.events):
         raise EvaluationError(
             f"test evaluation refused: evaluation id {authorization.evaluation_id!r} was "
             "already used; evaluation ids are single-use"
         )
 
-    ledger_path = ledger
+    dataset = prepared.dataset
+    protocol = prepared.protocol
+    holdout = prepared.holdout
+    train_validation = prepared.train_validation
+    protocol_sha = prepared.protocol_sha256
+    lock_sha = prepared.lock_sha256
+    runtime_sha = prepared.runtime_contract_sha256
+    ledger_path = prepared.ledger_path
     directory = Path(output_dir)
     results_path = directory / RESULTS_FILENAME
     report_path = directory / REPORT_FILENAME
-    existing = [path for path in (results_path, report_path) if path.exists()]
-    if existing and not overwrite:
-        names = ", ".join(path.name for path in existing)
-        raise EvaluationError(
-            f"refusing to start the one-time evaluation: existing report(s) {names} in "
-            f"{directory} would not be overwritten. Resolve the output location first."
-        )
-
-    # Everything below is allowed pre-authorization: train/validation runs
-    # and mechanical split bounds.
-    train_validation = evaluate_train_validation(dataset, protocol)
 
     def event_for(kind: str, **extra: str | None) -> LedgerEvent:
         return LedgerEvent(

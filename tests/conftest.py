@@ -351,18 +351,6 @@ def make_git_pipeline(root: Path, *, eligible: bool = True) -> GitPipeline:
     data whose fixed SMA underperforms buy-and-hold in validation, so the
     derived decision is ``rejected_for_test_promotion``.
     """
-    from eth_research import m2b_report
-    from eth_research.data.lock import build_dataset_lock
-    from eth_research.decision import (
-        build_research_decision_from_results,
-        render_research_decision,
-    )
-    from eth_research.discovery import build_discovery_decision, render_discovery_decision
-    from eth_research.environment import RuntimeContract
-    from eth_research.holdout import build_holdout_identity
-    from eth_research.protocol import BenchmarkResults, build_benchmark_protocol
-    from eth_research.provenance_v2 import build_provenance_v2
-
     repo = root / "repo"
     repo.mkdir(parents=True)
     _git(repo, "init", "-q")
@@ -384,8 +372,33 @@ def make_git_pipeline(root: Path, *, eligible: bool = True) -> GitPipeline:
     shutil.copy(real_root / "pyproject.toml", repo / "pyproject.toml")
 
     pipe = build_coinbase_pipeline(repo / "data", decline_from_row=72 if eligible else None)
+    return commit_synthetic_dossier(repo, pipe)
+
+
+def commit_synthetic_dossier(repo: Path, pipe: CoinbasePipeline) -> GitPipeline:
+    """Write and commit the complete dossier into an initialized git repo.
+
+    The repository must already contain its package source and lockfiles
+    (either a fixture copy or a real clone). Two commits are produced: the
+    pre-registration commit (all inputs) and the development-evidence
+    commit (results, report, decision, provenance anchor) — mirroring the
+    real repository's history shape.
+    """
+    from eth_research import m2b_report
+    from eth_research.data.builder import load_canonical_dataset
+    from eth_research.data.lock import build_dataset_lock
+    from eth_research.decision import (
+        build_research_decision_from_results,
+        render_research_decision,
+    )
+    from eth_research.discovery import build_discovery_decision, render_discovery_decision
+    from eth_research.environment import RuntimeContract
+    from eth_research.holdout import build_holdout_identity
+    from eth_research.protocol import BenchmarkResults, build_benchmark_protocol
+    from eth_research.provenance_v2 import build_provenance_v2
+
     research = repo / "research" / "m2b"
-    research.mkdir(parents=True)
+    research.mkdir(parents=True, exist_ok=True)
 
     (research / "acquisition_request_plan.json").write_bytes(pipe.plan.to_json_bytes())
     attempt = research / "raw" / "coinbase" / pipe.receipt.attempt_id
@@ -411,7 +424,6 @@ def make_git_pipeline(root: Path, *, eligible: bool = True) -> GitPipeline:
     protocol_path.write_bytes(protocol.to_json_bytes())
     contract = RuntimeContract.for_current_runtime(repo)
     (research / "runtime_contract.json").write_bytes(contract.to_json_bytes())
-    from eth_research.data.builder import load_canonical_dataset
 
     dataset = load_canonical_dataset(pipe.build.manifest_path)
     holdout = build_holdout_identity(dataset, protocol)
