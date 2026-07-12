@@ -101,8 +101,8 @@ _AUDIT_STATUSES: tuple[str, ...] = (
     AUDIT_CONTENT_DISCREPANCY,
 )
 
-_DISCOVERY_ATTEMPT: str = "discovery-001"
-_CANONICAL_ATTEMPT: str = "coinbase-eth-usd-001"
+DISCOVERY_ATTEMPT_ID: str = "discovery-001"
+CANONICAL_ATTEMPT_ID: str = "coinbase-eth-usd-001"
 
 _AUDIT_KEYS: frozenset[str] = frozenset(
     {
@@ -584,9 +584,9 @@ def build_frozen_dossier(
     """Compute the dossier manifest from the committed artifacts."""
     root = Path(repo_root)
     research = root / "research" / "m2b"
-    discovery_receipt_path = _attempt_dir(root, _DISCOVERY_ATTEMPT) / "acquisition_receipt.json"
+    discovery_receipt_path = _attempt_dir(root, DISCOVERY_ATTEMPT_ID) / "acquisition_receipt.json"
     discovery_receipt = load_acquisition_receipt(discovery_receipt_path)
-    primary_receipt_path = _attempt_dir(root, _CANONICAL_ATTEMPT) / "acquisition_receipt.json"
+    primary_receipt_path = _attempt_dir(root, CANONICAL_ATTEMPT_ID) / "acquisition_receipt.json"
     primary_receipt = load_acquisition_receipt(primary_receipt_path)
     manifest = DatasetManifest.from_json_bytes((research / "dataset_manifest.json").read_bytes())
     evidence = load_acquisition_evidence(research / "acquisition_evidence.json")
@@ -602,7 +602,7 @@ def build_frozen_dossier(
         discovery_request_plan_sha256=sha256_file(research / "discovery_plan.json"),
         discovery_receipt_sha256=sha256_file(discovery_receipt_path),
         discovery_raw_bundle_fingerprint=raw_bundle_fingerprint(
-            discovery_receipt, _attempt_dir(root, _DISCOVERY_ATTEMPT)
+            discovery_receipt, _attempt_dir(root, DISCOVERY_ATTEMPT_ID)
         ),
         discovery_decision_sha256=sha256_file(research / "discovery_decision.json"),
         discovery_decision_markdown_sha256=sha256_file(
@@ -612,7 +612,7 @@ def build_frozen_dossier(
         acquisition_request_plan_sha256=sha256_file(research / "acquisition_request_plan.json"),
         acquisition_receipt_sha256=sha256_file(primary_receipt_path),
         raw_bundle_fingerprint=raw_bundle_fingerprint(
-            primary_receipt, _attempt_dir(root, _CANONICAL_ATTEMPT)
+            primary_receipt, _attempt_dir(root, CANONICAL_ATTEMPT_ID)
         ),
         acquisition_evidence_sha256=sha256_file(research / "acquisition_evidence.json"),
         independent_audit=(
@@ -720,7 +720,7 @@ def verify_frozen_dossier(
     # --- 1. Every artifact hashes to the manifest. -------------------------
     hashed = {
         "discovery_request_plan_sha256": research / "discovery_plan.json",
-        "discovery_receipt_sha256": _attempt_dir(root, _DISCOVERY_ATTEMPT)
+        "discovery_receipt_sha256": _attempt_dir(root, DISCOVERY_ATTEMPT_ID)
         / "acquisition_receipt.json",
         "discovery_decision_sha256": research / "discovery_decision.json",
         "discovery_decision_markdown_sha256": research / "EARLIEST_CONTINUOUS_DECISION.md",
@@ -753,7 +753,7 @@ def verify_frozen_dossier(
     try:
         discovery_plan = load_acquisition_plan(research / "discovery_plan.json")
         discovery_receipt = load_acquisition_receipt(
-            _attempt_dir(root, _DISCOVERY_ATTEMPT) / "acquisition_receipt.json"
+            _attempt_dir(root, DISCOVERY_ATTEMPT_ID) / "acquisition_receipt.json"
         )
         plan = load_acquisition_plan(research / "acquisition_request_plan.json")
         receipt = load_acquisition_receipt(
@@ -773,7 +773,7 @@ def verify_frozen_dossier(
         return result()
     try:
         discovery_bundle = raw_bundle_fingerprint(
-            discovery_receipt, _attempt_dir(root, _DISCOVERY_ATTEMPT)
+            discovery_receipt, _attempt_dir(root, DISCOVERY_ATTEMPT_ID)
         )
         primary_bundle = raw_bundle_fingerprint(
             receipt, _attempt_dir(root, dossier.selected_attempt_id)
@@ -832,7 +832,7 @@ def verify_frozen_dossier(
     try:
         discovery_decision = load_discovery_decision(research / "discovery_decision.json")
         raw_bytes = (
-            _attempt_dir(root, _DISCOVERY_ATTEMPT) / discovery_receipt.responses[0].filename
+            _attempt_dir(root, DISCOVERY_ATTEMPT_ID) / discovery_receipt.responses[0].filename
         ).read_bytes()
         verify_discovery_decision_from_raw(discovery_decision, raw_bytes)
         rendered = render_discovery_decision(discovery_decision)

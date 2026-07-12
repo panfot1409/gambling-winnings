@@ -41,11 +41,17 @@ PLAN_RELPATH: str = "research/m2b/acquisition_request_plan.json"
 
 
 def _real_attempt_dir(repo_root: Path) -> Path:
-    base = repo_root / "research" / "m2b" / "raw" / "coinbase"
-    attempts = [p for p in base.iterdir() if p.is_dir() and p.name != "discovery-001"]
-    if len(attempts) != 1:
-        raise RuntimeError(f"expected exactly one real acquisition attempt, found {attempts}")
-    return attempts[0]
+    """The canonical committed attempt directory, pinned by name.
+
+    Audit reacquisition attempts (``coinbase-eth-usd-audit-*``) may sit
+    beside it for integrity comparison; they are never selected here.
+    """
+    from eth_research.dossier import CANONICAL_ATTEMPT_ID
+
+    attempt = repo_root / "research" / "m2b" / "raw" / "coinbase" / CANONICAL_ATTEMPT_ID
+    if not attempt.is_dir():
+        raise RuntimeError(f"the canonical acquisition attempt directory {attempt} is missing")
+    return attempt
 
 
 def build_results(

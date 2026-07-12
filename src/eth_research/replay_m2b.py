@@ -213,13 +213,17 @@ def check_against_committed(repo_root: str | Path, result: ReconstructResult) ->
 
 
 def _raw_dir_for(root: Path) -> Path:
-    # The single committed attempt directory (exactly one real acquisition).
-    base = root / RAW_ROOT_RELPATH
-    attempts = sorted(p for p in base.iterdir() if p.is_dir()) if base.exists() else []
-    real = [p for p in attempts if p.name != "discovery-001"]
-    if len(real) != 1:
-        raise AcquisitionError(f"expected exactly one real acquisition attempt, found {real}")
-    return real[0]
+    """The canonical committed attempt directory, pinned by name.
+
+    Audit reacquisition attempts may sit beside it; replay and lock
+    verification always run against the canonical attempt.
+    """
+    from eth_research.dossier import CANONICAL_ATTEMPT_ID
+
+    attempt = root / RAW_ROOT_RELPATH / CANONICAL_ATTEMPT_ID
+    if not attempt.is_dir():
+        raise AcquisitionError(f"the canonical acquisition attempt directory {attempt} is missing")
+    return attempt
 
 
 def main(argv: list[str] | None = None) -> int:

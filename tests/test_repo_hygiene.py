@@ -172,6 +172,9 @@ def test_raw_bodies_match_their_receipts() -> None:
     plan_for = {
         "discovery-001": "research/m2b/discovery_plan.json",
         "coinbase-eth-usd-001": "research/m2b/acquisition_request_plan.json",
+        # The independent integrity reacquisition fulfils the unchanged
+        # canonical plan under its own attempt id (closure section H).
+        "coinbase-eth-usd-audit-002": "research/m2b/acquisition_request_plan.json",
     }
     for attempt in attempts:
         receipt = load_acquisition_receipt(attempt / "acquisition_receipt.json")
