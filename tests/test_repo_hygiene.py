@@ -189,6 +189,28 @@ def test_raw_aggregate_size_is_bounded() -> None:
     assert total <= RAW_AGGREGATE_CAP_BYTES, f"raw aggregate {total} exceeds the 10 MiB cap"
 
 
+def test_committed_manifest_and_quality_anchor_the_lock() -> None:
+    """The tracked manifest/quality byte anchors must hash to the dataset lock.
+
+    The lock already binds their SHA-256; committing the exact bytes lets a
+    reviewer verify the dossier's identity without regenerating anything.
+    """
+    from eth_research.data.lock import load_dataset_lock
+    from eth_research.data.provenance import DatasetManifest, sha256_file
+
+    lock = load_dataset_lock(REPO_ROOT / "research/m2b/dataset_lock.json")
+    manifest_path = REPO_ROOT / "research/m2b/dataset_manifest.json"
+    quality_path = REPO_ROOT / "research/m2b/quality_report.json"
+    assert _tracked_files("research/m2b/dataset_manifest.json")
+    assert _tracked_files("research/m2b/quality_report.json")
+    assert sha256_file(manifest_path) == lock.manifest_sha256
+    assert sha256_file(quality_path) == lock.quality_report_sha256
+    # The committed manifest anchor must strictly parse and name the quality file.
+    manifest = DatasetManifest.from_json_bytes(manifest_path.read_bytes())
+    assert manifest.quality_report_sha256 == lock.quality_report_sha256
+    assert manifest.content_fingerprint == lock.content_fingerprint
+
+
 def test_no_derived_or_canonical_artifacts_are_tracked() -> None:
     """The derived CSV and canonical Parquet must never be committed."""
     for pattern in ("*.csv", "*.parquet", "*.pq"):

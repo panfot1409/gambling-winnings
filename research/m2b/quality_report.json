@@ -1,0 +1,37 @@
+{
+  "allow_extra_columns": false,
+  "assume_utc": false,
+  "error_finding_count": 0,
+  "expected_interval": "P1DT0H0M0S",
+  "findings": [
+    {
+      "code": "extreme_ranges",
+      "count": 50,
+      "description": "(high - low) / open above 25.00% (diagnostic only; data is never modified)",
+      "first_examples": [
+        "2016-06-17 00:00:00+00:00: 39.30%",
+        "2016-06-18 00:00:00+00:00: 36.70%",
+        "2016-08-02 00:00:00+00:00: 42.48%"
+      ],
+      "severity": "warning"
+    },
+    {
+      "code": "extreme_returns",
+      "count": 10,
+      "description": "|close-to-close return| above 25.00% (diagnostic only; data is never modified)",
+      "first_examples": [
+        "2016-06-17 00:00:00+00:00: -25.44%",
+        "2016-06-18 00:00:00+00:00: -25.62%",
+        "2017-03-16 00:00:00+00:00: +28.92%"
+      ],
+      "severity": "warning"
+    }
+  ],
+  "row_count": 3702,
+  "schema_version": 1,
+  "thresholds": {
+    "extreme_range": 0.25,
+    "extreme_return": 0.25
+  },
+  "warning_finding_count": 2
+}
