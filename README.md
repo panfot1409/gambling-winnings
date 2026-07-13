@@ -322,12 +322,22 @@ byte-empty).
   a deterministic moving-block bootstrap (seed 20260713, block 30, 5000
   resamples) of the mean daily paired excess return versus buy-and-hold.
   Every reported scalar is reconciled against the engine's accounting.
-- **Pre-registered experiments** (`eth_research.experiment_registry`,
-  `eth_research.develop_m3a`): an append-only `registered → started →
-  completed` registry records the fixed-baseline experiment before any real
-  computation; the terminal event pins the SHA-256 of the published
-  results, report, and their bundle. `develop_m3a --check` reconstructs the
-  dataset offline and reproduces both artifacts byte-for-byte.
+- **Pre-registered experiments through one fail-closed orchestrator**
+  (`eth_research.experiment_registry`, `eth_research.development_orchestrator`):
+  an append-only `registered → started → completed` registry (schema v1 for
+  run-001/002, append-chained schema v2 for the correction) records each
+  experiment before any real computation, and the only way to publish real
+  research-train artifacts is `run_registered_development_experiment`, which
+  runs ordered pre-checks and appends `started` before any strategy/backtest/
+  bootstrap. There is no unregistered write path. Publication is a durable,
+  rollback-safe batch transaction; results schema v2 identifies each run
+  exactly (`experiment_id`, `methodology_id`, source-tree fingerprint).
+- **Seam-safe inference.** The historical moving-block bootstrap v1 allowed
+  blocks to cross independent-reset fold seams; the corrective run uses a
+  fold-stratified bootstrap v2 (blocks strictly within a fold) plus a
+  hierarchical sensitivity bootstrap. Historical run-001/002 results are
+  archived, hash-verified, and never modified. Five folds are weak evidence
+  and every interval is an in-sample research diagnostic.
 
 Status: **the research-train walk-forward is run and recorded; no candidate
 is promoted; the development gate and the final holdout are sealed and their
@@ -335,9 +345,11 @@ ledgers are byte-empty.** Over the research-train period (an ETH bull
 market) buy-and-hold dominates median return, the active strategies beat
 buy-and-hold in only ~40% of folds, and every bootstrap interval of mean
 daily excess return versus buy-and-hold straddles zero — no alpha is
-claimed and nothing was tuned. See
-[research/m3a/README.md](research/m3a/README.md) and
-[docs/M3A_PLAN.md](docs/M3A_PLAN.md).
+claimed and nothing was tuned. No live-readiness or profitability claim is
+made; this is not investment advice. See
+[research/m3a/README.md](research/m3a/README.md),
+[docs/M3A_PLAN.md](docs/M3A_PLAN.md), and
+[docs/M3A_CLOSURE_REMEDIATION.md](docs/M3A_CLOSURE_REMEDIATION.md).
 
 ## Conventions
 

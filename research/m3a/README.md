@@ -33,6 +33,42 @@ holdout are sealed here and their access ledgers stay byte-empty.
 | `development_results.json` | **recorded** | The strict, byte-reproducible research-train walk-forward results (four strategies × three cost scenarios × five folds), three honest aggregation views, and the bootstrap intervals. Records zero development-gate and zero final-holdout events. |
 | `development_report.md` | **recorded** | The honest Markdown report, rendered purely from the validated results model. |
 
+## Closure remediation
+
+A closure remediation (see `../../docs/M3A_CLOSURE_REMEDIATION.md` and the
+bug-hunt table in `../../docs/M3A_BUG_LOG.md`) hardens the milestone:
+
+- **Registry enforcement is inside the public execution path.** The only way
+  to publish real research-train artifacts is the fail-closed
+  `run_registered_development_experiment` orchestrator, which runs ordered
+  pre-checks (repository/source/runtime/dossier/partition/protocol/methodology
+  verification, both ledgers byte-empty, exactly one registered-only v2
+  experiment) and appends a durable `started` event before any strategy,
+  backtest, metric, or bootstrap runs. The unregistered `--write` path is gone.
+- **Publication is a durable, rollback-safe batch transaction** (temp + fsync +
+  ordered replace + manifest-last + directory fsync, reverse rollback),
+  proven by a failure-injection matrix.
+- **Registry schema v2** (version-dispatched, append-chained onto the immutable
+  v1 prefix) and **results schema v2** (fully typed, strict-and-symmetric) make
+  every result identify its exact experiment (`experiment_id`, `methodology_id`,
+  execution source-tree fingerprint).
+- **Fold-aware bootstrap.** Run-001 and run-002 used the historical moving-block
+  bootstrap v1, whose blocks could cross independent-reset fold seams
+  (116/1097 starts, ~10.57%). The corrective run-003 uses the primary
+  fold-stratified bootstrap v2 (blocks strictly within a fold) plus a
+  hierarchical fold-block sensitivity bootstrap; see
+  `../../docs/M3A_BOOTSTRAP_METHOD_NOTE.md`.
+- **Immutable history.** Run-001 and run-002 bodies are archived under
+  `experiments/` and hash-verified against their registry events; they are never
+  modified. A per-run **return-evidence** artifact will let run-003's pooled and
+  bootstrap numbers be recomputed from raw daily observations.
+
+All intervals remain in-sample research diagnostics over five folds — weak
+evidence. No candidate is promoted; the development gate and the final holdout
+remain sealed and their ledgers byte-empty. Unsigned commits are an
+environment limitation (no signing key is available), **not** something to
+repair by rewriting history; the missing `v0.3.0` tag is unrelated debt.
+
 ## Reproduce on a fresh clone
 
 ```bash
