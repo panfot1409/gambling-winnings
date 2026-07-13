@@ -53,6 +53,7 @@ _ALLOWED_M3A_FILES: frozenset[str] = frozenset(
         "research/m3a/development_results.json",
         "research/m3a/development_report.md",
         "research/m3a/README.md",
+        "research/m3a/artifact_errata.jsonl",
     }
 )
 
@@ -89,11 +90,23 @@ class TestTrackedArtifacts:
         # archive, verified byte-for-byte against the registry by
         # verify_experiment_archive; only their names/paths are checked here.
         tracked = {
-            f for f in _tracked("research/m3a") if not f.startswith("research/m3a/experiments/")
+            f
+            for f in _tracked("research/m3a")
+            if not f.startswith("research/m3a/experiments/")
+            and not f.startswith("research/m3a/errata/")
         }
         assert tracked, "expected committed M3A artifacts"
         unexpected = tracked - _ALLOWED_M3A_FILES
         assert unexpected == set(), f"unexpected tracked M3A files: {sorted(unexpected)}"
+
+    def test_errata_files_are_allowlisted_names_only(self) -> None:
+        # The append-only errata layer stores one strict JSON + one rendered
+        # Markdown per erratum under research/m3a/errata/; nothing else lives
+        # there. verify_artifact_errata proves their contents byte-for-byte.
+        for rel in _tracked("research/m3a/errata"):
+            name = rel.rsplit("/", 1)[-1]
+            assert name.endswith((".json", ".md")), f"unexpected errata file: {rel}"
+            assert ".." not in rel
 
     def test_archive_files_are_allowlisted_names_only(self) -> None:
         allowed_names = {

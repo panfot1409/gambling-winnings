@@ -1,0 +1,54 @@
+{
+  "affected_cells": [
+    {
+      "ci_lower": -0.005063937422795938,
+      "ci_upper": -1.220168774754618e-05,
+      "cost_scenario": "base",
+      "interval_kind": "primary",
+      "strategy": "cash",
+      "zero_included": false
+    },
+    {
+      "ci_lower": -0.005063904789164851,
+      "ci_upper": -1.1503664325654388e-05,
+      "cost_scenario": "stressed",
+      "interval_kind": "primary",
+      "strategy": "cash",
+      "zero_included": false
+    },
+    {
+      "ci_lower": -0.005062567013459328,
+      "ci_upper": -1.0358783751154005e-05,
+      "cost_scenario": "severe",
+      "interval_kind": "primary",
+      "strategy": "cash",
+      "zero_included": false
+    }
+  ],
+  "affected_cost_scenarios": [
+    "base",
+    "severe",
+    "stressed"
+  ],
+  "affected_strategies": [
+    "cash"
+  ],
+  "corrected_statement": "The primary fold-stratified bootstrap intervals for sma_20_50 and donchian_55_20 straddle zero. The primary cash intervals are strictly below zero and therefore exclude zero on the underperformance (negative) side. The hierarchical sensitivity intervals straddle zero for every strategy, including cash. This is in-sample research-train evidence, not alpha, and promotes no candidate. The original report's rounded -0.00% display of the cash primary upper bound does not make zero part of the interval. All financial results remain unchanged from run-002.",
+  "development_gate_accessed": false,
+  "errata_schema_version": 1,
+  "erratum_id": "m3a-run003-report-zero-inclusion-v1",
+  "erroneous_statement": "every fold-aware bootstrap interval of mean daily paired excess return versus buy-and-hold straddles zero",
+  "erroneous_statement_sha256": "6c370216c26ba64d74a453c78d6ed6b4dc94f5c7c31af7d4398dc3ac64bbcd8c",
+  "error_class": "incorrect_statistical_summary",
+  "final_holdout_accessed": false,
+  "financial_values_changed": false,
+  "methodology_changed": false,
+  "new_experiment_run": false,
+  "previous_erratum_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "strategy_parameters_changed": false,
+  "target_artifact_relpath": "research/m3a/experiments/m3a-fixed-baseline-comparison-v2-run-003/development_report.md",
+  "target_artifact_sha256": "d6e920760fd4217cbac00cf6126b0da2afc1f0a9e673aacfc9aee5fc6baa3bfd",
+  "target_experiment_id": "m3a-fixed-baseline-comparison-v2-run-003",
+  "target_results_relpath": "research/m3a/experiments/m3a-fixed-baseline-comparison-v2-run-003/development_results.json",
+  "target_results_sha256": "5f6377b6eb0eb8c2a5ba126c37b29de5095670f7ed27c064f44e18c9c91ea8ae"
+}
