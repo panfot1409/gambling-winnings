@@ -35,8 +35,9 @@ from eth_research.bootstrap import (
     RNG_ALGORITHM,
     STATISTIC,
     BootstrapError,
+    paired_excess_returns,
 )
-from eth_research.data.provenance import require_int
+from eth_research.data.provenance import require_int, require_str
 from eth_research.data.validation import require_finite_float
 from eth_research.walkforward import (
     BOOTSTRAP_BLOCK_LENGTH,
@@ -48,6 +49,25 @@ from eth_research.walkforward import (
 FOLD_STRATIFIED_ALGORITHM: str = "fold-stratified-moving-block-bootstrap-v2"
 HIERARCHICAL_ALGORITHM: str = "hierarchical-fold-block-bootstrap-v1"
 _HIERARCHICAL_SEED_OFFSET: int = 1  # domain-separates the sensitivity RNG stream
+
+_FOLD_INTERVAL_KEYS: frozenset[str] = frozenset(
+    {
+        "algorithm",
+        "observation_count",
+        "fold_observation_counts",
+        "point_estimate",
+        "ci_lower",
+        "ci_median",
+        "ci_upper",
+        "seed",
+        "block_length",
+        "resamples",
+        "confidence",
+        "rng_algorithm",
+        "percentile_method",
+        "statistic",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -132,6 +152,34 @@ class FoldAwareInterval:
             "percentile_method": PERCENTILE_METHOD,
             "statistic": STATISTIC,
         }
+
+    @classmethod
+    def from_json_dict(cls, payload: Any) -> FoldAwareInterval:
+        """Strict symmetric parse; the recorded RNG/percentile/statistic must match."""
+        if not isinstance(payload, dict) or set(payload) != _FOLD_INTERVAL_KEYS:
+            raise ValueError("fold-aware interval keys do not match schema")
+        if payload["rng_algorithm"] != RNG_ALGORITHM:
+            raise ValueError(f"rng_algorithm is pinned to {RNG_ALGORITHM!r}")
+        if payload["percentile_method"] != PERCENTILE_METHOD:
+            raise ValueError(f"percentile_method is pinned to {PERCENTILE_METHOD!r}")
+        if payload["statistic"] != STATISTIC:
+            raise ValueError(f"statistic is pinned to {STATISTIC!r}")
+        counts = payload["fold_observation_counts"]
+        if not isinstance(counts, list):
+            raise ValueError("fold_observation_counts must be a list")
+        return cls(
+            algorithm=require_str("algorithm", payload["algorithm"]),
+            observation_count=require_int("observation_count", payload["observation_count"]),
+            fold_observation_counts=tuple(require_int("fold_observation_count", c) for c in counts),
+            point_estimate=require_finite_float("point_estimate", payload["point_estimate"]),
+            ci_lower=require_finite_float("ci_lower", payload["ci_lower"]),
+            ci_median=require_finite_float("ci_median", payload["ci_median"]),
+            ci_upper=require_finite_float("ci_upper", payload["ci_upper"]),
+            seed=require_int("seed", payload["seed"]),
+            block_length=require_int("block_length", payload["block_length"]),
+            resamples=require_int("resamples", payload["resamples"]),
+            confidence=require_finite_float("confidence", payload["confidence"]),
+        )
 
 
 def _validate_folds(
@@ -237,6 +285,24 @@ def hierarchical_fold_block_bootstrap(
         )
         means[i] = float(resampled.mean())
     return _interval(HIERARCHICAL_ALGORITHM, arrays, means, cfg)
+
+
+def paired_excess_returns_from_folds(
+    candidate_folds: tuple[pd.Series[float], ...],
+    buy_and_hold_folds: tuple[pd.Series[float], ...],
+) -> tuple[pd.Series[float], ...]:
+    """Per-fold paired excess (candidate minus buy-and-hold), aligned within each fold.
+
+    Each fold's candidate and buy-and-hold daily OOS return series are aligned
+    by timestamp and differenced, preserving fold boundaries so the fold-aware
+    bootstraps never mix observations across independent resets.
+    """
+    if len(candidate_folds) != len(buy_and_hold_folds):
+        raise BootstrapError("candidate and buy-and-hold must have the same fold count")
+    return tuple(
+        paired_excess_returns(cand, bnh)
+        for cand, bnh in zip(candidate_folds, buy_and_hold_folds, strict=True)
+    )
 
 
 def fold_aware_bootstrap_bytes(interval: FoldAwareInterval) -> bytes:
