@@ -10,9 +10,11 @@ import pytest
 import eth_research
 from eth_research.data.provenance import sha256_file
 from eth_research.development_orchestrator import (
-    DevelopmentRunAuthorization,
+    _CONTEXT_SENTINEL,
     OrchestratorError,
+    StartedRunContext,
     _resolve_registered_only,
+    _verify_started_run_context,
     run_registered_development_experiment,
 )
 from eth_research.experiment_registry import (
@@ -28,16 +30,52 @@ _EMPTY = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 _PREFIX = "7920d9fdf4e936ef6c6d79dfd1c10cdd12dcb9b2db264b9ab9d5640332e9af67"
 
 
-class TestUnforgeableAuthorization:
-    def test_authorization_cannot_be_constructed_externally(self) -> None:
-        with pytest.raises(OrchestratorError, match="cannot be forged"):
-            DevelopmentRunAuthorization(
+class TestStartedRunContextIsRegistryVerified:
+    """N1: the started-run context is a convenience carrier, not a capability.
+
+    The sentinel only catches accidental construction; the real boundary is
+    :func:`_verify_started_run_context`, which re-reads the canonical registry
+    and refuses any carrier the registry does not corroborate — even one built
+    with this module's genuine sentinel. (Hostile in-process monkeypatching of
+    the verifier itself is out of the single-repository threat model.)
+    """
+
+    def test_sentinel_catches_accidental_construction(self) -> None:
+        with pytest.raises(OrchestratorError, match="internal carrier"):
+            StartedRunContext(
                 experiment_id="m3a-fixed-baseline-comparison-v2-run-003",
-                execution_code_commit_sha="a" * 40,
+                run_head_commit_sha="a" * 40,
                 source_tree_fingerprint="b" * 64,
                 started_event_sha256="c" * 64,
                 _token=object(),  # not the module sentinel
             )
+
+    def test_sentinel_valid_carrier_is_refused_when_registry_has_no_started_run(self) -> None:
+        # A carrier built with the *real* sentinel authorizes nothing: the
+        # canonical registry has no registered→started run-003, so the boundary
+        # refuses it before any calculation.
+        forged = StartedRunContext(
+            experiment_id="m3a-fixed-baseline-comparison-v2-run-003",
+            run_head_commit_sha="a" * 40,
+            source_tree_fingerprint="b" * 64,
+            started_event_sha256="c" * 64,
+            _token=_CONTEXT_SENTINEL,
+        )
+        with pytest.raises(OrchestratorError, match="not corroborated by the canonical registry"):
+            _verify_started_run_context(REPO_ROOT, forged)
+
+    def test_sentinel_valid_carrier_for_a_completed_id_is_refused(self) -> None:
+        # Even naming a genuinely registered id fails unless it is *exactly*
+        # registered→started: run-002 is already completed.
+        forged = StartedRunContext(
+            experiment_id="m3a-fixed-baseline-comparison-v1-run-002",
+            run_head_commit_sha="a" * 40,
+            source_tree_fingerprint="b" * 64,
+            started_event_sha256="c" * 64,
+            _token=_CONTEXT_SENTINEL,
+        )
+        with pytest.raises(OrchestratorError, match="not corroborated by the canonical registry"):
+            _verify_started_run_context(REPO_ROOT, forged)
 
 
 class TestResolveRegisteredOnly:

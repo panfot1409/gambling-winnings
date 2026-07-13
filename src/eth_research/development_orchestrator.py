@@ -13,10 +13,14 @@ runtime binding, frozen dossier / partition / protocol / methodology
 verification, both sealed ledgers byte-empty, the canonical tracked registry,
 exactly one registered-only v2 experiment whose bound fields all agree, and no
 output collision). Only then does it append a durable ``started`` event and
-mint an unforgeable :class:`DevelopmentRunAuthorization`; the real evaluation
-and the transactional publication both require that token, so no strategy,
-backtest, metric, or bootstrap can run — and nothing can be published — before
-``started`` exists. On success it publishes the immutable run artifacts and the
+build a :class:`StartedRunContext` carrier. That carrier is a convenience, **not**
+a capability: at every privileged boundary the real evaluation and the
+transactional publication re-read the canonical registry and re-prove the run is
+genuinely ``registered`` → ``started`` (:func:`_verify_started_run_context`)
+before any strategy, backtest, metric, or bootstrap runs — so possession of the
+carrier (even one copying this module's sentinel) authorizes nothing, and
+nothing can be computed or published before a corroborated ``started`` exists.
+On success it publishes the immutable run artifacts and the
 compatibility aliases as one durable batch, reads them back, strictly parses
 them, reconciles the return evidence, and appends ``completed``; on any failure
 after ``started`` it appends ``failed`` and the experiment id stays consumed.
@@ -74,32 +78,39 @@ class OrchestratorError(RuntimeError):
     """A fail-closed development-experiment orchestration refused to proceed."""
 
 
-# An unforgeable capability: only this module holds the sentinel, so a
-# DevelopmentRunAuthorization cannot be constructed outside the orchestrator.
-_AUTH_SENTINEL: object = object()
+# A convenience sentinel — NOT a security boundary. Python module globals are
+# importable and object identity is copyable, so possession of a StartedRunContext
+# grants nothing: every privileged boundary re-reads the canonical registry and
+# re-proves the run is genuinely started (see _verify_started_run_context, N1).
+# This is a single-repository operational control; it does not defend against
+# hostile in-process code monkeypatching the verifier.
+_CONTEXT_SENTINEL: object = object()
 
 
 @dataclass(frozen=True)
-class DevelopmentRunAuthorization:
-    """Proof that a ``started`` event was durably appended for this experiment.
+class StartedRunContext:
+    """A carrier for the just-appended ``started`` event's identity.
 
-    The real evaluation and the publication both require this object; it can
-    be minted only inside :func:`run_registered_development_experiment`, after
-    the ``started`` event exists, so no real research-train calculation or
-    artifact publication can occur before the registry records the run.
+    It is a convenience passed between the orchestrator's phases, **not** an
+    unforgeable capability: the real evaluation and the publication both
+    re-read the canonical registry via :func:`_verify_started_run_context` and
+    prove the experiment is registered→started with the exact started-line hash
+    and all bindings intact, so a fabricated context (even one copying this
+    module's sentinel) is rejected because the registry does not corroborate it.
     """
 
     experiment_id: str
-    execution_code_commit_sha: str
+    run_head_commit_sha: str
     source_tree_fingerprint: str
     started_event_sha256: str
     _token: object
 
     def __post_init__(self) -> None:
-        if self._token is not _AUTH_SENTINEL:
+        # The sentinel only catches accidental construction; it is not the
+        # security boundary. The registry re-verification is.
+        if self._token is not _CONTEXT_SENTINEL:
             raise OrchestratorError(
-                "DevelopmentRunAuthorization cannot be forged; it is minted only after a durable "
-                "'started' event by the orchestrator"
+                "StartedRunContext is an internal carrier; construct it only via the orchestrator"
             )
 
 
@@ -302,6 +313,75 @@ def _resolve_registered_only(events: tuple[Any, ...], experiment_id: str) -> Exp
     return registered
 
 
+def _verify_started_run_context(root: Path, context: StartedRunContext) -> ExperimentEventV2:
+    """Re-prove from the canonical registry that ``context`` names a started run (N1).
+
+    Every privileged boundary (real evaluation, publication) calls this *before*
+    any strategy, backtest, metric, or bootstrap work. It re-reads the canonical
+    tracked registry — re-validating the entire append-chain — and proves that:
+
+    * the named experiment's history is exactly ``registered`` → ``started``;
+    * that ``started`` event is the registry's last line, and its exact stored
+      bytes hash to the value the carrier claims (tying the carrier to the
+      genuinely appended event, so a stale or fabricated hash is rejected);
+    * the run's HEAD is a real commit whose source-tree fingerprint matches the
+      registered execution binding — and the carrier's copy of it agrees;
+    * both sealed access ledgers are still byte-empty.
+
+    Possession of a :class:`StartedRunContext` (even one copying this module's
+    sentinel) therefore grants nothing: a carrier the registry does not
+    corroborate is refused here, before any real calculation. This is a
+    single-repository operational control, not a cryptographic capability — it
+    does not defend against hostile in-process code that monkeypatches this
+    verifier or the registry reader.
+    """
+    registry_path = root / EXPERIMENT_REGISTRY_RELPATH
+    if registry_path.is_symlink():
+        raise OrchestratorError(
+            "the experiment registry must be a real tracked file, not a symlink"
+        )
+    events = read_registry(registry_path)
+    history = [e for e in events if e.experiment_id == context.experiment_id]
+    stages = [e.event for e in history]
+    if stages != [EVENT_REGISTERED, EVENT_STARTED]:
+        raise OrchestratorError(
+            f"experiment {context.experiment_id!r} is not registered→started (stages={stages}); "
+            "the started-run context is not corroborated by the canonical registry"
+        )
+    registered, started = history[0], history[1]
+    if not isinstance(registered, ExperimentEventV2) or not isinstance(started, ExperimentEventV2):
+        raise OrchestratorError(
+            f"experiment {context.experiment_id!r} is not a v2 registered→started run"
+        )
+    # The started event must be the registry's last line, and its exact stored
+    # bytes must hash to the value the carrier claims.
+    if events[-1] is not started:
+        raise OrchestratorError(
+            f"the started event for {context.experiment_id!r} is not the registry's last line; "
+            "refusing to proceed on an uncorroborated started-run context"
+        )
+    last_sha = latest_registry_line_sha256(registry_path)
+    if last_sha != context.started_event_sha256:
+        raise OrchestratorError(
+            "the carried started-event hash does not match the registry's last line"
+        )
+    # The run's HEAD source tree must match the registered execution binding.
+    if not is_commit_object(root, context.run_head_commit_sha):
+        raise OrchestratorError("the run HEAD is not a real commit object")
+    head_fingerprint = source_tree_fingerprint(root, context.run_head_commit_sha)
+    if head_fingerprint != registered.execution_source_tree_fingerprint:
+        raise OrchestratorError(
+            "the run HEAD source-tree fingerprint disagrees with the registered execution binding"
+        )
+    if context.source_tree_fingerprint != registered.execution_source_tree_fingerprint:
+        raise OrchestratorError(
+            "the carried source-tree fingerprint disagrees with the registered execution binding"
+        )
+    # No gate/holdout access may have appeared since 'started'.
+    _verify_ledgers_byte_empty(root)
+    return started
+
+
 def run_registered_development_experiment(
     repo_root: str | Path,
     experiment_id: str,
@@ -323,16 +403,16 @@ def run_registered_development_experiment(
     started = _event_with(registered, EVENT_STARTED, now(), prep.previous_line_sha256)
     append_registry_event(prep.repo_root / prep.registry_relpath, started)
     started_sha = sha256_bytes(started.to_json_line()[:-1])
-    authorization = DevelopmentRunAuthorization(
+    context = StartedRunContext(
         experiment_id=experiment_id,
-        execution_code_commit_sha=prep.head,
+        run_head_commit_sha=prep.head,
         source_tree_fingerprint=prep.source_tree_fingerprint,
         started_event_sha256=started_sha,
-        _token=_AUTH_SENTINEL,
+        _token=_CONTEXT_SENTINEL,
     )
     try:
-        detail = _evaluate_authorized(prep, authorization)
-        completed = _publish_and_complete(prep, detail, authorization, now)
+        detail = _evaluate_authorized(prep, context)
+        completed = _publish_and_complete(prep, detail, context, now)
     except Exception as exc:
         _append_failed(prep, now, exc)
         raise OrchestratorError(
@@ -342,11 +422,16 @@ def run_registered_development_experiment(
 
 
 def _evaluate_authorized(
-    prep: PreparedRun, authorization: DevelopmentRunAuthorization
+    prep: PreparedRun, context: StartedRunContext
 ) -> DevelopmentEvaluationDetail:
-    """Reconstruct the dataset and run the walk-forward — requires authorization."""
-    if not isinstance(authorization, DevelopmentRunAuthorization):  # pragma: no cover - defensive
-        raise OrchestratorError("real-data evaluation requires a DevelopmentRunAuthorization")
+    """Reconstruct the dataset and run the walk-forward — re-verifies the run first.
+
+    Re-proves from the canonical registry that the run is genuinely
+    ``registered`` → ``started`` (N1) *before* any dataset reconstruction,
+    strategy, backtest, metric, or bootstrap work runs; possession of the
+    ``StartedRunContext`` carrier alone authorizes nothing.
+    """
+    _verify_started_run_context(prep.repo_root, context)
     import tempfile
 
     from eth_research.develop_m3a import _canonical_attempt_id
@@ -431,17 +516,18 @@ def _append_failed(prep: PreparedRun, now: Callable[[], pd.Timestamp], exc: Exce
 def _publish_and_complete(
     prep: PreparedRun,
     detail: DevelopmentEvaluationDetail,
-    authorization: DevelopmentRunAuthorization,
+    context: StartedRunContext,
     now: Callable[[], pd.Timestamp],
 ) -> ExperimentEventV2:
     """Build, publish transactionally, verify, and append 'completed'.
 
     The completed event is built (from the artifact hashes) *before* the
     manifest, so the manifest can bind the exact completed-event bytes; the
-    same event is appended after publication succeeds and verifies.
+    same event is appended after publication succeeds and verifies. Like the
+    evaluation boundary, this re-proves from the canonical registry that the run
+    is genuinely ``registered`` → ``started`` (N1) before publishing anything.
     """
-    if not isinstance(authorization, DevelopmentRunAuthorization):  # pragma: no cover - defensive
-        raise OrchestratorError("publication requires a DevelopmentRunAuthorization")
+    _verify_started_run_context(prep.repo_root, context)
     from eth_research.development_publication import publish_run_artifacts, render_run_artifacts
 
     artifacts = render_run_artifacts(prep, detail)
