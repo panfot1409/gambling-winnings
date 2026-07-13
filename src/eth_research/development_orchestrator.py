@@ -146,13 +146,34 @@ def _running_package_root() -> Path:
     return Path(location).resolve().parent
 
 
-def _preflight(repo_root: str | Path, experiment_id: str) -> PreparedRun:
-    """Run every fail-closed pre-check and return the validated context.
+@dataclass(frozen=True)
+class RepositoryPreconditions:
+    """The run-agnostic, validated repository context.
 
-    Read-only: it resolves and verifies the repository, runtime, frozen data,
-    protocols, ledgers, and registry, and locates exactly one registered-only
-    v2 experiment matching ``experiment_id`` whose bound fields all agree and
-    whose output paths do not yet exist. It appends nothing.
+    Everything the fail-closed orchestrator checks that does *not* depend on a
+    specific experiment id: canonical repository identity, a clean tracked tree,
+    the running-source binding and its fingerprint, the frozen numerical runtime,
+    the committed development partition, the frozen M2B dossier, the v1 protocol
+    and v2 methodology (mutually consistent), both sealed ledgers byte-empty, and
+    a real (non-symlink) registry file. Shared by :func:`_preflight` (before a
+    run) and :mod:`eth_research.m3a_register` (before registration) so both prove
+    exactly the same preconditions and cannot drift.
+    """
+
+    repo_root: Path
+    head: str
+    source_tree_fingerprint: str
+    partition_sha256: str
+    methodology_id: str
+    methodology_artifact_sha256: str
+
+
+def verify_repository_preconditions(repo_root: str | Path) -> RepositoryPreconditions:
+    """Run every run-agnostic fail-closed pre-check; return the derived context.
+
+    Read-only. Raises :class:`OrchestratorError` on the first violation. It does
+    not read the registry's events or look for any experiment — only that the
+    registry is a real tracked file.
     """
     # 1-2. Canonical repository root; refuse a symlinked/foreign package tree.
     try:
@@ -182,8 +203,6 @@ def _preflight(repo_root: str | Path, experiment_id: str) -> PreparedRun:
     _verify_runtime(root)
     # 7-8. Committed development partition; the frozen M2B dossier's committed
     #    bytes must match the partition's binding, and it must strictly parse.
-    #    (The full reconstruction-based dossier verification runs inside the
-    #    authorized evaluation, after 'started'.)
     partition = load_development_partition(root / DEVELOPMENT_PARTITION_RELPATH)
     partition_sha = sha256_file(root / DEVELOPMENT_PARTITION_RELPATH)
     dossier_sha = sha256_file(root / FROZEN_DOSSIER_RELPATH)
@@ -208,11 +227,32 @@ def _preflight(repo_root: str | Path, experiment_id: str) -> PreparedRun:
         raise OrchestratorError(
             "the experiment registry must be a real tracked file, not a symlink"
         )
+    return RepositoryPreconditions(
+        repo_root=root,
+        head=head,
+        source_tree_fingerprint=fingerprint,
+        partition_sha256=partition_sha,
+        methodology_id=methodology.methodology_id,
+        methodology_artifact_sha256=methodology_sha,
+    )
+
+
+def _preflight(repo_root: str | Path, experiment_id: str) -> PreparedRun:
+    """Run every fail-closed pre-check and return the validated context.
+
+    Read-only: it verifies the run-agnostic repository preconditions, then
+    locates exactly one registered-only v2 experiment matching ``experiment_id``
+    whose bound fields all agree and whose output paths do not yet exist. It
+    appends nothing.
+    """
+    pre = verify_repository_preconditions(repo_root)
+    root = pre.repo_root
+    registry_path = root / EXPERIMENT_REGISTRY_RELPATH
     events = read_registry(registry_path)
     # 13. Exactly one registered v2 experiment with no started/terminal event.
     registered = _resolve_registered_only(events, experiment_id)
     # 14. Bound fields agree with the committed inputs.
-    if registered.execution_source_tree_fingerprint != fingerprint:
+    if registered.execution_source_tree_fingerprint != pre.source_tree_fingerprint:
         raise OrchestratorError(
             "registered execution source-tree fingerprint disagrees with the running source"
         )
@@ -223,19 +263,22 @@ def _preflight(repo_root: str | Path, experiment_id: str) -> PreparedRun:
     # that runs, and the fingerprint binds it robustly across the append.
     if not is_commit_object(root, registered.execution_code_commit_sha):
         raise OrchestratorError("registered execution commit is not a real commit object")
-    if source_tree_fingerprint(root, registered.execution_code_commit_sha) != fingerprint:
+    if (
+        source_tree_fingerprint(root, registered.execution_code_commit_sha)
+        != pre.source_tree_fingerprint
+    ):
         raise OrchestratorError(
             "registered execution commit's source tree does not match the running source"
         )
-    if registered.development_partition_sha256 != partition_sha:
+    if registered.development_partition_sha256 != pre.partition_sha256:
         raise OrchestratorError("registered partition SHA disagrees with the committed partition")
     if registered.walk_forward_protocol_path != WALK_FORWARD_PROTOCOL_RELPATH:
         raise OrchestratorError("registered walk-forward protocol path is not the canonical path")
-    if registered.walk_forward_protocol_sha256 != methodology_sha:
+    if registered.walk_forward_protocol_sha256 != pre.methodology_artifact_sha256:
         raise OrchestratorError(
             "registered walk_forward_protocol_sha256 must bind the v2 methodology artifact"
         )
-    if registered.methodology_id != methodology.methodology_id:
+    if registered.methodology_id != pre.methodology_id:
         raise OrchestratorError("registered methodology id disagrees with the methodology artifact")
     # 15. Refuse output collisions before consuming the experiment.
     for relpath in (
@@ -251,8 +294,8 @@ def _preflight(repo_root: str | Path, experiment_id: str) -> PreparedRun:
         raise OrchestratorError("registry is empty; cannot chain a v2 event")
     return PreparedRun(
         repo_root=root,
-        head=head,
-        source_tree_fingerprint=fingerprint,
+        head=pre.head,
+        source_tree_fingerprint=pre.source_tree_fingerprint,
         registered_event=registered,
         registry_relpath=EXPERIMENT_REGISTRY_RELPATH,
         previous_line_sha256=previous,
