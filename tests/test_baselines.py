@@ -104,8 +104,8 @@ class TestDonchianLookAhead:
         frame = self._random_frame()
         base = DonchianChannel().target_positions(frame)
         mutated = frame.copy()
-        mutated.iloc[250, mutated.columns.get_loc("high")] = 10_000.0
-        mutated.iloc[250, mutated.columns.get_loc("close")] = 10_000.0
+        mutated.loc[mutated.index[250], "high"] = 10_000.0
+        mutated.loc[mutated.index[250], "close"] = 10_000.0
         after = DonchianChannel().target_positions(mutated)
         assert list(base.iloc[:250]) == list(after.iloc[:250])
 
@@ -118,7 +118,7 @@ class TestDonchianLookAhead:
         # Spike the current high AND close on the last bar; the channel excludes
         # the current bar, so entry at that bar must still not trigger (max of
         # the prior-3 highs is 10, close 10 is not > 10).
-        frame.iloc[5, frame.columns.get_loc("high")] = 100.0
+        frame.loc[frame.index[5], "high"] = 100.0
         targets = DonchianChannel(entry_window=3, exit_window=2).target_positions(frame)
         assert targets.iloc[5] == 0.0
 
@@ -134,7 +134,7 @@ class TestDonchianLookAhead:
         targets = DonchianChannel(entry_window=3, exit_window=2).target_positions(frame)
         assert targets.iloc[3] == 1.0  # entered
         frame2 = frame.copy()
-        frame2.iloc[4, frame2.columns.get_loc("low")] = 0.01  # spike current low only
+        frame2.loc[frame2.index[4], "low"] = 0.01  # spike current low only
         t2 = DonchianChannel(entry_window=3, exit_window=2).target_positions(frame2)
         # close[4]=15 vs min(prior-2 lows = l2,l3 = 9,9) = 9; 15 not < 9 -> stay long
         assert t2.iloc[4] == 1.0
