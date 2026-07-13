@@ -124,7 +124,7 @@ class TestRefusals:
         (tmp_path / "real").write_bytes(b"x")
         link = tmp_path / "results.json"
         link.symlink_to(tmp_path / "real")
-        with pytest.raises(PublicationError, match="not a regular file"):
+        with pytest.raises(PublicationError, match="symlink"):
             publish_batch(tmp_path, [_art("results.json", b"NEW")])
         assert _no_temps(tmp_path)
 

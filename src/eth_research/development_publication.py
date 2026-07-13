@@ -236,8 +236,14 @@ def publish_run_artifacts(
             EXPERIMENT_INDEX_RELPATH, index_bytes, immutable=False, is_completeness_marker=True
         ),
     ]
-    publish_batch(prep.repo_root, batch)
-    _verify_published(prep, artifacts, manifest_bytes)
+    # Verify inside the transaction, before commit: a read-back / strict-parse /
+    # reconciliation failure rolls the whole publication back to the prior bytes
+    # (N4) instead of leaving a finished-looking archive and migrated aliases.
+    publish_batch(
+        prep.repo_root,
+        batch,
+        verify=lambda _root: _verify_published(prep, artifacts, manifest_bytes),
+    )
 
 
 def _verify_published(prep: PreparedRun, artifacts: RunArtifacts, manifest_bytes: bytes) -> None:
