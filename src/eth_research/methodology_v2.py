@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from eth_research import __version__
-from eth_research._json import StrictJSONError, strict_json_loads
+from eth_research._json import StrictJSONError, require_canonical_file_bytes, strict_json_loads
 from eth_research.bootstrap import RNG_ALGORITHM, STATISTIC
 from eth_research.bootstrap_v2 import (
     FOLD_STRATIFIED_ALGORITHM,
@@ -462,6 +462,7 @@ def load_methodology_v2(path: str | Path) -> MethodologyProtocolV2:
     """Strictly parse the committed v2 methodology artifact."""
     raw = Path(path).read_bytes()
     try:
+        require_canonical_file_bytes(raw, "v2 methodology artifact")
         return MethodologyProtocolV2.from_json_bytes(raw)
     except ValueError as exc:
         raise MethodologyError(f"invalid v2 methodology artifact: {exc}") from exc

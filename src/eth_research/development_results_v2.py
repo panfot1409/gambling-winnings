@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from eth_research._json import StrictJSONError, strict_json_loads
+from eth_research._json import StrictJSONError, require_canonical_file_bytes, strict_json_loads
 from eth_research.bootstrap_v2 import (
     FOLD_STRATIFIED_ALGORITHM,
     HIERARCHICAL_ALGORITHM,
@@ -777,6 +777,7 @@ def load_development_results_v2(path: str | Path) -> DevelopmentResultsV2:
     """Strictly parse a committed v2 development-results file into the typed model."""
     raw = Path(path).read_bytes()
     try:
+        require_canonical_file_bytes(raw, "v2 development results")
         return DevelopmentResultsV2.from_json_bytes(raw)
     except ValueError as exc:
         raise DevelopmentResultsV2Error(f"invalid v2 development results: {exc}") from exc

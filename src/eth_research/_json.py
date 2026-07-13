@@ -53,6 +53,21 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def require_canonical_file_bytes(raw: bytes, label: str) -> bytes:
+    """A serialized artifact *file* must end with exactly one trailing newline.
+
+    Every model's ``to_json_bytes`` appends ``"\\n"``, so the canonical on-disk
+    form ends with a newline. Enforcing that at the file-load boundary makes a
+    committed artifact a true serialize fixed point (``load(dump(x)) == file``),
+    rather than silently accepting a de-newlined file. ``from_json_bytes`` itself
+    stays a lenient parser — registry/errata *lines* carry no trailing newline —
+    and every committed artifact is additionally SHA-256-bound downstream.
+    """
+    if not raw.endswith(b"\n"):
+        raise StrictJSONError(f"{label} must end with a trailing newline")
+    return raw
+
+
 def strict_json_loads(raw: bytes | str) -> Any:
     """Parse JSON with the strict rules above; raise :class:`StrictJSONError`.
 

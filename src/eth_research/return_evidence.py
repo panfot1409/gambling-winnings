@@ -32,7 +32,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from eth_research._json import StrictJSONError, strict_json_loads
+from eth_research._json import StrictJSONError, require_canonical_file_bytes, strict_json_loads
 from eth_research.data.provenance import require_int, require_str, sha256_bytes
 from eth_research.data.validation import (
     require_evaluation_id,
@@ -377,6 +377,7 @@ def load_return_evidence(path: str | Path) -> ReturnEvidence:
     """Strictly parse a committed return-evidence artifact."""
     raw = Path(path).read_bytes()
     try:
+        require_canonical_file_bytes(raw, "return evidence")
         return ReturnEvidence.from_json_bytes(raw)
     except ValueError as exc:
         raise ReturnEvidenceError(f"invalid return evidence: {exc}") from exc

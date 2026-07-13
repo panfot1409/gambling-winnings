@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from eth_research._json import StrictJSONError, strict_json_loads
+from eth_research._json import StrictJSONError, require_canonical_file_bytes, strict_json_loads
 from eth_research.data.provenance import (
     require_hex64,
     require_int,
@@ -305,14 +305,16 @@ def _strict_object(raw: bytes, keys: frozenset[str], label: str) -> dict[str, An
 
 def load_artifact_manifest(path: str | Path) -> ArtifactManifest:
     try:
-        return ArtifactManifest.from_json_bytes(Path(path).read_bytes())
+        raw = require_canonical_file_bytes(Path(path).read_bytes(), "artifact manifest")
+        return ArtifactManifest.from_json_bytes(raw)
     except ValueError as exc:
         raise ArchiveError(f"invalid artifact manifest {Path(path).name!r}: {exc}") from exc
 
 
 def load_experiment_index(path: str | Path) -> ExperimentIndex:
     try:
-        return ExperimentIndex.from_json_bytes(Path(path).read_bytes())
+        raw = require_canonical_file_bytes(Path(path).read_bytes(), "experiment index")
+        return ExperimentIndex.from_json_bytes(raw)
     except ValueError as exc:
         raise ArchiveError(f"invalid experiment index: {exc}") from exc
 
@@ -401,6 +403,7 @@ def verify_experiment_archive(repo_root: str | Path) -> tuple[str, ...]:
             f"experiment index {index_ids} does not match completed registry events "
             f"{sorted(completed, key=lambda cid: completed[cid][0])}"
         )
+    declared_files: dict[str, set[str]] = {}
     for entry in index.entries:
         position, event = completed[entry.experiment_id]
         if entry.registry_event_position != position:
@@ -415,4 +418,48 @@ def verify_experiment_archive(repo_root: str | Path) -> tuple[str, ...]:
         if manifest.registry_event_position != position:
             raise ArchiveError(f"{entry.experiment_id}: manifest position != registry position")
         verify_archived_experiment(root, manifest, event)
+        files = {entry.manifest_relpath, manifest.results_relpath, manifest.report_relpath}
+        if manifest.return_evidence_relpath is not None:
+            files.add(manifest.return_evidence_relpath)
+        declared_files[entry.experiment_id] = files
+
+    _reject_extra_archive_files(root, index_ids, declared_files)
     return tuple(index_ids)
+
+
+def _reject_extra_archive_files(
+    root: Path, index_ids: list[str], declared_files: dict[str, set[str]]
+) -> None:
+    """The experiments tree must contain exactly the declared archive files.
+
+    Enumerates ``research/m3a/experiments/`` on disk and refuses any stray file,
+    rogue experiment directory (even one with a self-consistent manifest that is
+    neither indexed nor a completed event), symlink, or undeclared file inside a
+    known experiment — closing the gap where an index-only verifier trusts the
+    declared paths but never proves the tree holds nothing else.
+    """
+    experiments_root = root / EXPERIMENTS_RELDIR
+    if not experiments_root.is_dir():
+        raise ArchiveError(f"experiments directory missing: {EXPERIMENTS_RELDIR}")
+    allowed_ids = set(index_ids)
+    for child in sorted(experiments_root.iterdir()):
+        rel = child.relative_to(root).as_posix()
+        if child.is_symlink():
+            raise ArchiveError(f"symlink in experiments tree: {rel}")
+        if child.is_file():
+            if rel != EXPERIMENT_INDEX_RELPATH:
+                raise ArchiveError(f"unexpected file in experiments tree: {rel}")
+            continue
+        if not child.is_dir():
+            raise ArchiveError(f"unexpected non-file/directory in experiments tree: {rel}")
+        if child.name not in allowed_ids:
+            raise ArchiveError(f"rogue experiment directory not in the index: {rel}")
+        allowed_rel = declared_files[child.name]
+        for descendant in sorted(child.rglob("*")):
+            drel = descendant.relative_to(root).as_posix()
+            if descendant.is_symlink():
+                raise ArchiveError(f"symlink in archive: {drel}")
+            if descendant.is_dir():
+                raise ArchiveError(f"unexpected subdirectory in archive: {drel}")
+            if drel not in allowed_rel:
+                raise ArchiveError(f"undeclared file in archive {child.name}: {drel}")

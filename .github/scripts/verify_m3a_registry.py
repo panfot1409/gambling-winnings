@@ -41,6 +41,22 @@ REPO = Path(__file__).resolve().parents[2]
 _EMPTY_SHA = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 _GATE_LEDGER = "research/m3a/development_gate_access.jsonl"
 _HOLDOUT_LEDGER = "research/m2b/test_evaluations.jsonl"
+# The immutable six-line registry-v1 prefix (run-001 + run-002 lifecycles). Its
+# byte hash is pinned here so the CI gate — not only a unit test — refuses any
+# edit to a v1 prefix line (e.g. a monotonic-preserving timestamp change that the
+# append-chain, which only binds v2 lines to their predecessor, would not catch).
+_V1_PREFIX_LINES = 6
+_V1_PREFIX_SHA256 = "7920d9fdf4e936ef6c6d79dfd1c10cdd12dcb9b2db264b9ab9d5640332e9af67"
+
+
+def _verify_v1_prefix() -> None:
+    raw = (REPO / EXPERIMENT_REGISTRY_RELPATH).read_bytes()
+    lines = [line for line in raw.split(b"\n") if line]
+    if len(lines) < _V1_PREFIX_LINES:
+        fail(f"registry has fewer than {_V1_PREFIX_LINES} lines")
+    prefix = b"".join(line + b"\n" for line in lines[:_V1_PREFIX_LINES])
+    if sha256_bytes(prefix) != _V1_PREFIX_SHA256:
+        fail("the immutable six-line registry v1 prefix has changed")
 
 
 def fail(message: str) -> NoReturn:
@@ -132,6 +148,7 @@ def _verify_v2(completed: ExperimentEventV2, registered: ExperimentEventV2) -> N
 
 def main() -> int:
     events = read_registry(REPO / EXPERIMENT_REGISTRY_RELPATH)  # validates all lifecycles
+    _verify_v1_prefix()  # the immutable six-line v1 prefix is byte-identical
     # Every completed experiment's archive + the index verify (and no extras).
     verify_experiment_archive(REPO)
     _verify_ledgers()
