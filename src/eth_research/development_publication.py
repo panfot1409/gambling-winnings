@@ -124,8 +124,15 @@ def render_run_artifacts(prep: PreparedRun, detail: DevelopmentEvaluationDetail)
         experiment_family_id=registered.experiment_family,
         methodology_id=registered.methodology_id,
         package_version=__version__,
-        execution_code_commit_sha=prep.head,
-        registered_code_commit_sha=registered.registered_code_commit_sha,
+        # N8: distinct, unambiguous git-identity fields. The registered event's
+        # execution commit (E) is the source whose tree runs; the run HEAD (R)
+        # is the clean checkout the run started from (also the registration
+        # container for run-003 — the registry-only commit does not change src,
+        # so source fingerprints agree); the registered code commit froze the
+        # methodology/protocol.
+        execution_source_commit_sha=registered.execution_code_commit_sha,
+        run_head_commit_sha=prep.head,
+        methodology_freeze_commit_sha=registered.registered_code_commit_sha,
         execution_source_tree_fingerprint=prep.source_tree_fingerprint,
         frozen_m2_dossier_sha256=v1.frozen_m2_dossier_sha256,
         development_partition_sha256=v1.development_partition_sha256,

@@ -359,8 +359,9 @@ _TOP_LEVEL_KEYS: frozenset[str] = frozenset(
         "experiment_family_id",
         "methodology_id",
         "package_version",
-        "execution_code_commit_sha",
-        "registered_code_commit_sha",
+        "execution_source_commit_sha",
+        "run_head_commit_sha",
+        "methodology_freeze_commit_sha",
         "execution_source_tree_fingerprint",
         "frozen_m2_dossier_sha256",
         "development_partition_sha256",
@@ -395,8 +396,9 @@ class DevelopmentResultsV2:
     experiment_family_id: str
     methodology_id: str
     package_version: str
-    execution_code_commit_sha: str
-    registered_code_commit_sha: str
+    execution_source_commit_sha: str
+    run_head_commit_sha: str
+    methodology_freeze_commit_sha: str
     execution_source_tree_fingerprint: str
     frozen_m2_dossier_sha256: str
     development_partition_sha256: str
@@ -433,8 +435,9 @@ class DevelopmentResultsV2:
         if self.methodology_id != METHODOLOGY_ID:
             raise ValueError(f"methodology_id must be {METHODOLOGY_ID!r}")
         require_nonempty_str("package_version", self.package_version)
-        require_commit_sha("execution_code_commit_sha", self.execution_code_commit_sha)
-        require_commit_sha("registered_code_commit_sha", self.registered_code_commit_sha)
+        require_commit_sha("execution_source_commit_sha", self.execution_source_commit_sha)
+        require_commit_sha("run_head_commit_sha", self.run_head_commit_sha)
+        require_commit_sha("methodology_freeze_commit_sha", self.methodology_freeze_commit_sha)
         require_hex64("execution_source_tree_fingerprint", self.execution_source_tree_fingerprint)
         require_hex64("frozen_m2_dossier_sha256", self.frozen_m2_dossier_sha256)
         require_hex64("development_partition_sha256", self.development_partition_sha256)
@@ -534,8 +537,9 @@ class DevelopmentResultsV2:
             "experiment_family_id": self.experiment_family_id,
             "methodology_id": self.methodology_id,
             "package_version": self.package_version,
-            "execution_code_commit_sha": self.execution_code_commit_sha,
-            "registered_code_commit_sha": self.registered_code_commit_sha,
+            "execution_source_commit_sha": self.execution_source_commit_sha,
+            "run_head_commit_sha": self.run_head_commit_sha,
+            "methodology_freeze_commit_sha": self.methodology_freeze_commit_sha,
             "execution_source_tree_fingerprint": self.execution_source_tree_fingerprint,
             "frozen_m2_dossier_sha256": self.frozen_m2_dossier_sha256,
             "development_partition_sha256": self.development_partition_sha256,
@@ -600,11 +604,14 @@ class DevelopmentResultsV2:
             ),
             methodology_id=require_str("methodology_id", payload["methodology_id"]),
             package_version=require_str("package_version", payload["package_version"]),
-            execution_code_commit_sha=require_str(
-                "execution_code_commit_sha", payload["execution_code_commit_sha"]
+            execution_source_commit_sha=require_str(
+                "execution_source_commit_sha", payload["execution_source_commit_sha"]
             ),
-            registered_code_commit_sha=require_str(
-                "registered_code_commit_sha", payload["registered_code_commit_sha"]
+            run_head_commit_sha=require_str(
+                "run_head_commit_sha", payload["run_head_commit_sha"]
+            ),
+            methodology_freeze_commit_sha=require_str(
+                "methodology_freeze_commit_sha", payload["methodology_freeze_commit_sha"]
             ),
             execution_source_tree_fingerprint=require_str(
                 "execution_source_tree_fingerprint", payload["execution_source_tree_fingerprint"]

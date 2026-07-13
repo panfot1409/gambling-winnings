@@ -150,8 +150,9 @@ def _build_consistent() -> tuple[DevelopmentResultsV2, ReturnEvidence]:
         experiment_family_id="m3a-fixed-baseline-comparison-v2",
         methodology_id="walk-forward-fold-stratified-bootstrap-v2",
         package_version="0.4.0",
-        execution_code_commit_sha="a" * 40,
-        registered_code_commit_sha="b" * 40,
+        execution_source_commit_sha="a" * 40,
+        run_head_commit_sha="b" * 40,
+        methodology_freeze_commit_sha="9" * 40,
         execution_source_tree_fingerprint="c" * 64,
         frozen_m2_dossier_sha256="d" * 64,
         development_partition_sha256="e" * 64,
@@ -217,6 +218,18 @@ class TestInvariants:
         payload = json.loads(results.to_json_bytes())
         payload["fold_results"] = payload["fold_results"][:-1]
         with pytest.raises(ValueError, match="complete 5x4x3 grid"):
+            DevelopmentResultsV2.from_json_bytes(json.dumps(payload).encode("utf-8"))
+
+    def test_commit_identity_fields_are_distinct_and_required(self) -> None:
+        # N8: execution-source / run-head / methodology-freeze are separate
+        # 40-hex fields, never one overloaded commit.
+        results, _ = _build_consistent()
+        assert results.execution_source_commit_sha == "a" * 40
+        assert results.run_head_commit_sha == "b" * 40
+        assert results.methodology_freeze_commit_sha == "9" * 40
+        payload = json.loads(results.to_json_bytes())
+        del payload["run_head_commit_sha"]
+        with pytest.raises(ValueError, match="top-level keys do not match"):
             DevelopmentResultsV2.from_json_bytes(json.dumps(payload).encode("utf-8"))
 
     def test_bad_experiment_family_is_rejected(self) -> None:
