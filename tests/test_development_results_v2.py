@@ -233,6 +233,28 @@ class TestInvariants:
         with pytest.raises(ValueError, match="does not rederive"):
             DevelopmentResultsV2.from_json_bytes(json.dumps(payload).encode("utf-8"))
 
+    def test_buy_and_hold_with_two_fills_is_rejected(self) -> None:
+        results, _ = _build_consistent()
+        payload = json.loads(results.to_json_bytes())
+        bnh = next(c for c in payload["fold_results"] if c["strategy"] == "buy_and_hold")
+        bnh["num_fills"] = 2
+        with pytest.raises(ValueError, match="exactly one entry per fold"):
+            DevelopmentResultsV2.from_json_bytes(json.dumps(payload).encode("utf-8"))
+
+    def test_exposure_outside_unit_interval_is_rejected(self) -> None:
+        results, _ = _build_consistent()
+        payload = json.loads(results.to_json_bytes())
+        payload["fold_results"][12]["exposure_fraction"] = 1.5
+        with pytest.raises(ValueError, match="exposure_fraction out of"):
+            DevelopmentResultsV2.from_json_bytes(json.dumps(payload).encode("utf-8"))
+
+    def test_drawdown_outside_range_is_rejected(self) -> None:
+        results, _ = _build_consistent()
+        payload = json.loads(results.to_json_bytes())
+        payload["fold_results"][12]["max_drawdown"] = 0.5  # must be in [-1, 0]
+        with pytest.raises(ValueError, match="max_drawdown out of"):
+            DevelopmentResultsV2.from_json_bytes(json.dumps(payload).encode("utf-8"))
+
 
 class TestReconciliation:
     def test_pooled_and_bootstrap_recompute_from_evidence(self) -> None:
@@ -256,6 +278,14 @@ class TestReconciliation:
         # Rebuild via a bypass: construct with the tampered pooled cell but valid grid.
         tampered = DevelopmentResultsV2.from_json_bytes(_repair_grid(payload))
         with pytest.raises(DevelopmentResultsV2Error, match="does not recompute"):
+            reconcile_results_v2_with_evidence(tampered, evidence)
+
+    def test_forged_bootstrap_point_fails_reconciliation(self) -> None:
+        results, evidence = _build_consistent()
+        payload = json.loads(results.to_json_bytes())
+        payload["bootstrap_cells"][0]["primary"]["point_estimate"] += 0.01
+        tampered = DevelopmentResultsV2.from_json_bytes(json.dumps(payload).encode("utf-8"))
+        with pytest.raises(DevelopmentResultsV2Error, match="bootstrap.*does not recompute"):
             reconcile_results_v2_with_evidence(tampered, evidence)
 
 

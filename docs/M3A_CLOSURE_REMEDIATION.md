@@ -188,6 +188,26 @@ red-team matrix over registry/orchestrator, publication, results, bootstrap, and
 firewall attacks; each attack gets a regression test or a documented scope reason.
 An independent second red-team pass that never touches a sealed partition.
 
+### Red-team coverage map
+
+| attack class | attacks | covering tests |
+| --- | --- | --- |
+| registry / orchestrator | unknown / reused / already-started / already-terminal id; v2-as-first-line; broken append-chain; correction without a completed parent; unsafe/foreign artifact path; unknown/missing v2 key; contaminated registry blocks reads; no-registered-experiment fail-closed with no side effects; unforgeable authorization | `test_experiment_registry.py::TestRegistryV2`, `test_development_orchestrator.py` |
+| publication | replace failure; fsync-dir failure; immutable-existing target; pre-existing symlink; duplicate path; empty batch; marker-written-last; fresh-publish and correction rollback restore exact prior bytes | `test_publication.py` |
+| results v2 | schema ≠ 2; unknown/missing top-level key; forged data-access declaration; incomplete 5×4×3 grid; liquidation > marked; cash with a fill; buy-and-hold ≠ one fill; exposure ∉ [0,1]; drawdown ∉ [−1,0]; summary that does not rederive; pooled/bootstrap that do not recompute from evidence; mismatched experiment id | `test_development_results_v2.py` |
+| return evidence | observation on/after the development gate; boundary after the gate; incomplete grid; per-fold length mismatch; NaN return; reordered / duplicated fold axis | `test_return_evidence.py` |
+| bootstrap | block longer than the smallest fold (would cross a seam); within-fold sentinel proves no seam crossing; symmetric interval parse pins RNG/percentile/statistic | `test_bootstrap_v2.py`, `test_m3a_closure_defects.py::TestR4SeamCrossingBootstrap` |
+| firewall | forbidden timestamp reaching the engine or a strategy; boundary mutated after validation; forbidden observation smuggled through return evidence | `test_development_evaluation.py` firewall spies, `test_return_evidence.py::TestFirewall` |
+| no unregistered write path | develop_m3a exposes no `--write`; `publish_batch` is called only from the orchestrator's publication module | `test_m3a_closure_defects.py::TestNoUnregisteredRealDataWritePath` |
+
+Scope notes: orchestrator happy-path attacks that require a *registered* v2
+experiment (output collision, source-modified-after-registration, runtime/version
+drift) are exercised end-to-end when run-003 executes and by the strict replay of
+that completed experiment; the component invariants they rely on are unit-tested
+above. The `curl | sh` installer SHA pin (R7) stays documented CI debt: the
+sandbox egress policy blocks github.com and astral.sh, so no trusted SHA can be
+obtained offline and a guessed one must not be committed.
+
 ## 11. CI / security changes
 
 Remove every `curl … | sh`; install uv via a full-SHA-pinned `astral-sh/setup-uv`
