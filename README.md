@@ -299,12 +299,16 @@ byte-empty).
   rows **only**; a firewall rejects any row on or after the development gate
   — and any gap, duplicate, or reordering — before it can reach a strategy
   or the engine. The partition binds the frozen M2 dossier SHA-256.
-- **Pre-registered walk-forward** (`eth_research.walkforward`): an
-  expanding window with 1095 initial training rows and five contiguous
+- **Pre-registered walk-forward** (`eth_research.walkforward`): this is
+  **fixed-rule rolling-origin out-of-sample evaluation** — no estimator is
+  fit. An expanding window with 1095 initial rows and five contiguous
   out-of-sample folds over the remaining 1126 rows (226, 225, 225, 225,
   225), information gap 0, context ≤ 55 bars, each fold reset to an
-  independent 10 000 USD. Independent resets are a comparison device, not
-  one stitched portfolio.
+  independent 10 000 USD. The expanding "training" row counts are the
+  **information/history sets** that define each fold's origin and supply
+  indicator context; the fixed strategies (SMA 20/50, Donchian 55/20) are
+  never fitted on them. Independent resets are a comparison device, not one
+  stitched portfolio.
 - **Fixed strategies and predeclared costs** (`eth_research.strategies`,
   `eth_research.costs`): exactly cash, buy-and-hold, SMA(20/50), and
   Donchian(55/20) — **never** optimized; the Donchian channels exclude the

@@ -51,6 +51,11 @@ runs both on the authoritative CPython 3.12.3 runtime and on Python
 
 ## The firewall, in one paragraph
 
+This is fixed-rule rolling-origin OOS evaluation with expanding information
+sets — **no estimator is fit**. The expanding "training" row counts are the
+information/history windows that define each fold's rolling origin and supply
+indicator context; the fixed strategies are never fitted on them.
+
 The evaluator loads **only** research-train rows. Every fold's training,
 context, and out-of-sample frame is sliced positionally within the
 research-train partition and guarded before it reaches a strategy or the

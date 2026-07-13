@@ -68,9 +68,15 @@ model that parses, and vice versa.
 
 ## Walk-forward semantics
 
-Research train (2221 rows) only. Initial training window 1095 rows; five
-contiguous expanding-window OOS folds tile the remaining 1126 rows as evenly
-as possible (226, 225, 225, 225, 225). Every research-train row belongs to
+This is **fixed-rule rolling-origin out-of-sample evaluation with expanding
+information sets — no estimator is fit**. The expanding "training" row counts
+below define each fold's rolling origin and provide indicator history/context;
+the fixed strategies are never fitted on them (there is no parameter estimation
+step anywhere in this milestone).
+
+Research train (2221 rows) only. Initial information/history window 1095 rows;
+five contiguous expanding-window OOS folds tile the remaining 1126 rows as
+evenly as possible (226, 225, 225, 225, 225). Every research-train row belongs to
 the initial training block or exactly one OOS fold — no overlap, no gap, no
 shuffle. Information gap 0 bars (no ML label horizon exists; a signal from
 the prior close executes at the next open). Context for a fold comes only
