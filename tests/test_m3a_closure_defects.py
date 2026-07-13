@@ -183,15 +183,16 @@ class TestR6HistoricalBodiesNotRetained:
 
 
 class TestR7UnverifiedInstaller:
-    """Workflows pipe an unverified installer into a shell."""
+    """FIXED (N10): no workflow pipes an unverified installer into a shell."""
 
-    def test_workflows_pipe_curl_into_sh(self) -> None:
-        offenders = []
+    def test_no_workflow_pipes_curl_into_sh(self) -> None:
+        # R7/N10 fixed: uv is installed from the hash-pinned PyPI wheel.
         for wf in ("ci.yml", "m2b-replay.yml", "m3a-replay.yml"):
             text = _module_source(f".github/workflows/{wf}")
-            if "curl -LsSf https://astral.sh/uv" in text and "| sh" in text:
-                offenders.append(wf)
-        assert set(offenders) == {"ci.yml", "m2b-replay.yml", "m3a-replay.yml"}  # R7
+            assert "install.sh | sh" not in text
+            assert "curl -LsSf https://astral.sh/uv" not in text
+        pin = (REPO_ROOT / "ci/uv-requirements.txt").read_text("utf-8")
+        assert pin.count("--hash=sha256:") >= 1
 
 
 class TestR8MisleadingTrainingTerminology:

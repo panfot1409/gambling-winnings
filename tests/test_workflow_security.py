@@ -111,11 +111,9 @@ class TestSurvivingWorkflowsPinned:
 
 
 class TestSupplyChainHardening:
-    """Closure R7: every supply-chain invariant achievable offline. The uv
-    installer's SHA-256 cannot be pinned in this sandbox — outbound access to
-    github.com and astral.sh is blocked by the environment egress policy (403),
-    so a trusted SHA cannot be obtained and a guessed one must not be committed;
-    that single residual is recorded as CI supply-chain debt in docs/M3A_BUG_LOG.md."""
+    """N10 (was R7): uv is installed from the hash-pinned PyPI wheel — no
+    downloaded byte is piped to a shell, and the artifact digests are verified
+    against ``ci/uv-requirements.txt`` before use."""
 
     def test_no_secrets_are_referenced(self) -> None:
         for path in _all_workflow_files():
@@ -126,26 +124,33 @@ class TestSupplyChainHardening:
         for path in _all_workflow_files():
             assert "upload-artifact" not in path.read_text(encoding="utf-8")
 
-    def test_uv_installer_is_version_pinned(self) -> None:
-        # The one downloaded installer must target the exact pinned uv version,
-        # never a floating "latest"/unversioned URL.
+    def test_no_curl_or_wget_pipes_into_a_shell(self) -> None:
+        # N10: no surviving workflow may pipe a downloaded installer into a shell.
         for path in _all_workflow_files():
             text = path.read_text(encoding="utf-8")
-            for match in re.findall(r"astral\.sh/uv/([^/\s]+)/install\.sh", text):
-                assert match == "0.8.17", f"{path.name}: uv installer version {match} is not pinned"
+            assert "install.sh | sh" not in text
+            assert "install.sh|sh" not in text
+            for line in text.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                if ("curl" in stripped or "wget" in stripped) and "|" in stripped:
+                    raise AssertionError(f"{path.name}: a download is piped into a shell")
+
+    def test_uv_is_installed_from_the_hash_pinned_pypi_wheel(self) -> None:
+        pin = REPO_ROOT / "ci/uv-requirements.txt"
+        text = pin.read_text(encoding="utf-8")
+        assert "uv==0.8.17" in text
+        assert "--hash=sha256:" in text
+        # Every workflow that installs uv references the pinned, hash-checked file.
+        for path in _all_workflow_files():
+            wf = path.read_text(encoding="utf-8")
+            if "Install uv" in wf:
+                assert "ci/uv-requirements.txt" in wf, f"{path.name} does not use the uv pin"
+                assert "--require-hashes" in wf, f"{path.name} does not require hashes"
 
     def test_m3a_replay_asserts_both_ledgers_byte_empty(self) -> None:
         text = (WORKFLOWS / "m3a-replay.yml").read_text(encoding="utf-8")
         assert "development_gate_access.jsonl" in text or "GATE_LEDGER" in text
         assert "test_evaluations.jsonl" in text or "HOLDOUT_LEDGER" in text
         assert text.count("byte-empty") >= 2  # before and after
-
-    def test_only_the_pinned_uv_host_is_downloaded(self) -> None:
-        # Downloads (curl/wget) may only target the allowlisted uv installer host.
-        for path in _all_workflow_files():
-            text = path.read_text(encoding="utf-8")
-            for line in text.splitlines():
-                if "curl" in line or "wget" in line:
-                    hosts = set(_URL_RE.findall(line))
-                    bad = hosts - ALLOWED_HOSTS
-                    assert not bad, f"{path.name}: download from disallowed host {bad}"
