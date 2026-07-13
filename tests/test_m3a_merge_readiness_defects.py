@@ -182,18 +182,26 @@ class TestK3EndToEndLifecycleIsStanding:
 
 
 # --------------------------------------------------------------------------- #
-# K4 — the terminal audit names a stale "Final HEAD".
+# K4 — the terminal audit's "Final HEAD" wording is now honest (fixed in Phase 6).
 # --------------------------------------------------------------------------- #
-class TestK4TerminalAuditNamesStaleFinalHead:
+class TestK4TerminalAuditHeadSemanticsAreHonest:
     AUDIT = "docs/M3A_RUN003_TERMINAL_AUDIT.md"
-    STALE_FINAL_HEAD = "b4e90726b26d69f94e40ad76e7c9675dea11ed32"
+    PRIOR_CHECKPOINT = "b4e90726b26d69f94e40ad76e7c9675dea11ed32"
+    MERGE_AUDIT = "docs/M3A_MERGE_READINESS_AUDIT.md"
 
-    def test_audit_declares_the_stale_final_head(self) -> None:
+    def test_prior_audit_is_bannered_superseded(self) -> None:
         text = (REPO / self.AUDIT).read_text("utf-8")
-        assert f"Final HEAD: `{self.STALE_FINAL_HEAD}`" in text
+        assert "Superseded" in text
+        assert "M3A_MERGE_READINESS_AUDIT.md" in text
 
-    def test_declared_final_head_precedes_the_audits_own_commit(self) -> None:
-        # The commit that last modified the audit file.
+    def test_prior_audit_no_longer_makes_the_bare_final_head_claim(self) -> None:
+        # The self-contradictory "Final HEAD: `<sha>`" phrasing is gone; the commit
+        # is now described as an ancestor of the doc's own commit, not the head.
+        text = (REPO / self.AUDIT).read_text("utf-8")
+        assert f"Final HEAD: `{self.PRIOR_CHECKPOINT}`" not in text
+        assert "not equal to, this document's own commit" in text
+
+    def test_prior_checkpoint_is_an_ancestor_of_the_audits_own_commit(self) -> None:
         doc_commit = subprocess.run(
             ["git", "log", "-1", "--format=%H", "--", self.AUDIT],
             cwd=str(REPO),
@@ -201,8 +209,13 @@ class TestK4TerminalAuditNamesStaleFinalHead:
             text=True,
             check=True,
         ).stdout.strip()
-        # The declared "Final HEAD" strictly precedes the doc's own commit — a
-        # self-contradiction: a file cannot honestly name a later HEAD as final
-        # while itself being committed afterwards.
-        assert doc_commit != self.STALE_FINAL_HEAD
-        assert _is_ancestor(self.STALE_FINAL_HEAD, doc_commit)
+        # The named checkpoint genuinely precedes the doc's own commit, which is
+        # exactly why the honest wording (ancestor, not final head) is required.
+        assert doc_commit != self.PRIOR_CHECKPOINT
+        assert _is_ancestor(self.PRIOR_CHECKPOINT, doc_commit)
+
+    def test_merge_readiness_audit_uses_honest_checkpoint_roles(self) -> None:
+        text = (REPO / self.MERGE_AUDIT).read_text("utf-8")
+        assert "Externally-reported branch head" in text
+        # It must not embed its own final commit SHA.
+        assert "Docs / PR-only closure commit" in text
