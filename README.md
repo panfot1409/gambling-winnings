@@ -281,6 +281,60 @@ and the committed test-access ledger is byte-empty (SHA-256
 [docs/M2B_REAL_DATA_PLAN.md](docs/M2B_REAL_DATA_PLAN.md), and
 [docs/M2B_PRE_HOLDOUT_FORTRESS.md](docs/M2B_PRE_HOLDOUT_FORTRESS.md).
 
+## Development research laboratory (Milestone 3A)
+
+Milestone 3A is a rigorous environment for developing **future** ETH
+strategy candidates on a walk-forward protocol — without abusing one
+validation period and without ever touching the final holdout. It runs the
+four fixed strategies over the research-train partition only and records an
+honest, byte-reproducible result. No candidate is promoted, and both the
+development gate and the final holdout stay sealed (their access ledgers are
+byte-empty).
+
+- **Immutable three-level data access** (`eth_research.development`): the
+  frozen M2B dataset is split once, chronologically, into research train
+  (2016-05-23 .. 2022-06-21, 2221 rows), a sealed development gate
+  (2022-06-22 .. 2024-06-30, 740 rows), and the sealed final holdout
+  (2024-07-01 .. 2026-07-11, 741 rows). The loader returns research-train
+  rows **only**; a firewall rejects any row on or after the development gate
+  — and any gap, duplicate, or reordering — before it can reach a strategy
+  or the engine. The partition binds the frozen M2 dossier SHA-256.
+- **Pre-registered walk-forward** (`eth_research.walkforward`): an
+  expanding window with 1095 initial training rows and five contiguous
+  out-of-sample folds over the remaining 1126 rows (226, 225, 225, 225,
+  225), information gap 0, context ≤ 55 bars, each fold reset to an
+  independent 10 000 USD. Independent resets are a comparison device, not
+  one stitched portfolio.
+- **Fixed strategies and predeclared costs** (`eth_research.strategies`,
+  `eth_research.costs`): exactly cash, buy-and-hold, SMA(20/50), and
+  Donchian(55/20) — **never** optimized; the Donchian channels exclude the
+  current bar (`.shift(1)`), so signals are strictly causal. Every strategy
+  is evaluated under all three predeclared cost scenarios (base 10/5 bps,
+  stressed 20/10 bps, severe 50/25 bps); none is chosen after seeing results.
+- **Honest evaluation** (`eth_research.development_evaluation`,
+  `eth_research.bootstrap`): three aggregation views that are never
+  conflated — an independent-fold summary, a pooled reset-OOS diagnostic
+  (not a tradable path), and a full-train in-sample exploratory view — plus
+  a deterministic moving-block bootstrap (seed 20260713, block 30, 5000
+  resamples) of the mean daily paired excess return versus buy-and-hold.
+  Every reported scalar is reconciled against the engine's accounting.
+- **Pre-registered experiments** (`eth_research.experiment_registry`,
+  `eth_research.develop_m3a`): an append-only `registered → started →
+  completed` registry records the fixed-baseline experiment before any real
+  computation; the terminal event pins the SHA-256 of the published
+  results, report, and their bundle. `develop_m3a --check` reconstructs the
+  dataset offline and reproduces both artifacts byte-for-byte.
+
+Status: **the research-train walk-forward is run and recorded; no candidate
+is promoted; the development gate and the final holdout are sealed and their
+ledgers are byte-empty.** Over the research-train period (an ETH bull
+market) buy-and-hold dominates median return, the active strategies beat
+buy-and-hold in only ~40% of folds, and every bootstrap interval of mean
+daily excess return versus buy-and-hold straddles zero — no alpha is
+claimed and nothing was tuned. See
+[research/m3a/README.md](research/m3a/README.md) and
+[docs/M3A_PLAN.md](docs/M3A_PLAN.md).
+
 ## Conventions
 
 - **Timestamps are candle open times**, UTC (`datetime64[ns, UTC]`); a
@@ -333,7 +387,7 @@ src/eth_research/
         lock.py        # committable dataset lock: metadata and hashes only
         validation.py  # shared strict JSON validators
     splits.py       # chronological splits + warm-up context helpers
-    strategies/     # Strategy interface, buy-and-hold, SMA crossover
+    strategies/     # Strategy interface, cash, buy-and-hold, SMA crossover, Donchian channel
     backtest.py     # bar-by-bar portfolio engine: open fills, fees, ledger
     metrics.py      # equity-curve metrics: return, CAGR, Sharpe, Sortino, drawdown
     _json.py        # one strict JSON decoder (dup-key + non-finite rejection)
@@ -349,11 +403,22 @@ src/eth_research/
     discovery.py    # machine-verified earliest-continuous-start decision
     decision.py     # recorded validation-stage SMA rejection decision
     test_readiness.py # read-only pre-holdout readiness preflight
+    development.py   # M3A three-level data-access firewall (research train only)
+    walkforward.py   # M3A expanding-window walk-forward protocol + fold frames
+    costs.py         # M3A predeclared cost scenarios (base/stressed/severe)
+    development_evaluation.py # M3A walk-forward evaluator, diagnostics, honest aggregation
+    bootstrap.py     # M3A deterministic moving-block bootstrap
+    experiment_registry.py # M3A append-only experiment registry (registered->started->terminal)
+    develop_m3a.py   # M3A research-train experiment publisher + reproduce (--check)
 .github/workflows/
     ci.yml          # lint/type/test on 3.12/3.13 + authoritative-runtime job
     m2b-replay.yml  # fresh-clone reproducibility on authoritative + compat runtimes
+    m3a-replay.yml  # M3A results reproduce byte-for-byte; both access ledgers byte-empty
     # (the write-capable m2b-acquire.yml is retired: data is frozen)
+.github/scripts/
+    verify_m3a_registry.py # CI gate: the registry terminal event binds the published bytes
 research/m2b/       # committable provenance records, frozen contracts, raw bytes, ledger
+research/m3a/       # M3A partition, walk-forward protocol, registry, results, report, gate ledger
 tests/              # unit, hand-calculated ledger, and look-ahead regression tests
 examples/           # runnable end-to-end example
 docs/PLAN.md        # milestone plan
@@ -361,6 +426,7 @@ docs/M2A_PLAN.md    # Milestone 2A implementation plan
 docs/M2B_PLAN.md    # Milestone 2B implementation plan
 docs/M2B_REAL_DATA_PLAN.md # Milestone 2B Part B plan (acquisition + freeze)
 docs/M2B_ACQUISITION.md # real-data acquisition procedure (GitHub Actions clean room)
+docs/M3A_PLAN.md    # Milestone 3A development research laboratory plan
 docs/REMEDIATION.md # Milestone 1 correctness remediation record
 ```
 
@@ -382,6 +448,7 @@ CI installs with `uv sync --locked` and fails if the lock and
 
 ## Roadmap
 
-See [docs/PLAN.md](docs/PLAN.md) for the milestone plan and
-[docs/REMEDIATION.md](docs/REMEDIATION.md) for the Milestone 1 correctness
-remediation record.
+See [docs/PLAN.md](docs/PLAN.md) for the milestone plan,
+[docs/M3A_PLAN.md](docs/M3A_PLAN.md) for the current development research
+laboratory, and [docs/REMEDIATION.md](docs/REMEDIATION.md) for the
+Milestone 1 correctness remediation record.
