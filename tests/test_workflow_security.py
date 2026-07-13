@@ -108,3 +108,44 @@ class TestSurvivingWorkflowsPinned:
         assert re.search(
             r"^permissions:\n\s+contents:\s*read\b", CI.read_text(encoding="utf-8"), re.MULTILINE
         )
+
+
+class TestSupplyChainHardening:
+    """Closure R7: every supply-chain invariant achievable offline. The uv
+    installer's SHA-256 cannot be pinned in this sandbox — outbound access to
+    github.com and astral.sh is blocked by the environment egress policy (403),
+    so a trusted SHA cannot be obtained and a guessed one must not be committed;
+    that single residual is recorded as CI supply-chain debt in docs/M3A_BUG_LOG.md."""
+
+    def test_no_secrets_are_referenced(self) -> None:
+        for path in _all_workflow_files():
+            assert "secrets." not in path.read_text(encoding="utf-8"), f"{path.name} uses a secret"
+
+    def test_no_artifact_upload(self) -> None:
+        # No workflow may upload artifacts (which could exfiltrate market data).
+        for path in _all_workflow_files():
+            assert "upload-artifact" not in path.read_text(encoding="utf-8")
+
+    def test_uv_installer_is_version_pinned(self) -> None:
+        # The one downloaded installer must target the exact pinned uv version,
+        # never a floating "latest"/unversioned URL.
+        for path in _all_workflow_files():
+            text = path.read_text(encoding="utf-8")
+            for match in re.findall(r"astral\.sh/uv/([^/\s]+)/install\.sh", text):
+                assert match == "0.8.17", f"{path.name}: uv installer version {match} is not pinned"
+
+    def test_m3a_replay_asserts_both_ledgers_byte_empty(self) -> None:
+        text = (WORKFLOWS / "m3a-replay.yml").read_text(encoding="utf-8")
+        assert "development_gate_access.jsonl" in text or "GATE_LEDGER" in text
+        assert "test_evaluations.jsonl" in text or "HOLDOUT_LEDGER" in text
+        assert text.count("byte-empty") >= 2  # before and after
+
+    def test_only_the_pinned_uv_host_is_downloaded(self) -> None:
+        # Downloads (curl/wget) may only target the allowlisted uv installer host.
+        for path in _all_workflow_files():
+            text = path.read_text(encoding="utf-8")
+            for line in text.splitlines():
+                if "curl" in line or "wget" in line:
+                    hosts = set(_URL_RE.findall(line))
+                    bad = hosts - ALLOWED_HOSTS
+                    assert not bad, f"{path.name}: download from disallowed host {bad}"
