@@ -120,10 +120,16 @@ class TestR5MissingRunIdentity:
 
 
 class TestR6HistoricalBodiesNotRetained:
-    """Only the latest run's bodies exist at HEAD."""
+    """FIXED: every completed experiment now has directly verifiable bytes."""
 
-    def test_no_per_experiment_archive_exists_yet(self) -> None:
-        assert not (REPO_ROOT / "research/m3a/experiments").exists()  # R6 reproduced
+    def test_per_experiment_archive_exists_and_verifies(self) -> None:
+        from eth_research.experiment_archive import verify_experiment_archive
+
+        # R6 fixed: run-001 and run-002 bodies are archived and verified at HEAD,
+        # not only recoverable from Git history.
+        ids = verify_experiment_archive(REPO_ROOT)
+        assert "m3a-fixed-baseline-comparison-v1-run-001" in ids
+        assert "m3a-fixed-baseline-comparison-v1-run-002" in ids
 
 
 class TestR7UnverifiedInstaller:

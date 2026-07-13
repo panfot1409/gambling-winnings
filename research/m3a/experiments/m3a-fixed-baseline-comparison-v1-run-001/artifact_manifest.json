@@ -1,0 +1,17 @@
+{
+  "artifact_schema_version": 1,
+  "bundle_sha256": "365e3a5a9393ab6dfe222109cc2845cf6c05413df2bdf319fb85d2d504cde755",
+  "experiment_family": "m3a-fixed-baseline-comparison-v1",
+  "experiment_id": "m3a-fixed-baseline-comparison-v1-run-001",
+  "materialization": "recovered_from_history",
+  "registry_completed_event_sha256": "f68af11da855de9c621eb8f904db573552f00c54b7112bf2a3885a9b4b891dc4",
+  "registry_event_position": 3,
+  "report_relpath": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-001/development_report.md",
+  "report_sha256": "9362c631ccd37a5ea2dcd8d7bc2c54a8212311363153287fc1a3e3be77b116bf",
+  "results_relpath": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-001/development_results.json",
+  "results_schema_version": 1,
+  "results_sha256": "b8616248c72e863210de131f91a7ea90e6810ff20c13440375ed385b3c8ed67a",
+  "return_evidence_relpath": null,
+  "return_evidence_sha256": null,
+  "source_commit": "bba0bd7c0737cadee4c169a9b3591119ef68a7b2"
+}
