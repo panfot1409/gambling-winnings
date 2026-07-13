@@ -837,12 +837,20 @@ def render_development_report(results: DevelopmentResults) -> str:
     add("")
     add("## 5. Fold table")
     add("")
+    add(
+        "`context rows` is the warm-up context each fold makes available (capped at "
+        "55 bars); a strategy consumes up to its own need — cash and buy-and-hold 0, "
+        "SMA(20/50) 50, Donchian(55/20) 55 — so the per-strategy usage in "
+        "`development_results.json` is 0/0/50/55."
+    )
+    add("")
     add("| fold | training rows | context rows | OOS rows | OOS window |")
     add("| ---: | ---: | ---: | ---: | --- |")
     for fi in fold_indices:
         sample = fold_by[(fi, strategies[0], scenarios[0])]
+        fold_context = max(fold_by[(fi, s, scenarios[0])].context_row_count for s in strategies)
         add(
-            f"| {fi} | {sample.training_row_count} | {sample.context_row_count} | "
+            f"| {fi} | {sample.training_row_count} | {fold_context} | "
             f"{sample.oos_row_count} | {sample.oos_first_open_time.date()} .. "
             f"{sample.oos_last_open_time.date()} |"
         )
@@ -1044,6 +1052,11 @@ def render_development_report(results: DevelopmentResults) -> str:
         "performance and not test performance.",
         "Independent fold resets and the pooled reset-OOS series are diagnostics, "
         "not tradable paths.",
+        "Under the pre-registered 55-bar context budget, Donchian(55/20) — whose "
+        "channel excludes the current bar — is not yet live at the final context "
+        "bar, so it enters each fold's first OOS bar flat (a conservative one-bar "
+        "warm-up); SMA(20/50) is live at the first OOS bar. The asymmetry follows "
+        "from the pinned context budget and is not look-ahead.",
         "The bootstrap quantifies sampling variability only; it does not prove "
         "alpha or remove uncertainty.",
         "Costs are a simplified constant fee plus directional slippage; no spread, "

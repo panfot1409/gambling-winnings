@@ -111,6 +111,24 @@ class TestEvaluatorShape:
         sections = re.findall(r"^## (\d+)\.", md, re.MULTILINE)
         assert sections == [str(i) for i in range(1, 22)]
 
+    def test_fold_table_reports_fold_context_not_cash(self, real_manifest: Path) -> None:
+        # Regression: the fold table must show the fold's available warm-up
+        # context (55), not the cash strategy's zero. Sampling strategies[0]
+        # (cash) once printed 0 for every fold, contradicting the protocol.
+        md = render_development_report(_evaluate(real_manifest))
+        section5 = md.split("## 5. Fold table")[1].split("## 6.")[0]
+        data_rows = [ln for ln in section5.splitlines() if ln.startswith("| 0 |")]
+        assert data_rows, "fold 0 data row missing"
+        # columns: | fold | training rows | context rows | OOS rows | window |
+        context_cell = data_rows[0].split("|")[3].strip()
+        assert context_cell == "55", f"fold context column is {context_cell!r}, expected 55"
+
+    def test_report_documents_the_donchian_warmup(self, real_manifest: Path) -> None:
+        # Regression: the conservative one-bar Donchian warm-up must be disclosed.
+        md = render_development_report(_evaluate(real_manifest))
+        assert "first OOS bar flat" in md
+        assert "not look-ahead" in md
+
 
 class TestFirewallSpies:
     def test_no_forbidden_timestamp_reaches_the_engine(
