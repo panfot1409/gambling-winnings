@@ -17,6 +17,8 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
+
 import eth_research
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
@@ -105,7 +107,28 @@ class TestR4SeamCrossingBootstrap:
                 crossing += 1
         assert n == 1126
         assert max_start == 1097
-        assert crossing == 116  # R4 reproduced: 116/1097 starts cross a reset seam
+        assert crossing == 116  # R4 reproduced: 116/1097 v1 starts cross a reset seam
+
+    def test_v2_is_fold_stratified_and_cannot_cross_a_seam(self) -> None:
+        # R4 fixed: the v2 primary bootstrap draws blocks strictly within a fold
+        # and refuses a block longer than the smallest fold.
+        import pandas as pd
+
+        from eth_research.bootstrap import BootstrapError
+        from eth_research.bootstrap_v2 import (
+            FoldAwareBootstrapConfig,
+            fold_stratified_moving_block_bootstrap,
+        )
+
+        def s(vals: list[float]) -> pd.Series:
+            idx = pd.date_range("2020-01-01", periods=len(vals), freq="D", tz="UTC")
+            return pd.Series(vals, index=idx)
+
+        with pytest.raises(BootstrapError, match="exceeds the smallest fold length"):
+            fold_stratified_moving_block_bootstrap(
+                (s([0.01] * 40), s([0.02] * 20)),
+                FoldAwareBootstrapConfig(block_length=30),
+            )
 
 
 class TestR5MissingRunIdentity:
