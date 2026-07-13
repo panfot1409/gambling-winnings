@@ -205,8 +205,17 @@ def _preflight(repo_root: str | Path, experiment_id: str) -> PreparedRun:
         raise OrchestratorError(
             "registered execution source-tree fingerprint disagrees with the running source"
         )
-    if registered.execution_code_commit_sha != head:
-        raise OrchestratorError("registered execution commit is not HEAD")
+    # The registered execution commit must be a real commit whose committed
+    # package source matches the running source. It need not equal HEAD: the
+    # pre-registration commit that appends the 'registered' event does not touch
+    # src/eth_research, so the source tree at the registration commit is the one
+    # that runs, and the fingerprint binds it robustly across the append.
+    if not is_commit_object(root, registered.execution_code_commit_sha):
+        raise OrchestratorError("registered execution commit is not a real commit object")
+    if source_tree_fingerprint(root, registered.execution_code_commit_sha) != fingerprint:
+        raise OrchestratorError(
+            "registered execution commit's source tree does not match the running source"
+        )
     if registered.development_partition_sha256 != partition_sha:
         raise OrchestratorError("registered partition SHA disagrees with the committed partition")
     if registered.walk_forward_protocol_path != WALK_FORWARD_PROTOCOL_RELPATH:
