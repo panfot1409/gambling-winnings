@@ -137,19 +137,28 @@ class TestSyntheticStates:
 
 
 class TestCompatibilityRuntimeHonesty:
-    """On a non-authoritative interpreter the gate refuses honestly."""
+    """On a compatibility interpreter the committed M2B contract is a superseded
+    snapshot (it pins the 0.3.0 package that froze the dossier), so readiness
+    verifies the frozen dossier's data integrity independently of the runtime
+    pin: it is integrity-ready on any interpreter, yet never
+    authorized-test-ready. The strict production runtime gate — which would
+    refuse this compatibility interpreter — is exercised separately by the
+    ``--production`` environment check and the production evaluator path."""
 
     @requires_clean_tree
     @pytest.mark.skipif(
         ON_AUTHORITATIVE_RUNTIME, reason="only meaningful on a compatibility interpreter"
     )
-    def test_non_authoritative_runtime_reports_an_honest_runtime_mismatch(
+    def test_compatibility_runtime_is_integrity_ready_via_snapshot(
         self, real_manifest: Path
     ) -> None:
+        contract = json.loads((REPO_ROOT / "research/m2b/runtime_contract.json").read_bytes())
+        if contract["package_version"] == eth_research.__version__:
+            pytest.skip("committed contract is not a superseded snapshot for this package")
         report = test_readiness.preflight_authorized_benchmark(REPO_ROOT, real_manifest)
-        assert report.integrity_ready is False
-        assert report.integrity_failure is not None
-        assert "runtime" in report.integrity_failure.lower()
+        assert report.integrity_ready is True, report.integrity_failure
+        assert report.integrity_failure is None
+        assert report.dossier_verified is True
         assert report.authorized_test_ready is False
         assert report.ledger_byte_count == 0
         assert (
