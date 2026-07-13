@@ -39,6 +39,7 @@ REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 ANCHOR = REPO_ROOT / "research/m2b/frozen_dossier.json"
 ATTEMPT_REL = "research/m2b/raw/coinbase/coinbase-eth-usd-001"
 REGISTRATION_COMMIT = "b89627463775bf32698effb5adea1270a5927890"
+FROZEN_M2_VERSION = "0.3.0"
 
 pytestmark = pytest.mark.skipif(
     not (REPO_ROOT / ATTEMPT_REL).is_dir(), reason="canonical acquisition not present"
@@ -66,6 +67,35 @@ def _verify(gp: GitPipeline) -> DossierVerification:
     )
 
 
+class TestFrozenSnapshotVerification:
+    """The committed 0.3.0 dossier verifies as a frozen snapshot at any
+    running package version (e.g. Milestone 3A at 0.4.0), and tampering a
+    frozen data artifact is still caught in that mode."""
+
+    def test_real_repo_verifies_in_snapshot_mode_when_version_advanced(self) -> None:
+        import eth_research
+        from eth_research.replay_m2b import reconstruct_dataset
+
+        if eth_research.__version__ == FROZEN_M2_VERSION:
+            pytest.skip("running the frozen version exercises live mode, not snapshot mode")
+        import tempfile
+
+        work = Path(tempfile.mkdtemp())
+        res = reconstruct_dataset(REPO_ROOT, "coinbase-eth-usd-001", work)
+        result = verify_frozen_dossier(
+            REPO_ROOT,
+            manifest_path=res.build.manifest_path,
+            raw_chunk_dir=REPO_ROOT / ATTEMPT_REL,
+            derived_csv=res.derived_csv,
+        )
+        assert result.ok, result.errors
+        assert "snapshot_mode" in result.checks
+        # Data-integrity anchors and the byte-exact evidence regeneration
+        # still run in snapshot mode.
+        assert "holdout:committed_bytes" in result.checks
+        assert "evidence:results_bytes" in result.checks
+
+
 class TestCommittedDossier:
     """The real repository's committed manifest."""
 
@@ -77,7 +107,10 @@ class TestCommittedDossier:
         dossier = load_frozen_dossier(ANCHOR)
         assert dossier.protocol_registration_commit_sha == REGISTRATION_COMMIT
         assert dossier.selected_attempt_id == "coinbase-eth-usd-001"
-        assert dossier.package_version == eth_research.__version__
+        # The dossier records the package version that froze it (Milestone
+        # 2B → 0.3.0), which is not necessarily the running version once a
+        # later milestone (3A) advances the package.
+        assert dossier.package_version == FROZEN_M2_VERSION
 
     def test_audit_status_is_explicit_never_absent(self) -> None:
         audit = load_frozen_dossier(ANCHOR).independent_audit

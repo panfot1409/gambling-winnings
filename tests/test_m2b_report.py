@@ -36,28 +36,40 @@ def _commit() -> str:
     return m2b_report.committed_protocol_registration_commit(REPO_ROOT)
 
 
+def _frozen_version() -> str:
+    # The package version the committed results were frozen at (0.3.0);
+    # reproducing them under a later package regenerates at that version.
+    from eth_research.protocol import BenchmarkResults
+
+    return BenchmarkResults.from_json_bytes(
+        (REPO_ROOT / m2b_report.RESULTS_RELPATH).read_bytes()
+    ).package_version
+
+
+def _generate(real_manifest: Path) -> tuple[bytes, str]:
+    return m2b_report.generate(
+        REPO_ROOT,
+        real_manifest,
+        protocol_registration_commit_sha=_commit(),
+        package_version=_frozen_version(),
+    )
+
+
 class TestReproducibility:
     def test_generated_matches_committed(self, real_manifest: Path) -> None:
-        results_bytes, report_md = m2b_report.generate(
-            REPO_ROOT, real_manifest, protocol_registration_commit_sha=_commit()
-        )
+        results_bytes, report_md = _generate(real_manifest)
         committed_results = (REPO_ROOT / m2b_report.RESULTS_RELPATH).read_bytes()
         committed_report = (REPO_ROOT / m2b_report.REPORT_RELPATH).read_text(encoding="utf-8")
         assert results_bytes == committed_results
         assert report_md == committed_report
 
     def test_generation_is_deterministic(self, real_manifest: Path) -> None:
-        commit = _commit()
-        a = m2b_report.generate(REPO_ROOT, real_manifest, protocol_registration_commit_sha=commit)
-        b = m2b_report.generate(REPO_ROOT, real_manifest, protocol_registration_commit_sha=commit)
-        assert a == b
+        assert _generate(real_manifest) == _generate(real_manifest)
 
     def test_results_round_trip(self, real_manifest: Path) -> None:
         from eth_research.protocol import BenchmarkResults
 
-        results_bytes, _ = m2b_report.generate(
-            REPO_ROOT, real_manifest, protocol_registration_commit_sha=_commit()
-        )
+        results_bytes, _ = _generate(real_manifest)
         assert BenchmarkResults.from_json_bytes(results_bytes).to_json_bytes() == results_bytes
 
 

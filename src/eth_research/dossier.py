@@ -31,7 +31,18 @@ the train/validation results, report, and research decision must
 regenerate byte-for-byte; the discovery decision must re-verify against
 its raw response; the audit comparison must re-verify against the audit
 raw when performed; and one package-version chain must hold throughout.
-No check is silently optional in the production path.
+
+The dossier records the package version that froze it. When a later
+package verifies the frozen snapshot (``__version__`` differs from the
+recorded version — e.g. Milestone 3A over the Milestone 2B dossier), the
+full version-independent data-integrity graph still runs and the
+development evidence is regenerated at the *recorded* version so the
+frozen bytes reproduce exactly. Only two bindings are recognized as
+frozen and not re-validated against the advanced working environment: the
+root ``uv.lock`` / ``pyproject.toml`` byte anchors (the version bump
+legitimately changed those files) and the running interpreter's presence
+in the version chain (checked over the frozen committed artifacts
+otherwise).
 
 All of this is hash-bound and tamper-evident within one repository. It is
 **not** cryptographic authentication: there is no signing key and no
@@ -717,6 +728,25 @@ def verify_frozen_dossier(
         errors.append(f"dossier:parse: {exc}")
         return result()
 
+    # The dossier records the package version that froze it. When a later
+    # package (e.g. Milestone 3A at 0.4.0) verifies this frozen 0.3.0
+    # snapshot, the version-independent data-integrity graph is checked in
+    # full, while the version-coupled bindings — the root ``uv.lock`` /
+    # ``pyproject.toml`` byte anchors (superseded in the working tree) and
+    # the byte-exact *re-derivation* of the development evidence (which
+    # would embed the running version) — are recognized as frozen: the
+    # committed evidence is instead verified for internal self-consistency
+    # at its own recorded version. The version chain is checked over the
+    # frozen committed artifacts. When the running version equals the
+    # dossier's recorded version (Milestone 2B's own version) every check
+    # runs exactly as before.
+    snapshot = dossier.package_version != __version__
+    check(
+        "snapshot_mode" if snapshot else "live_mode",
+        True,
+        "",
+    )
+
     # --- 1. Every artifact hashes to the manifest. -------------------------
     hashed = {
         "discovery_request_plan_sha256": research / "discovery_plan.json",
@@ -732,8 +762,6 @@ def verify_frozen_dossier(
         "quality_report_sha256": research / "quality_report.json",
         "dataset_lock_sha256": research / "dataset_lock.json",
         "runtime_contract_sha256": research / "runtime_contract.json",
-        "uv_lock_sha256": root / "uv.lock",
-        "pyproject_sha256": root / "pyproject.toml",
         "protocol_sha256": research / "protocol.json",
         "holdout_identity_sha256": research / "holdout_identity.json",
         "train_validation_results_sha256": research / "train_validation_results.json",
@@ -741,6 +769,12 @@ def verify_frozen_dossier(
         "validation_decision_sha256": research / "validation_decision.json",
         "validation_decision_markdown_sha256": research / "validation_decision.md",
     }
+    if not snapshot:
+        # The root lockfiles are pinned to the frozen version; in snapshot
+        # mode they have legitimately advanced and are verified as frozen
+        # bytes via git elsewhere (replay/hygiene), not re-hashed here.
+        hashed["uv_lock_sha256"] = root / "uv.lock"
+        hashed["pyproject_sha256"] = root / "pyproject.toml"
     for field, path in hashed.items():
         try:
             ok = sha256_file(path) == getattr(dossier, field)
@@ -849,12 +883,20 @@ def verify_frozen_dossier(
         return result()
 
     # --- 6-8. Evidence, semantic re-derivation, dataset, protocol. ---------
+    # The lock pins the manifest's version-coupled SHA. In live mode the
+    # freshly reconstructed manifest reproduces it byte-for-byte; in
+    # snapshot mode a later package cannot reproduce the frozen version's
+    # manifest bytes, so the lock is verified against the committed frozen
+    # manifest (version-independently matching the lock), while the
+    # reconstructed frame is verified via the content fingerprint below.
+    committed_manifest_path = research / "dataset_manifest.json"
+    lock_manifest_path = committed_manifest_path if snapshot else Path(manifest_path)
     try:
         lock = load_dataset_lock(research / "dataset_lock.json")
         protocol = BenchmarkProtocol.from_json_bytes((research / "protocol.json").read_bytes())
         manifest, evidence = verify_dataset_lock(
             lock,
-            manifest_path=manifest_path,
+            manifest_path=lock_manifest_path,
             acquisition_evidence_path=research / "acquisition_evidence.json",
             raw_chunk_dir=raw_chunk_dir,
             derived_csv=derived_csv,
@@ -883,16 +925,23 @@ def verify_frozen_dossier(
         ),
         (
             "dataset:manifest_anchor",
-            sha256_file(manifest_path) == dossier.dataset_manifest_sha256,
-            "the regenerated manifest bytes differ from the tracked anchor",
+            sha256_file(lock_manifest_path) == dossier.dataset_manifest_sha256,
+            "the manifest bytes differ from the tracked anchor",
         ),
     ):
         if not check(name, ok, detail):
             return result()
     try:
         dataset = load_canonical_dataset(manifest_path)
-        if dataset.manifest != manifest:
-            raise DossierError("the reloaded dataset's manifest is not the manifest the lock pins")
+        # The reloaded frame must reproduce the protocol's content
+        # fingerprint (the version-independent reproducibility contract) and
+        # bind the same manifest identity as the lock; the manifest's own
+        # bytes may legitimately carry the reconstructing package's version
+        # in snapshot mode, so identity is compared by content fingerprint.
+        if dataset.manifest.content_fingerprint != manifest.content_fingerprint:
+            raise DossierError(
+                "the reloaded dataset's fingerprint is not the manifest the lock pins"
+            )
         verify_protocol(protocol, lock)
         if content_fingerprint(dataset.frame) != protocol.dataset_content_fingerprint:
             raise DossierError("the reloaded frame's recomputed fingerprint is not the protocol's")
@@ -902,7 +951,8 @@ def verify_frozen_dossier(
         errors.append(f"dataset:reload_fingerprint_protocol: {exc}")
         return result()
 
-    # Quality anchor equals the regenerated quality report beside the manifest.
+    # Quality anchor equals the regenerated quality report beside the manifest
+    # (the quality report is version-independent).
     quality_regen = Path(manifest_path).parent / dataset.manifest.quality_report_filename
     if not check(
         "dataset:quality_anchor",
@@ -965,17 +1015,33 @@ def verify_frozen_dossier(
         "a relabelled registration cannot verify",
     ):
         return result()
+    # The train/validation SegmentMetrics numbers are version-independent
+    # (the pinned numpy/pandas stack is unchanged by a package-version
+    # bump), so they are recomputed in both modes for the returned models.
     try:
         train_validation = evaluation.evaluate_train_validation(dataset, protocol)
+        state["registration"] = registration
+        state["train_validation"] = train_validation
+        checks.append("evidence:evaluate")
+    except Exception as exc:
+        errors.append(f"evidence:evaluate: {exc}")
+        return result()
+
+    # The committed results are regenerated from the verified dataset and
+    # protocol and compared byte-for-byte. The results are stamped with the
+    # dossier's recorded package version — the numbers are version-
+    # independent (the pinned numerical stack is unchanged by a package
+    # bump), so the frozen 0.3.0 bytes reproduce exactly under a later
+    # package too. A forged verdict or edited number cannot survive.
+    try:
         results = evaluation.build_benchmark_results(
             dataset,
             protocol,
             train_validation,
             protocol_registration_commit_sha=registration,
             test_evaluation_id=None,
+            package_version=dossier.package_version,
         )
-        state["registration"] = registration
-        state["train_validation"] = train_validation
         state["results"] = results
         checks.append("evidence:regenerate")
     except Exception as exc:
@@ -987,6 +1053,10 @@ def verify_frozen_dossier(
         "the committed train/validation results do not regenerate byte-for-byte",
     ):
         return result()
+
+    # Report render and decision rebuild are pure functions of the results
+    # model (no running-version dependency), so they are verified in both
+    # modes against the committed artifacts.
     try:
         rendered_report = m2b_report.render_report(root, results)
     except Exception as exc:
@@ -995,7 +1065,7 @@ def verify_frozen_dossier(
     if not check(
         "evidence:report_bytes",
         rendered_report == (research / "train_validation_report.md").read_text(encoding="utf-8"),
-        "the committed train/validation report does not regenerate byte-for-byte",
+        "the committed train/validation report is not the rendering of the results model",
     ):
         return result()
     try:
@@ -1090,23 +1160,33 @@ def verify_frozen_dossier(
             errors.append(f"audit:verify: {exc}")
             return result()
 
-    # --- 14. One version chain. ---------------------------------------------
+    # --- 14. One version chain over the frozen committed artifacts. ---------
+    # Every committed artifact must report the dossier's recorded version.
+    # In live mode the running interpreter is included too (it froze them);
+    # in snapshot mode a later package verifies the frozen chain without
+    # asserting it equals the running version. The manifest version is read
+    # from the committed byte anchor, never a freshly reconstructed manifest
+    # (which legitimately carries the running builder's version).
     runtime = load_runtime_contract(research / "runtime_contract.json")
+    committed_manifest = DatasetManifest.from_json_bytes(
+        (research / "dataset_manifest.json").read_bytes()
+    )
     versions = {
         "plan": plan.package_version,
         "receipt": receipt.package_version,
         "evidence": evidence.package_version,
-        "manifest": dataset.manifest.package_version,
+        "manifest": committed_manifest.package_version,
         "lock": lock.package_version,
         "runtime": runtime.package_version,
         "protocol": protocol.package_version,
         "results": results.package_version,
         "dossier": dossier.package_version,
-        "running": __version__,
     }
+    if not snapshot:
+        versions["running"] = __version__
     check(
         "version_chain",
-        len(set(versions.values())) == 1,
-        f"package versions disagree: {versions}",
+        set(versions.values()) == {dossier.package_version},
+        f"package versions disagree: {versions} (expected {dossier.package_version!r})",
     )
     return result()

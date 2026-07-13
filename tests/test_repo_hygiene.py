@@ -192,19 +192,52 @@ def test_raw_aggregate_size_is_bounded() -> None:
     assert total <= RAW_AGGREGATE_CAP_BYTES, f"raw aggregate {total} exceeds the 10 MiB cap"
 
 
-def test_frozen_dossier_anchors_every_artifact() -> None:
-    """The committed frozen dossier must equal a fresh build byte-for-byte.
+def test_frozen_dossier_anchors_every_committed_artifact() -> None:
+    """The committed frozen dossier must hash-anchor every committed artifact.
 
-    Byte equality with :func:`build_frozen_dossier` proves every artifact
-    hash, both raw-bundle fingerprints, and the registration commit without
-    reconstructing the dataset; the full *semantic* graph (re-derivation,
-    holdout recompute, byte-exact evidence regeneration) runs in
-    ``test_dossier.py`` and inside every shared-gate preparation.
+    Version-independent: every ``*_sha256`` the dossier records for a
+    tracked ``research/m2b`` artifact must equal that committed file's
+    actual SHA-256. This holds regardless of the running package version
+    (a later milestone bumps ``__version__`` while the frozen 0.3.0 dossier
+    stays byte-identical). The full *semantic* graph — raw re-derivation,
+    holdout recompute, evidence self-consistency, both raw-bundle
+    fingerprints — runs in ``test_dossier.py`` and inside every shared-gate
+    preparation. The version-coupled root ``uv.lock`` / ``pyproject.toml``
+    anchors pin the frozen-snapshot lockfiles and are recognized as frozen
+    when a later milestone advances the package version.
     """
-    from eth_research.dossier import build_frozen_dossier
+    from eth_research.data.provenance import sha256_file
+    from eth_research.dossier import DISCOVERY_ATTEMPT_ID, load_frozen_dossier
 
-    committed = (REPO_ROOT / "research/m2b/frozen_dossier.json").read_bytes()
-    assert committed == build_frozen_dossier(REPO_ROOT).to_json_bytes()
+    dossier_path = REPO_ROOT / "research/m2b/frozen_dossier.json"
+    dossier = load_frozen_dossier(dossier_path)
+    # Byte-stable: the committed dossier round-trips exactly.
+    assert dossier.to_json_bytes() == dossier_path.read_bytes()
+    research = REPO_ROOT / "research/m2b"
+    canonical_attempt = research / "raw/coinbase" / dossier.selected_attempt_id
+    discovery_attempt = research / "raw/coinbase" / DISCOVERY_ATTEMPT_ID
+    anchored = {
+        "discovery_request_plan_sha256": research / "discovery_plan.json",
+        "discovery_receipt_sha256": discovery_attempt / "acquisition_receipt.json",
+        "discovery_decision_sha256": research / "discovery_decision.json",
+        "discovery_decision_markdown_sha256": research / "EARLIEST_CONTINUOUS_DECISION.md",
+        "acquisition_request_plan_sha256": research / "acquisition_request_plan.json",
+        "acquisition_receipt_sha256": canonical_attempt / "acquisition_receipt.json",
+        "acquisition_evidence_sha256": research / "acquisition_evidence.json",
+        "dataset_manifest_sha256": research / "dataset_manifest.json",
+        "quality_report_sha256": research / "quality_report.json",
+        "dataset_lock_sha256": research / "dataset_lock.json",
+        "runtime_contract_sha256": research / "runtime_contract.json",
+        "protocol_sha256": research / "protocol.json",
+        "holdout_identity_sha256": research / "holdout_identity.json",
+        "train_validation_results_sha256": research / "train_validation_results.json",
+        "train_validation_report_sha256": research / "train_validation_report.md",
+        "validation_decision_sha256": research / "validation_decision.json",
+        "validation_decision_markdown_sha256": research / "validation_decision.md",
+    }
+    for field, path in anchored.items():
+        assert path.is_file(), f"{field} artifact {path} missing"
+        assert sha256_file(path) == getattr(dossier, field), f"{field} anchor mismatch"
 
 
 def test_exactly_one_graph_manifest_is_tracked() -> None:

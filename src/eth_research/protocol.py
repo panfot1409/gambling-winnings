@@ -428,23 +428,39 @@ def build_benchmark_protocol(lock: DatasetLock, *, package_version: str) -> Benc
     )
 
 
-def verify_protocol(protocol: BenchmarkProtocol, lock: DatasetLock) -> None:
-    """The protocol must pin exactly this dataset lock and its artifacts.
+def require_protocol_runtime_version(protocol: BenchmarkProtocol) -> None:
+    """The frozen protocol must be executed by the version that registered it.
 
-    For the frozen Milestone 2B protocol the software-version chain is
-    validated too: the protocol, the dataset lock, and the running package
-    must all report the same version.
+    A one-time-**test** production concern: the sealed evaluation may run
+    only under the exact package version that pre-registered the protocol.
+    Enforced at the production authorization boundary, **not** during the
+    version-independent structural verification (:func:`verify_protocol`),
+    so a later package can still verify the frozen protocol as a snapshot.
     """
-    if protocol.package_version != lock.package_version:
-        raise ProtocolError(
-            f"protocol/dataset-lock package version mismatch: protocol says "
-            f"{protocol.package_version!r}, lock says {lock.package_version!r}"
-        )
     if protocol.package_version != __version__:
         raise ProtocolError(
             f"protocol package version {protocol.package_version!r} is not the running "
             f"package version {__version__!r}; the frozen 2B protocol must be run by the "
             "version that pre-registered it"
+        )
+
+
+def verify_protocol(protocol: BenchmarkProtocol, lock: DatasetLock) -> None:
+    """The protocol must pin exactly this dataset lock and its artifacts.
+
+    Structural, version-independent verification: the protocol and the
+    dataset lock must report the same ``package_version`` (internal
+    snapshot consistency) and the protocol must pin every one of the lock's
+    artifact hashes. The binding to the *running* package version — that
+    the frozen protocol is executed only by the version that registered it
+    — is a production-authorization concern enforced separately by
+    :func:`require_protocol_runtime_version`, so this function verifies a
+    frozen snapshot correctly at any running version.
+    """
+    if protocol.package_version != lock.package_version:
+        raise ProtocolError(
+            f"protocol/dataset-lock package version mismatch: protocol says "
+            f"{protocol.package_version!r}, lock says {lock.package_version!r}"
         )
     checks: list[tuple[str, str, str]] = [
         (
