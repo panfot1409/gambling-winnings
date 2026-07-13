@@ -236,11 +236,10 @@ class TestFrozenDossierReVerificationDisclosure:
         assert self._HOLDOUT_LEDGER.read_bytes() == b""
 
         seen: list[pd.Timestamp] = []
-        original = ev.run_backtest
 
         def spy(data: pd.DataFrame, *args: Any, **kwargs: Any) -> Any:
             seen.append(data.index.max())
-            return original(data, *args, **kwargs)
+            return real_run_backtest(data, *args, **kwargs)
 
         monkeypatch.setattr(ev, "run_backtest", spy)
         dataset = load_development_dataset(REPO_ROOT, real_manifest)
