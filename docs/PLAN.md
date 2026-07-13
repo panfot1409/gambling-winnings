@@ -48,6 +48,14 @@ src/eth_research/
         schema.py      # strict OHLCV schema -> canonical frame format
         load.py        # CSV / Parquet -> validated frame
         synthetic.py   # deterministic synthetic OHLCV for tests/examples
+        provenance.py  # dataset identity, manifest, content fingerprint (M2A)
+        quality.py     # offline data-quality audit (M2A)
+        builder.py     # audited canonical dataset builder + verification (M2A)
+        coinbase.py    # offline Coinbase response adapter + acquisition evidence (M2B)
+        lock.py        # committable dataset lock: metadata and hashes only (M2B)
+        validation.py  # shared strict JSON validators (M2B)
+    _json.py           # one strict JSON decoder (dup-key + non-finite rejection) (M2B)
+    gitcheck.py        # read-only git checks binding the test run to HEAD (M2B)
     splits.py          # chronological splits + warm-up context helpers
     strategies/
         base.py        # Strategy interface + timing contract
@@ -55,6 +63,9 @@ src/eth_research/
         moving_average.py
     backtest.py        # bar-by-bar portfolio engine: open fills, fees, ledger
     metrics.py         # equity-curve metrics + performance summary
+    protocol.py        # frozen benchmark protocol + result models (M2B)
+    ledger.py          # append-only test-access ledger (M2B)
+    evaluation.py      # guarded benchmark evaluator + reporting (M2B)
 ```
 
 Data flow: `load → validate → split → strategy signals → backtest → metrics`.
@@ -129,13 +140,62 @@ dataset:
 
 ## 7. Milestone 2B — Real ETH data, frozen and benchmarked
 
-- Acquire one real ETH OHLCV history (documented manual/offline
-  acquisition), freeze it through the 2A pipeline, and record its manifest
-  fingerprints.
-- Run the existing buy-and-hold benchmark and SMA baseline on it through
-  the untouched Milestone 1 engine; publish the resulting report.
-- Test-set discipline bookkeeping: the test segment is evaluated once and
-  the evaluation is recorded.
+Detailed plans: [M2B_PLAN.md](M2B_PLAN.md) and
+[M2B_REAL_DATA_PLAN.md](M2B_REAL_DATA_PLAN.md); acquisition procedure:
+[M2B_ACQUISITION.md](M2B_ACQUISITION.md).
+
+**Status: real data acquired, frozen, protocol pre-registered, and
+train/validation benchmarks recorded; the one-time test evaluation is
+still pending independent authorization.** The development container
+cannot reach Coinbase, so the real acquisition ran from a tightly scoped
+GitHub Actions clean room (public unauthenticated candle GETs only) and
+committed the raw bytes back to the branch; everything downstream is
+reproduced and verified offline. The dataset is 3702 gap-free daily
+candles (2016-05-23 .. 2026-07-11). The **test** segment has never been
+evaluated: the committed ledger (`research/m2b/test_evaluations.jsonl`) is
+byte-empty. Synthetic data is never substituted for a real benchmark.
+
+Delivered (version 0.3.0):
+
+- strict offline Coinbase source adapter and byte-reproducible
+  acquisition evidence (`data/coinbase.py`) — no networking in the
+  package; acquisition itself is one-time manual `curl`, documented, and
+  raw files stay git-ignored;
+- committable dataset lock chaining evidence → derived file → canonical
+  dataset → audit report (`data/lock.py`);
+- frozen benchmark protocol whose schema pins every non-dataset choice
+  (60/20/20 floor split, buy-and-hold + SMA(20, 50) only, 10 bps fee,
+  5 bps slippage, 10,000 USD per independent segment, 50-bar SMA
+  context, the exact metric set) so the JSON only binds a dataset
+  (`protocol.py`);
+- append-only, crash-honest test-access ledger (`ledger.py`) and a
+  guarded one-time test evaluator with full provenance re-verification,
+  exact reconciliation against the engine's accounting, deterministic
+  JSON results, and Markdown rendered only from the validated model
+  (`evaluation.py`).
+
+Independent executable red-teaming (post-review) hardened the trust
+boundaries further: one strict JSON decoder rejects duplicate keys and
+non-finite numbers across every provenance format; acquisition
+verification now proves the derived CSV re-derives byte-for-byte from
+the raw chunks (not just matching independent hashes) and binds request
+metadata; acquisition publication is a single transaction (CSV +
+evidence, evidence last); result metrics enforce internal identities
+(total return, turnover, CAGR, drawdown, fills) and a package-version
+chain; and the one-time test evaluator now binds to the repository's
+real `HEAD` with a clean tracked tree, reads only the canonical tracked
+ledger, and reloads/re-verifies the dataset itself rather than trusting
+a caller-supplied object. The git binding is documented as a
+single-repository, single-researcher operational control (it cannot
+attest a remote, GitHub CI status, concurrent clones, or history
+rewrites).
+
+Release administration debt: the **remote `v0.2.0` annotated tag is
+pending due to an environment ref-write restriction** (tag pushes and
+the REST tag endpoint return 403 from the development environment). The
+local annotated tag exists on merge commit `4014532e`;
+`claude/m2-dataset-provenance` is retained as the undeleted fallback
+until the tag is published and verified remotely.
 
 ## 8. Later milestones
 

@@ -1,0 +1,18 @@
+{
+  "acquisition_evidence_sha256": "27ba6a6013fab67c02361bc3e2b43a761fa5ac0310556d7557859bdcbbbd2d0b",
+  "base_asset": "ETH",
+  "candle_interval": "P1DT0H0M0S",
+  "content_fingerprint": "sha256:273f89eb07ae882784e40c2bc2ef2be5db93ddb3efa7de6270880ad1b7dd5718",
+  "first_open_time": "2016-05-23T00:00:00+00:00",
+  "last_open_time": "2026-07-11T00:00:00+00:00",
+  "lock_schema_version": 1,
+  "manifest_sha256": "58ec9cb9940f76c991db92696e0a72df3365fa2b5d31305fa25f15468ac7b4fd",
+  "market_type": "spot",
+  "package_version": "0.3.0",
+  "quality_report_sha256": "b167df002768469bd5fb17c5a6588edc2c98e3ce910a0995187e1f68ed14f07a",
+  "quote_asset": "USD",
+  "raw_file_sha256": "90872962bd7a9a96df9de33384b23067f4254374c0cfac741a0a018fac422d86",
+  "row_count": 3702,
+  "symbol": "ETH-USD",
+  "venue": "coinbase-exchange"
+}

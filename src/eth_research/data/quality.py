@@ -26,6 +26,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
+from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.provenance import (
     require_bool,
     require_int,
@@ -222,8 +223,8 @@ class QualityReport:
     def from_json_bytes(cls, raw: bytes) -> QualityReport:
         """Strict parse: exact keys, exact JSON types, no repair."""
         try:
-            payload: Any = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            payload: Any = strict_json_loads(raw)
+        except StrictJSONError as exc:
             raise ValueError(f"quality report is not valid JSON: {exc}") from exc
         if not isinstance(payload, dict):
             raise ValueError("quality report JSON must be an object")

@@ -1,0 +1,21 @@
+{
+  "candle_interval_seconds": 86400,
+  "chosen_end": "2026-07-12T00:00:00+00:00",
+  "chosen_start": "2016-05-23T00:00:00+00:00",
+  "discovery_candle_count": 257,
+  "discovery_schema_version": 1,
+  "discovery_window_end": "2017-02-01T00:00:00+00:00",
+  "discovery_window_start": "2016-05-01T00:00:00+00:00",
+  "first_available_open_time": "2016-05-18T00:00:00+00:00",
+  "last_discovery_open_time": "2017-01-31T00:00:00+00:00",
+  "missing_early_open_times": [
+    "2016-05-21T00:00:00+00:00",
+    "2016-05-22T00:00:00+00:00"
+  ],
+  "product": "ETH-USD",
+  "raw_response_sha256": "d13f1f4df537d6002ab0f7bea7fc8a74fe00317921d7a85406106375335380df",
+  "retrieved_at": "2026-07-12T05:07:28+00:00",
+  "source_commit": "a86a8c3b9c7ede41989b1974e4a79c9895b3f7ef",
+  "venue": "coinbase-exchange",
+  "workflow_run_id": "29180702904"
+}

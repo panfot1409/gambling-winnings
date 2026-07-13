@@ -1,0 +1,15 @@
+{
+  "environment_schema_version": 1,
+  "machine": "x86_64",
+  "numpy_version": "2.5.1",
+  "os_family": "Linux",
+  "package_version": "0.3.0",
+  "pandas_version": "3.0.3",
+  "pyarrow_version": "25.0.0",
+  "pyproject_sha256": "45949a4bd9b6107522bdc9279cfb1af8243e5b775ac85798501ae1559c133c1e",
+  "python_cache_tag": "cpython-312",
+  "python_implementation": "CPython",
+  "python_version": "3.12.3",
+  "runtime_role": "authoritative-benchmark-runtime",
+  "uv_lock_sha256": "581ca9a47299c05a39fa23c62ecb1766ede671ed4c4f125e4ea6ecbf74e25b7d"
+}

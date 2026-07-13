@@ -14,3 +14,8 @@ import eth_research
 
 def test_package_metadata_and_dunder_version_agree() -> None:
     assert eth_research.__version__ == version("eth-research")
+
+
+def test_milestone_2b_development_version() -> None:
+    """Milestone 2B code identifies itself as 0.3.0, not a released tag's version."""
+    assert eth_research.__version__ == "0.3.0"

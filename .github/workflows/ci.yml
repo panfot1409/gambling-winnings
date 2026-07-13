@@ -5,15 +5,23 @@ on:
     branches: ["**"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   checks:
+    # Compatibility coverage: the package must import, type-check, and pass its
+    # suite on every supported interpreter. These jobs may parse the runtime
+    # contract but never claim to be the authoritative benchmark runtime.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0  # full history: the shared gate verifies the protocol-registration commit
       - name: Install uv 0.8.17 (pinned)
         run: |
           curl -LsSf https://astral.sh/uv/0.8.17/install.sh | sh
@@ -28,5 +36,89 @@ jobs:
         run: uv run --no-sync ruff format --check .
       - name: Type check (strict, including examples)
         run: uv run --no-sync mypy src tests examples
+      - name: Compatibility runtime-contract parse
+        run: uv run --no-sync python -m eth_research.environment --repo-root . --compat
       - name: Tests
         run: uv run --no-sync pytest
+
+  authoritative-runtime:
+    # The one runtime the authorized benchmark may run on: CPython 3.12.3 with
+    # the locked numerical stack. Installs that exact interpreter and verifies
+    # the frozen runtime contract (once it is committed).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0  # full history: the shared gate verifies the protocol-registration commit
+      - name: Install uv 0.8.17 (pinned)
+        run: |
+          curl -LsSf https://astral.sh/uv/0.8.17/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install the authoritative CPython 3.12.3
+        run: uv python install 3.12.3
+      - name: Verify uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Sync locked environment on the authoritative runtime
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: Verify the authoritative runtime contract
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.environment --repo-root .
+      - name: Tests on the authoritative runtime
+        run: uv run --no-sync --python 3.12.3 pytest
+
+  readiness:
+    # The exact honest state of the one-time test, asserted on every fresh
+    # clone: integrity-ready and holdout-fresh, the candidate scientifically
+    # REJECTED, and therefore NOT authorized-test-ready — with a byte-empty
+    # ledger. The rejection is a research finding, not an infrastructure
+    # failure: the informational CLI exits zero for it, and the
+    # --require-authorized-test-ready flag must exit nonzero.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0  # full history: the shared gate verifies the protocol-registration commit
+      - name: Install uv 0.8.17 (pinned)
+        run: |
+          curl -LsSf https://astral.sh/uv/0.8.17/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install the authoritative CPython 3.12.3
+        run: uv python install 3.12.3
+      - name: Sync locked environment on the authoritative runtime
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: Reconstruct the canonical dataset offline from committed raw
+        run: |
+          uv run --no-sync --python 3.12.3 python -m eth_research.replay_m2b \
+            --repo-root . --work-dir "$RUNNER_TEMP/replay" --check
+      - name: Assert the exact honest readiness state
+        run: |
+          set -euo pipefail
+          uv run --no-sync --python 3.12.3 python -m eth_research.test_readiness \
+            --repo-root . \
+            --manifest "$RUNNER_TEMP/replay/datasets/coinbase-exchange-eth-usd-86400s.manifest.json" \
+            > "$RUNNER_TEMP/readiness.json"
+          jq . "$RUNNER_TEMP/readiness.json"
+          test "$(jq -r '.integrity_ready' "$RUNNER_TEMP/readiness.json")" = "true"
+          test "$(jq -r '.integrity_failure' "$RUNNER_TEMP/readiness.json")" = "null"
+          test "$(jq -r '.dossier_verified' "$RUNNER_TEMP/readiness.json")" = "true"
+          test "$(jq -r '.holdout_fresh' "$RUNNER_TEMP/readiness.json")" = "true"
+          test "$(jq -r '.promotion_decision' "$RUNNER_TEMP/readiness.json")" = "rejected_for_test_promotion"
+          test "$(jq -r '.promotion_eligible' "$RUNNER_TEMP/readiness.json")" = "false"
+          test "$(jq -r '.authorized_test_ready' "$RUNNER_TEMP/readiness.json")" = "false"
+          test "$(jq -r '.output_collision' "$RUNNER_TEMP/readiness.json")" = "false"
+          test "$(jq -r '.train_validation_reproducible' "$RUNNER_TEMP/readiness.json")" = "true"
+          test "$(jq -r '.ledger_byte_count' "$RUNNER_TEMP/readiness.json")" = "0"
+          test "$(jq -r '.ledger_event_count' "$RUNNER_TEMP/readiness.json")" = "0"
+          test "$(jq -r '.ledger_sha256' "$RUNNER_TEMP/readiness.json")" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          test "$(jq -r '.test_row_count' "$RUNNER_TEMP/readiness.json")" = "741"
+          test "$(jq -r '.test_first_open_time' "$RUNNER_TEMP/readiness.json")" = "2024-07-01T00:00:00+00:00"
+      - name: The rejected candidate must NOT be authorized-test-ready
+        run: |
+          set -euo pipefail
+          if uv run --no-sync --python 3.12.3 python -m eth_research.test_readiness \
+            --repo-root . \
+            --manifest "$RUNNER_TEMP/replay/datasets/coinbase-exchange-eth-usd-86400s.manifest.json" \
+            --require-authorized-test-ready > /dev/null; then
+            echo "--require-authorized-test-ready unexpectedly exited zero"; exit 1
+          else
+            echo "correctly not authorized-test-ready (scientific rejection)"
+          fi

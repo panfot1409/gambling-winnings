@@ -146,3 +146,25 @@ def test_invalid_content_raises_schema_error(tmp_path: Path, canonical: pd.DataF
     canonical.reset_index().drop(columns=["close"]).to_csv(path, index=False)
     with pytest.raises(SchemaError, match="missing required"):
         load_ohlcv(path)
+
+
+def test_csv_floats_load_with_round_trip_precision(tmp_path: Path) -> None:
+    """CSV values must load as exactly the doubles the file denotes.
+
+    pandas' default CSV float parser can be off by multiple ulps; the
+    canonical dataset builder already parses with round-trip precision, so
+    ``load_ohlcv`` reading the same file must produce bit-identical values
+    (Milestone 1 correctness fix, found during the Milestone 2B red-team).
+    """
+    tricky = "0.0007973654593590796"
+    exact = float(tricky)
+    path = tmp_path / "eth.csv"
+    path.write_text(
+        "timestamp,open,high,low,close,volume\n"
+        f"2024-01-01T00:00:00+00:00,{tricky},{tricky},{tricky},{tricky},1.0\n"
+        f"2024-01-02T00:00:00+00:00,{tricky},{tricky},{tricky},{tricky},1.0\n",
+        encoding="utf-8",
+    )
+    loaded = load_ohlcv(path)
+    assert float(loaded["open"].iloc[0]) == exact
+    assert float(loaded["close"].iloc[1]) == exact
