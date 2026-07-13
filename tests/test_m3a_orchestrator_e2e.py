@@ -21,6 +21,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+import eth_research
 from conftest import _git, make_m3a_checkout
 from eth_research.experiment_archive import verify_experiment_archive
 from eth_research.experiment_registry import read_registry
@@ -31,6 +34,36 @@ _GATE_LEDGER_REL = "research/m3a/development_gate_access.jsonl"
 _HOLDOUT_LEDGER_REL = "research/m2b/test_evaluations.jsonl"
 _INTENT_REL = "research/m3a/completion_intent.json"
 _ALIAS_RESULTS_REL = "research/m3a/development_results.json"
+
+
+def _on_frozen_runtime() -> bool:
+    """True iff the active runtime satisfies the frozen numerical contract.
+
+    The orchestrator (and the registration CLI, which shares preconditions)
+    proceeds only under the frozen runtime, so run-002 and run-003 stay
+    bit-identical. On any other runtime it fail-closes — correct behavior that
+    makes the driven-lifecycle rehearsal meaningful only here (e.g. it runs on
+    the authoritative CPython 3.12.3 job, not the 3.13 compatibility job).
+    """
+    from eth_research.environment import (
+        CANONICAL_RUNTIME_CONTRACT_RELPATH,
+        RuntimeVerificationError,
+        load_runtime_contract,
+        verify_runtime_snapshot,
+    )
+
+    repo = Path(eth_research.__file__).resolve().parents[2]
+    try:
+        verify_runtime_snapshot(load_runtime_contract(repo / CANONICAL_RUNTIME_CONTRACT_RELPATH))
+    except RuntimeVerificationError:
+        return False
+    return True
+
+
+_FROZEN_ONLY = pytest.mark.skipif(
+    not _on_frozen_runtime(),
+    reason="the orchestrated run-003 executes only under the frozen numerical runtime",
+)
 
 
 def _run(clone: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -69,6 +102,7 @@ def _register_and_commit_r(clone: Path) -> None:
     _git(clone, "commit", "--quiet", "-m", "pre-register run-003 (registry only)")
 
 
+@_FROZEN_ONLY
 class TestSuccessfulEndToEnd:
     def test_full_production_lifecycle(self, tmp_path: Path) -> None:
         clone = make_m3a_checkout(tmp_path)
@@ -186,6 +220,7 @@ class TestSuccessfulEndToEnd:
         assert "not awaiting execution" in rerun.stderr
 
 
+@_FROZEN_ONLY
 class TestFailureTransitions:
     """End-to-end refusal proof. The publication-rollback, started->failed, and
     crash-recovery transitions run against the real models in the focused
