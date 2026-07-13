@@ -1,5 +1,13 @@
 # Milestone 3A — run-003 terminal-completion audit (read-only handoff)
 
+> **Superseded by the merge-readiness milestone.** This audit covers the
+> run-003 terminal-completion milestone only. A later merge-readiness milestone
+> added the append-only report erratum, made the end-to-end lifecycle standing,
+> and applied red-team fixes — see `docs/M3A_MERGE_READINESS_AUDIT.md` for the
+> current terminal record. The commit named below as the milestone's final
+> implementation checkpoint predates *this document's own* commit (a file cannot
+> embed its own hash); it is not the current branch head.
+
 The final read-only audit of the run-003 terminal-completion milestone. It
 records exactly what changed after the closure checkpoint, proves the sealed
 invariants held throughout, shows that the corrective run-003 was registered,
@@ -10,7 +18,8 @@ final-holdout access.
 ## 1. Starting SHA, final SHA, branch, PR
 
 - Closure checkpoint (start): `18de74334723c37f49bc7a0ab10d152430716930`
-- Final HEAD: `b4e90726b26d69f94e40ad76e7c9675dea11ed32`
+- Final implementation/artifact checkpoint audited by this document (an ancestor
+  of, not equal to, this document's own commit): `b4e90726b26d69f94e40ad76e7c9675dea11ed32`
 - Branch: `claude/m3a-development-research-lab`
 - PR: **#4 open and draft** — not merged, not undrafted.
 

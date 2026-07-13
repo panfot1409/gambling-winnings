@@ -72,6 +72,8 @@ repair by rewriting history; the missing `v0.3.0` tag is unrelated debt.
 ## Reproduce on a fresh clone
 
 ```bash
+# Clone with full history (fetch-depth 0): --check binds the registration commit
+# to git history, so a shallow clone cannot reproduce.
 uv sync --locked --all-extras --python 3.12.3
 uv run --no-sync python -m eth_research.develop_m3a --repo-root . --check
 uv run --no-sync python .github/scripts/verify_m3a_registry.py
@@ -103,7 +105,17 @@ rejected, and any gap, duplicate, or reordering is rejected. The four
 strategies (cash, buy-and-hold, SMA 20/50, Donchian 55/20) are fixed and
 were **never** optimized; the Donchian channels exclude the current bar
 (`.shift(1)`), so signals are strictly causal. Test-suite firewall spies
-assert no timestamp after 2022-06-21 ever reaches the engine or a strategy.
+assert no timestamp after 2022-06-21 ever reaches the M3A engine or a strategy.
+
+One integrity re-derivation is disclosed for precision: loading the dataset
+re-verifies the frozen M2B dossier, which recomputes M2B's *already published*
+train+validation benchmark to prove it reproduces byte-for-byte. By construction
+that runs the M2 validation segment — which is the development gate
+(2022-06-22 .. 2024-06-30) — through the engine. It re-derives public M2B
+numbers that are hash-compared and discarded, records **no** development-gate
+ledger event, reveals nothing new to M3A development, and **never** touches the
+final holdout; the research-train frame M3A evaluates is sliced and re-guarded
+independently (`TestFrozenDossierReVerificationDisclosure`).
 
 ## Honest finding
 
@@ -122,6 +134,14 @@ severe-cost failures are retained exactly as computed. This is in-sample
 development evidence, not live performance and not test performance. See
 `../../docs/M3A_RUN003_BOOTSTRAP_COMPARISON.md` for the full-precision
 v1/v2/hierarchical record.
+
+The immutable run-003 report's Section 5 renders the cash primary upper bound as
+`-0.00%` and states the universal "every … interval straddles zero", which is
+false for the three cash primary cells. The immutable bytes are preserved; the
+correction is recorded out-of-band by the machine-verified append-only erratum
+`errata/m3a-run003-report-zero-inclusion-v1.json` (indexed in
+`artifact_errata.jsonl`, verified by `verify_artifact_errata` and reported by
+`develop_m3a --check` as `1 verified bound erratum`).
 
 ## Not authorized in Milestone 3A
 

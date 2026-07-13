@@ -18,10 +18,14 @@ names the single remaining scientifically-honest step.
 ## 1. Starting SHA, final SHA, branch, PR state
 
 - Starting HEAD: `8e076165ad07fcbeb4c5350e9d835439495b1489`
-- Final HEAD: `18de74334723c37f49bc7a0ab10d152430716930` (this audit handoff
+- **Closure-milestone** final HEAD (historical; superseded — see the banner
+  above and `docs/M3A_MERGE_READINESS_AUDIT.md`):
+  `18de74334723c37f49bc7a0ab10d152430716930` (that milestone's audit-handoff
   commit; its parent `d1dbb68` is the last pre-audit commit, at which the CI and
   working-tree observations in §26–§27 were taken — a commit cannot contain its
-  own SHA)
+  own SHA). The "to be recorded when run-003 executes" placeholders in §16–§17
+  were fulfilled by run-003 and are tabulated in
+  `docs/M3A_RUN003_BOOTSTRAP_COMPARISON.md`.
 - Branch: `claude/m3a-development-research-lab`
 - PR: **#4 open and draft** — not merged, not undrafted.
 
