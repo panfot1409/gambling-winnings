@@ -12,16 +12,29 @@ them exactly:
 * **final holdout** — the M2 *test* segment (741 rows,
   2024-07-01 .. 2026-07-11 UTC). Absolutely forbidden.
 
-The firewall hands downstream code the research-train rows **only**. It
-never passes the full dataset and trusts callers to slice: every frame and
-every warm-up context handed to a strategy or the backtest engine is
-checked, and a single row on or after 2022-06-22 — or a gap, duplicate,
-shuffle, or fingerprint mismatch — is *rejected*, never silently
-truncated. There is no arbitrary date-range or ``segment="test"`` escape
-hatch. Permitted operations on the forbidden partitions are integrity-only
-(schema validation, mechanical splitting, counts, bounds, opaque content
-fingerprints); no forbidden market value ever reaches a strategy or the
-engine.
+The firewall hands the downstream **M3A walk-forward** the research-train
+rows **only**. It never passes the full dataset and trusts callers to slice:
+every frame and every warm-up context handed to an M3A strategy or the M3A
+backtest engine is checked, and a single row on or after 2022-06-22 — or a
+gap, duplicate, shuffle, or fingerprint mismatch — is *rejected*, never
+silently truncated. There is no arbitrary date-range or ``segment="test"``
+escape hatch, so no forbidden market value ever reaches an M3A walk-forward
+strategy, fold, bootstrap, report, or the engine driven by
+:func:`evaluate_development`.
+
+One integrity re-derivation is disclosed for precision. Loading the dataset
+first re-verifies the frozen M2B dossier, which recomputes M2B's *already
+published* train+validation benchmark to prove it reproduces byte-for-byte
+(see :func:`build_development_partition`). By construction that re-simulation
+runs the M2 *validation* segment — which is the M3A development gate
+(2022-06-22 .. 2024-06-30) — through the engine. It re-derives public M2B
+numbers that are hash-compared and discarded, records **no** development-gate
+access-ledger event, reveals nothing new to M3A development, and **never**
+touches the final holdout (>= 2024-07-01). The research-train frame M3A
+actually evaluates is sliced (``index <= 2022-06-21``), re-guarded, and
+fingerprint-checked independently of that check. Permitted operations on the
+forbidden partitions are otherwise integrity-only (schema validation,
+mechanical splitting, counts, bounds, opaque content fingerprints).
 """
 
 from __future__ import annotations

@@ -206,3 +206,53 @@ class TestFirewallSpies:
         monkeypatch.setattr(de, "build_fold_frames", poisoned)
         with pytest.raises(DevelopmentAccessError, match="forbidden partition access"):
             _evaluate(real_manifest)
+
+
+class TestFrozenDossierReVerificationDisclosure:
+    """Pin the one disclosed exception to the firewall (see ``development.py``).
+
+    Loading the dataset first re-verifies the frozen M2B dossier, which recomputes
+    M2B's already-published train+validation benchmark. That re-simulation runs the
+    M2 validation segment — the M3A development gate — through the engine. This is
+    benign (public M2B numbers, hash-compared and discarded, no gate-ledger event,
+    run-003 financials unchanged) but it is real, so it is disclosed and pinned
+    here: the re-derivation must never reach the final holdout, and both sealed
+    ledgers must stay byte-empty. The M3A walk-forward's own surfaces are proven
+    clean by :class:`TestFirewallSpies` above (which patches the evaluator binding).
+    """
+
+    GATE_END = pd.Timestamp("2024-06-30", tz="UTC")
+    HOLDOUT_START = pd.Timestamp("2024-07-01", tz="UTC")
+    _GATE_LEDGER = REPO_ROOT / "research/m3a/development_gate_access.jsonl"
+    _HOLDOUT_LEDGER = REPO_ROOT / "research/m2b/test_evaluations.jsonl"
+
+    def test_dossier_reverification_touches_validation_but_never_the_holdout(
+        self, real_manifest: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from eth_research import evaluation as ev
+        from eth_research.development import load_development_dataset
+
+        assert self._GATE_LEDGER.read_bytes() == b""
+        assert self._HOLDOUT_LEDGER.read_bytes() == b""
+
+        seen: list[pd.Timestamp] = []
+        original = ev.run_backtest
+
+        def spy(data: pd.DataFrame, *args: Any, **kwargs: Any) -> Any:
+            seen.append(data.index.max())
+            return original(data, *args, **kwargs)
+
+        monkeypatch.setattr(ev, "run_backtest", spy)
+        dataset = load_development_dataset(REPO_ROOT, real_manifest)
+
+        # The dossier re-derivation exercised the engine over the M2 validation
+        # (== development-gate) segment, but never the final holdout.
+        assert seen, "the frozen-dossier verification must exercise the engine"
+        assert max(seen) == self.GATE_END
+        assert all(ts < self.HOLDOUT_START for ts in seen)
+        # The frame M3A actually evaluates is research-train only.
+        assert dataset.frame.index.max() == BOUNDARY
+        assert len(dataset.frame) == 2221
+        # No development-gate or final-holdout access was recorded.
+        assert self._GATE_LEDGER.read_bytes() == b""
+        assert self._HOLDOUT_LEDGER.read_bytes() == b""
