@@ -143,3 +143,29 @@ class TestSuccessfulEndToEnd:
         status = _run(clone, "eth_research.m3a_recovery", "--repo-root", str(clone), "--status")
         assert status.returncode == 0
         assert "no-intent" in status.stdout
+
+        # A second invocation of the consumed id is refused (single-use).
+        rerun = _run(
+            clone, "eth_research.develop_m3a", "--repo-root", str(clone), "--run-experiment", RUN_ID
+        )
+        assert rerun.returncode == 1
+        assert "not awaiting execution" in rerun.stderr
+
+
+class TestFailureTransitions:
+    """End-to-end refusal proof. The publication-rollback, started->failed, and
+    crash-recovery transitions run against the real models in the focused
+    ``test_publication.py`` and ``test_m3a_recovery.py`` suites."""
+
+    def test_unregistered_run_refuses_before_any_started(self, tmp_path: Path) -> None:
+        clone = make_m3a_checkout(tmp_path)
+        # No registration: the orchestrator refuses and appends no 'started'.
+        run = _run(
+            clone, "eth_research.develop_m3a", "--repo-root", str(clone), "--run-experiment", RUN_ID
+        )
+        assert run.returncode == 1
+        assert "no registered experiment" in run.stderr
+        events = read_registry(clone / _REGISTRY_REL)
+        assert all(e.experiment_id != RUN_ID for e in events)
+        assert (clone / _GATE_LEDGER_REL).read_bytes() == b""
+        assert (clone / _HOLDOUT_LEDGER_REL).read_bytes() == b""
