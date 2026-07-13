@@ -285,10 +285,10 @@ class TestReconciliation:
         payload = json.loads(results.to_json_bytes())
         payload["bootstrap_cells"][0]["primary"]["point_estimate"] += 0.01
         tampered = DevelopmentResultsV2.from_json_bytes(json.dumps(payload).encode("utf-8"))
-        with pytest.raises(DevelopmentResultsV2Error, match="bootstrap.*does not recompute"):
+        with pytest.raises(DevelopmentResultsV2Error, match=r"bootstrap.*does not recompute"):
             reconcile_results_v2_with_evidence(tampered, evidence)
 
 
-def _repair_grid(payload: dict) -> bytes:
+def _repair_grid(payload: dict[str, object]) -> bytes:
     """Serialize a payload whose pooled mean was nudged (observation_count intact)."""
     return json.dumps(payload).encode("utf-8")

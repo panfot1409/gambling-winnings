@@ -121,7 +121,7 @@ class TestGrid:
         ev = _build()
         payload = json.loads(ev.to_json_bytes())
         raw = json.dumps(payload).replace("0.0", "NaN", 1).encode("utf-8")
-        with pytest.raises(ValueError, match="NaN|not valid JSON|net_return"):
+        with pytest.raises(ValueError, match=r"NaN|not valid JSON|net_return"):
             ReturnEvidence.from_json_bytes(raw)
 
     def test_reordered_fold_axes_are_rejected(self) -> None:
@@ -131,12 +131,12 @@ class TestGrid:
             payload["fold_axes"][1],
             payload["fold_axes"][0],
         )
-        with pytest.raises(ValueError, match="fold_axes indices must be 0..K-1"):
+        with pytest.raises(ValueError, match=r"fold_axes indices must be 0\.\.K-1"):
             ReturnEvidence.from_json_bytes(json.dumps(payload).encode("utf-8"))
 
     def test_duplicated_fold_axis_is_rejected(self) -> None:
         ev = _build()
         payload = json.loads(ev.to_json_bytes())
         payload["fold_axes"][1] = payload["fold_axes"][0]  # duplicate fold_index 0
-        with pytest.raises(ValueError, match="fold_axes indices must be 0..K-1"):
+        with pytest.raises(ValueError, match=r"fold_axes indices must be 0\.\.K-1"):
             ReturnEvidence.from_json_bytes(json.dumps(payload).encode("utf-8"))
