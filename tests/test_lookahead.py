@@ -18,9 +18,23 @@ import pytest
 
 from eth_research.backtest import CostModel, run_backtest
 from eth_research.splits import chronological_split
-from eth_research.strategies import BuyAndHold, MovingAverageCrossover, Strategy
+from eth_research.strategies import (
+    BuyAndHold,
+    Cash,
+    DonchianChannel,
+    MovingAverageCrossover,
+    Strategy,
+)
 
-STRATEGIES = [BuyAndHold(), MovingAverageCrossover(fast_window=10, slow_window=30)]
+STRATEGIES = [
+    BuyAndHold(),
+    Cash(),
+    MovingAverageCrossover(fast_window=10, slow_window=30),
+    # The stateful Donchian breakout is the newest and most look-ahead-prone
+    # strategy: its channels must exclude the current bar, so prefix-invariance
+    # and future-perturbation immunity are the decisive causal checks.
+    DonchianChannel(entry_window=55, exit_window=20),
+]
 CUT_POINTS = (40, 150, 399)
 ZERO_COST = CostModel(fee_rate=0.0, slippage_rate=0.0)
 
