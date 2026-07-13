@@ -1,0 +1,33 @@
+{
+  "dataset_content_fingerprint": "sha256:273f89eb07ae882784e40c2bc2ef2be5db93ddb3efa7de6270880ad1b7dd5718",
+  "dataset_first_open_time": "2016-05-23T00:00:00+00:00",
+  "dataset_last_open_time": "2026-07-11T00:00:00+00:00",
+  "dataset_row_count": 3702,
+  "frozen_m2_dossier_sha256": "20ce9be93d955189244c3b57c932dafbbe54a2babde4d4860275ca1d624d432e",
+  "package_version": "0.4.0",
+  "partition_schema_version": 1,
+  "partitions": [
+    {
+      "content_fingerprint": "sha256:60aa988e9db786db5723c925abc794463c23ff701791173b745196c7a8b12033",
+      "first_open_time": "2016-05-23T00:00:00+00:00",
+      "last_open_time": "2022-06-21T00:00:00+00:00",
+      "name": "research_train",
+      "row_count": 2221
+    },
+    {
+      "content_fingerprint": "sha256:97747723e0fcd141ea346b1d4ca784bf782f887280d4515f69609eb9c2392b1a",
+      "first_open_time": "2022-06-22T00:00:00+00:00",
+      "last_open_time": "2024-06-30T00:00:00+00:00",
+      "name": "development_gate",
+      "row_count": 740
+    },
+    {
+      "content_fingerprint": "sha256:71c1214d6f1322d3fc9fec84bbf92e910c7a94b6f5c4683cdbace071ce2f6c22",
+      "first_open_time": "2024-07-01T00:00:00+00:00",
+      "last_open_time": "2026-07-11T00:00:00+00:00",
+      "name": "final_holdout",
+      "row_count": 741
+    }
+  ],
+  "split_semantics": "m2b-chronological-60-20-20-positional-floor"
+}
