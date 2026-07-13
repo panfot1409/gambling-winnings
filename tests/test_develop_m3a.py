@@ -12,6 +12,7 @@ from eth_research.develop_m3a import (
     EXPERIMENT_FAMILY_ID,
     REPORT_RELPATH,
     RESULTS_RELPATH,
+    _committed_provenance,
     generate,
     registered_commit_from_history,
     result_bundle_sha256,
@@ -28,25 +29,24 @@ pytestmark = pytest.mark.skipif(
 
 
 class TestGenerate:
+    # Phase 13 discipline: real research-train data is evaluated only to
+    # reproduce the *registered* experiment, so both tests use the committed
+    # experiment's own provenance rather than fabricated `"a"*40`/`"b"*40`
+    # commits, and never publish a new real-data artifact.
+    def _committed(self) -> tuple[bytes, str]:
+        execution, registered, family = _committed_provenance(REPO_ROOT)
+        return generate(
+            REPO_ROOT,
+            execution_code_commit_sha=execution,
+            registered_code_commit_sha=registered,
+            experiment_family_id=family,
+        )
+
     def test_generate_is_deterministic(self) -> None:
-        first = generate(
-            REPO_ROOT,
-            execution_code_commit_sha="a" * 40,
-            registered_code_commit_sha="b" * 40,
-        )
-        second = generate(
-            REPO_ROOT,
-            execution_code_commit_sha="a" * 40,
-            registered_code_commit_sha="b" * 40,
-        )
-        assert first == second
+        assert self._committed() == self._committed()
 
     def test_report_has_all_sections(self) -> None:
-        _, report = generate(
-            REPO_ROOT,
-            execution_code_commit_sha="a" * 40,
-            registered_code_commit_sha="b" * 40,
-        )
+        _, report = self._committed()
         sections = re.findall(r"^## (\d+)\.", report, re.MULTILINE)
         assert sections == [str(i) for i in range(1, 22)]
 

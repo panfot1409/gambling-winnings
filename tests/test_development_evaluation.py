@@ -45,12 +45,20 @@ def real_manifest() -> Path:
 
 
 def _evaluate(manifest: Path) -> Any:
+    # Phase 13 discipline: real research-train data is evaluated here only to
+    # reproduce the *registered* experiment, so the provenance is the committed
+    # experiment's own (never fabricated `"a"*40`/`"b"*40` commits). Synthetic
+    # fixtures cover the pure unit diagnostics; the firewall spies below assert
+    # no forbidden row reaches the engine.
+    from eth_research.develop_m3a import _committed_provenance
+
+    execution, registered, family = _committed_provenance(REPO_ROOT)
     return evaluate_development(
         REPO_ROOT,
         manifest,
-        execution_code_commit_sha="a" * 40,
-        registered_code_commit_sha="b" * 40,
-        experiment_family_id=FAMILY,
+        execution_code_commit_sha=execution,
+        registered_code_commit_sha=registered,
+        experiment_family_id=family,
     )
 
 
