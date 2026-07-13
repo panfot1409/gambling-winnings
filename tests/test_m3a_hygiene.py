@@ -33,6 +33,7 @@ _ALLOWED_M3A_FILES: frozenset[str] = frozenset(
     {
         "research/m3a/development_partition.json",
         "research/m3a/walk_forward_protocol.json",
+        "research/m3a/walk_forward_protocol_v2.json",
         "research/m3a/development_gate_access.jsonl",
         "research/m3a/experiment_registry.jsonl",
         "research/m3a/development_results.json",
