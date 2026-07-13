@@ -115,3 +115,39 @@ class TestHierarchicalSensitivity:
         a = hierarchical_fold_block_bootstrap(folds)
         b = hierarchical_fold_block_bootstrap(folds)
         assert fold_aware_bootstrap_bytes(a) == fold_aware_bootstrap_bytes(b)
+
+
+class TestN7EffectiveSeedProvenance:
+    def test_effective_rng_seed_is_recorded_exactly(self) -> None:
+        # N7: the hierarchical stream is seeded 20260714, not the base 20260713.
+        folds = _five_folds(11)
+        primary = fold_stratified_moving_block_bootstrap(folds)
+        sensitivity = hierarchical_fold_block_bootstrap(folds)
+        assert primary.base_seed == 20260713
+        assert primary.effective_rng_seed == 20260713
+        assert sensitivity.base_seed == 20260713
+        assert sensitivity.effective_rng_seed == 20260714
+
+    def test_round_trip_carries_both_seeds(self) -> None:
+        from eth_research.bootstrap_v2 import FoldAwareInterval
+
+        sensitivity = hierarchical_fold_block_bootstrap(_five_folds(7))
+        assert FoldAwareInterval.from_json_dict(sensitivity.to_json_dict()) == sensitivity
+
+    def test_wrong_effective_seed_is_rejected(self) -> None:
+        from eth_research.bootstrap_v2 import FoldAwareInterval
+
+        primary = fold_stratified_moving_block_bootstrap(_five_folds(7))
+        payload = primary.to_json_dict()
+        payload["effective_rng_seed"] = payload["base_seed"] + 5  # not the pinned offset
+        with pytest.raises(ValueError, match=r"effective_rng_seed .* disagrees"):
+            FoldAwareInterval.from_json_dict(payload)
+
+    def test_zero_observation_count_is_rejected(self) -> None:
+        from eth_research.bootstrap_v2 import FoldAwareInterval
+
+        good = fold_stratified_moving_block_bootstrap(_five_folds(7)).to_json_dict()
+        good["fold_observation_counts"] = [0] * len(good["fold_observation_counts"])
+        good["observation_count"] = 0
+        with pytest.raises(ValueError, match="must be >= 1"):
+            FoldAwareInterval.from_json_dict(good)

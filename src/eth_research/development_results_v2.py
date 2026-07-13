@@ -736,15 +736,21 @@ def reconcile_results_v2_with_evidence(
     for cell in results.bootstrap_cells:
         # Recompute with the exact configuration the cell declares (self-describing).
         config = FoldAwareBootstrapConfig(
-            seed=cell.primary.seed,
+            seed=cell.primary.base_seed,
             block_length=cell.primary.block_length,
             resamples=cell.primary.resamples,
             confidence=cell.primary.confidence,
         )
-        if cell.sensitivity.seed != cell.primary.seed:
+        if cell.sensitivity.base_seed != cell.primary.base_seed:
             raise DevelopmentResultsV2Error(
-                f"sensitivity/primary base seed ({cell.strategy},{cell.cost_scenario}) disagree; "
-                "the hierarchical stream is domain-separated internally, not by the recorded seed"
+                f"sensitivity/primary base seed ({cell.strategy},{cell.cost_scenario}) disagree"
+            )
+        if (
+            cell.primary.effective_rng_seed != cell.primary.base_seed
+            or cell.sensitivity.effective_rng_seed != cell.sensitivity.base_seed + 1
+        ):
+            raise DevelopmentResultsV2Error(
+                f"recorded effective RNG seeds ({cell.strategy},{cell.cost_scenario}) are wrong"
             )
         fold_excess = paired_excess_returns_from_folds(
             evidence.fold_series(cell.strategy, cell.cost_scenario),

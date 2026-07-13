@@ -38,7 +38,7 @@ from eth_research.bootstrap import (
     paired_excess_returns,
 )
 from eth_research.data.provenance import require_int, require_str
-from eth_research.data.validation import require_finite_float
+from eth_research.data.validation import require_finite_float, require_positive_int
 from eth_research.walkforward import (
     BOOTSTRAP_BLOCK_LENGTH,
     BOOTSTRAP_CONFIDENCE,
@@ -59,7 +59,8 @@ _FOLD_INTERVAL_KEYS: frozenset[str] = frozenset(
         "ci_lower",
         "ci_median",
         "ci_upper",
-        "seed",
+        "base_seed",
+        "effective_rng_seed",
         "block_length",
         "resamples",
         "confidence",
@@ -119,7 +120,8 @@ class FoldAwareInterval:
     ci_lower: float
     ci_median: float
     ci_upper: float
-    seed: int
+    base_seed: int
+    effective_rng_seed: int
     block_length: int
     resamples: int
     confidence: float
@@ -127,9 +129,29 @@ class FoldAwareInterval:
     def __post_init__(self) -> None:
         if self.algorithm not in (FOLD_STRATIFIED_ALGORITHM, HIERARCHICAL_ALGORITHM):
             raise ValueError(f"unknown fold-aware algorithm {self.algorithm!r}")
-        require_int("observation_count", self.observation_count)
+        require_positive_int("observation_count", self.observation_count)
+        if not self.fold_observation_counts:
+            raise ValueError("fold_observation_counts must be non-empty")
+        for count in self.fold_observation_counts:
+            require_positive_int("fold_observation_count", count)
         if self.observation_count != sum(self.fold_observation_counts):
             raise ValueError("observation_count must equal the sum of fold observation counts")
+        require_int("base_seed", self.base_seed)
+        require_int("effective_rng_seed", self.effective_rng_seed)
+        require_positive_int("block_length", self.block_length)
+        require_positive_int("resamples", self.resamples)
+        if not 0.0 < require_finite_float("confidence", self.confidence) < 1.0:
+            raise ValueError("confidence must be in (0, 1)")
+        # The fold-stratified stream is seeded with the base seed; the
+        # hierarchical stream is domain-separated (base + 1).
+        expected = self.base_seed + (
+            _HIERARCHICAL_SEED_OFFSET if self.algorithm == HIERARCHICAL_ALGORITHM else 0
+        )
+        if self.effective_rng_seed != expected:
+            raise ValueError(
+                f"effective_rng_seed {self.effective_rng_seed} disagrees with the expected "
+                f"{expected} for {self.algorithm!r}"
+            )
         for label in ("point_estimate", "ci_lower", "ci_median", "ci_upper"):
             require_finite_float(label, getattr(self, label))
         if not self.ci_lower <= self.ci_median <= self.ci_upper:
@@ -144,7 +166,8 @@ class FoldAwareInterval:
             "ci_lower": self.ci_lower,
             "ci_median": self.ci_median,
             "ci_upper": self.ci_upper,
-            "seed": self.seed,
+            "base_seed": self.base_seed,
+            "effective_rng_seed": self.effective_rng_seed,
             "block_length": self.block_length,
             "resamples": self.resamples,
             "confidence": self.confidence,
@@ -175,7 +198,8 @@ class FoldAwareInterval:
             ci_lower=require_finite_float("ci_lower", payload["ci_lower"]),
             ci_median=require_finite_float("ci_median", payload["ci_median"]),
             ci_upper=require_finite_float("ci_upper", payload["ci_upper"]),
-            seed=require_int("seed", payload["seed"]),
+            base_seed=require_int("base_seed", payload["base_seed"]),
+            effective_rng_seed=require_int("effective_rng_seed", payload["effective_rng_seed"]),
             block_length=require_int("block_length", payload["block_length"]),
             resamples=require_int("resamples", payload["resamples"]),
             confidence=require_finite_float("confidence", payload["confidence"]),
@@ -222,6 +246,7 @@ def _interval(
     arrays: list[np.ndarray],
     means: np.ndarray,
     config: FoldAwareBootstrapConfig,
+    effective_rng_seed: int,
 ) -> FoldAwareInterval:
     pooled = np.concatenate(arrays)
     lower_pct = (1.0 - config.confidence) / 2.0 * 100.0
@@ -234,7 +259,8 @@ def _interval(
         ci_lower=float(np.percentile(means, lower_pct, method="linear")),
         ci_median=float(np.percentile(means, 50.0, method="linear")),
         ci_upper=float(np.percentile(means, upper_pct, method="linear")),
-        seed=config.seed,
+        base_seed=config.seed,
+        effective_rng_seed=effective_rng_seed,
         block_length=config.block_length,
         resamples=config.resamples,
         confidence=config.confidence,
@@ -258,7 +284,7 @@ def fold_stratified_moving_block_bootstrap(
     for i in range(cfg.resamples):
         resampled = np.concatenate([_resample_within(a, cfg.block_length, rng) for a in arrays])
         means[i] = float(resampled.mean())
-    return _interval(FOLD_STRATIFIED_ALGORITHM, arrays, means, cfg)
+    return _interval(FOLD_STRATIFIED_ALGORITHM, arrays, means, cfg, cfg.seed)
 
 
 def hierarchical_fold_block_bootstrap(
@@ -284,7 +310,7 @@ def hierarchical_fold_block_bootstrap(
             [_resample_within(arrays[j], cfg.block_length, rng) for j in chosen]
         )
         means[i] = float(resampled.mean())
-    return _interval(HIERARCHICAL_ALGORITHM, arrays, means, cfg)
+    return _interval(HIERARCHICAL_ALGORITHM, arrays, means, cfg, cfg.hierarchical_seed)
 
 
 def paired_excess_returns_from_folds(
