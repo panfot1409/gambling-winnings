@@ -1,0 +1,89 @@
+"""Fail-closed development-experiment orchestrator: no real work before 'started'."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+import eth_research
+from eth_research.data.provenance import sha256_file
+from eth_research.development_orchestrator import (
+    DevelopmentRunAuthorization,
+    OrchestratorError,
+    _resolve_registered_only,
+    run_registered_development_experiment,
+)
+from eth_research.experiment_registry import (
+    EXPERIMENT_REGISTRY_RELPATH,
+    read_registry,
+)
+
+REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
+_REGISTRY = REPO_ROOT / EXPERIMENT_REGISTRY_RELPATH
+_GATE_LEDGER = REPO_ROOT / "research/m3a/development_gate_access.jsonl"
+_HOLDOUT_LEDGER = REPO_ROOT / "research/m2b/test_evaluations.jsonl"
+_EMPTY = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+_PREFIX = "7920d9fdf4e936ef6c6d79dfd1c10cdd12dcb9b2db264b9ab9d5640332e9af67"
+
+
+class TestUnforgeableAuthorization:
+    def test_authorization_cannot_be_constructed_externally(self) -> None:
+        with pytest.raises(OrchestratorError, match="cannot be forged"):
+            DevelopmentRunAuthorization(
+                experiment_id="m3a-fixed-baseline-comparison-v2-run-003",
+                execution_code_commit_sha="a" * 40,
+                source_tree_fingerprint="b" * 64,
+                started_event_sha256="c" * 64,
+                _token=object(),  # not the module sentinel
+            )
+
+
+class TestResolveRegisteredOnly:
+    def test_unknown_id_is_refused(self) -> None:
+        with pytest.raises(OrchestratorError, match="no registered experiment"):
+            _resolve_registered_only((), "m3a-nope-001")
+
+    def test_already_terminal_v1_id_is_refused(self) -> None:
+        # The committed registry's run-001/002 are v1 and already completed.
+        events = read_registry(_REGISTRY)
+        with pytest.raises(OrchestratorError, match="not awaiting execution"):
+            _resolve_registered_only(events, "m3a-fixed-baseline-comparison-v1-run-001")
+
+
+class TestFailClosedPreStart:
+    """Before 'started', a refused run appends nothing and touches no sealed file."""
+
+    def _snapshot(self) -> tuple[str, str, str, int]:
+        return (
+            sha256_file(_REGISTRY),
+            sha256_file(_GATE_LEDGER),
+            sha256_file(_HOLDOUT_LEDGER),
+            len(read_registry(_REGISTRY)),
+        )
+
+    def test_no_registered_v2_experiment_refuses_without_side_effects(self) -> None:
+        before = self._snapshot()
+        assert before[0] == _PREFIX  # registry is the immutable v1 prefix
+        assert before[1] == before[2] == _EMPTY
+        with pytest.raises(OrchestratorError):
+            run_registered_development_experiment(
+                REPO_ROOT,
+                "m3a-fixed-baseline-comparison-v2-run-003",
+                clock=lambda: pd.Timestamp("2026-07-13T17:00:00+00:00"),
+            )
+        after = self._snapshot()
+        # Nothing appended; both sealed ledgers still byte-empty; prefix intact.
+        assert after == before
+        assert sha256_file(_REGISTRY) == _PREFIX
+
+    def test_running_an_already_completed_v1_id_refuses(self) -> None:
+        before = self._snapshot()
+        with pytest.raises(OrchestratorError):
+            run_registered_development_experiment(
+                REPO_ROOT,
+                "m3a-fixed-baseline-comparison-v1-run-002",
+                clock=lambda: pd.Timestamp("2026-07-13T17:00:00+00:00"),
+            )
+        assert self._snapshot() == before

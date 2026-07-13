@@ -35,7 +35,7 @@ from eth_research.data.provenance import (
     sha256_bytes,
 )
 from eth_research.data.validation import require_commit_sha, require_evaluation_id
-from eth_research.experiment_registry import ExperimentEvent, ExperimentEventV2, RegistryEvent
+from eth_research.experiment_registry import ExperimentEventV2, RegistryEvent
 
 ARCHIVE_SCHEMA_VERSION: int = 1
 EXPERIMENTS_RELDIR: str = "research/m3a/experiments"
@@ -367,11 +367,13 @@ def verify_archived_experiment(
         raise ArchiveError(f"{manifest.experiment_id}: manifest report hash != completed event")
     if manifest.bundle_sha256 != completed_event.result_bundle_sha256:
         raise ArchiveError(f"{manifest.experiment_id}: manifest bundle hash != completed event")
-    if isinstance(completed_event, ExperimentEventV2):
-        if manifest.return_evidence_sha256 != completed_event.return_evidence_sha256:
-            raise ArchiveError(
-                f"{manifest.experiment_id}: manifest return-evidence hash != completed event"
-            )
+    if (
+        isinstance(completed_event, ExperimentEventV2)
+        and manifest.return_evidence_sha256 != completed_event.return_evidence_sha256
+    ):
+        raise ArchiveError(
+            f"{manifest.experiment_id}: manifest return-evidence hash != completed event"
+        )
     if sha256_bytes(completed_event.to_json_line()) != manifest.registry_completed_event_sha256:
         raise ArchiveError(f"{manifest.experiment_id}: completed-event line hash mismatch")
 

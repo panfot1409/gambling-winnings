@@ -29,34 +29,60 @@ def _module_source(relpath: str) -> str:
 
 
 class TestR1RegistryBypass:
-    """The public publisher can publish without consulting the registry."""
+    """FIXED: the only real-data publication path is the registry-gated orchestrator."""
 
-    def test_publisher_does_not_reference_the_experiment_registry(self) -> None:
-        # R1: develop_m3a imports no registry module, so --write cannot enforce
-        # that a registered/started experiment exists before publishing.
-        tree = ast.parse(_module_source("src/eth_research/develop_m3a.py"))
-        imported = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                imported.add(node.module)
-            elif isinstance(node, ast.Import):
-                imported.update(a.name for a in node.names)
-        assert not any("experiment_registry" in m for m in imported), (
-            "R1 reproduced only while develop_m3a does not consult the registry; "
-            "once the orchestrator enforces registration, invert this test"
-        )
+    def test_no_unregistered_write_path_and_orchestrator_is_used(self) -> None:
+        # R1 fixed: the unregistered --write publisher is gone, and real-data
+        # publication routes through the fail-closed orchestrator, which
+        # consults the experiment registry before any real calculation.
+        src = _module_source("src/eth_research/develop_m3a.py")
+        assert "--write" not in src
+        assert "_atomic_write" not in src
+        assert "run_registered_development_experiment" in src
+        orchestrator = _module_source("src/eth_research/development_orchestrator.py")
+        assert "read_registry" in orchestrator
+        assert "append_registry_event" in orchestrator
 
 
 class TestR2NonTransactionalPublish:
-    """The results+report batch is not atomic and never fsyncs."""
+    """FIXED: publication is a durable rollback-safe batch transaction."""
 
-    def test_atomic_write_is_per_file_and_never_fsyncs(self) -> None:
-        src = _module_source("src/eth_research/develop_m3a.py")
-        assert "def _atomic_write" in src
-        # R2: no fsync anywhere in the publisher, and results/report are two
-        # independent replaces (a crash between leaves a mixed pair).
-        assert "fsync" not in src
-        assert src.count("_atomic_write(") >= 2
+    def test_publisher_uses_the_durable_batch_transaction(self) -> None:
+        # R2 fixed: develop_m3a no longer defines the per-file, no-fsync writer.
+        dev = _module_source("src/eth_research/develop_m3a.py")
+        assert "def _atomic_write" not in dev
+        # Publication now runs through the durable, fsynced, rollback-safe batch.
+        pub = _module_source("src/eth_research/development_publication.py")
+        assert "publish_batch" in pub
+        from eth_research import publication
+
+        assert hasattr(publication, "publish_batch")
+
+
+class TestNoUnregisteredRealDataWritePath:
+    """Phase 13: the public CLI exposes no unregistered real-data write path."""
+
+    def test_develop_m3a_main_has_no_write_flag(self) -> None:
+        tree = ast.parse(_module_source("src/eth_research/develop_m3a.py"))
+        offenders = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and node.value == "--write"
+        ]
+        assert not offenders, "develop_m3a still defines a --write flag"
+
+    def test_publish_batch_is_called_only_from_the_orchestrator_path(self) -> None:
+        # The durable publisher is invoked only by the orchestrator's publication
+        # module — never from an unguarded CLI path.
+        callers = []
+        for rel in (
+            "src/eth_research/develop_m3a.py",
+            "src/eth_research/development_publication.py",
+            "src/eth_research/replay_m2b.py",
+        ):
+            if "publish_batch(" in _module_source(rel):
+                callers.append(rel)
+        assert callers == ["src/eth_research/development_publication.py"]
 
 
 class TestR3LooseResultsParsing:
@@ -138,9 +164,7 @@ class TestR5MissingRunIdentity:
     """The committed results cannot identify their own run."""
 
     def test_results_have_family_but_no_experiment_id(self) -> None:
-        payload = json.loads(
-            (REPO_ROOT / "research/m3a/development_results.json").read_bytes()
-        )
+        payload = json.loads((REPO_ROOT / "research/m3a/development_results.json").read_bytes())
         assert "experiment_family_id" in payload
         assert "experiment_id" not in payload  # R5 reproduced
 

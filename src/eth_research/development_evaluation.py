@@ -570,6 +570,23 @@ def _periods_per_year(oos: pd.DataFrame) -> float:
     return periods_per_year_from_interval(frame_interval(oos))
 
 
+@dataclass(frozen=True)
+class DevelopmentEvaluationDetail:
+    """The v1 result plus the raw per-fold return series behind it.
+
+    The corrective run-003 needs the raw daily OOS returns to build the return
+    evidence and the fold-aware bootstrap; ``fold_returns`` maps
+    ``(strategy, cost_scenario)`` to the per-fold daily return series in fold
+    order (exactly what fed the v1 aggregations), so run-003 reuses the same
+    numbers rather than recomputing them.
+    """
+
+    results: DevelopmentResults
+    fold_returns: dict[tuple[str, str], list[pd.Series[float]]]
+    periods_per_year: float
+    research_train_last_open_time: pd.Timestamp
+
+
 def evaluate_development(
     repo_root: str | Path,
     manifest_path: str | Path,
@@ -578,7 +595,25 @@ def evaluate_development(
     registered_code_commit_sha: str,
     experiment_family_id: str,
 ) -> DevelopmentResults:
-    """Run the full research-train walk-forward and return the strict result.
+    """Run the full research-train walk-forward and return the strict result."""
+    return evaluate_development_detailed(
+        repo_root,
+        manifest_path,
+        execution_code_commit_sha=execution_code_commit_sha,
+        registered_code_commit_sha=registered_code_commit_sha,
+        experiment_family_id=experiment_family_id,
+    ).results
+
+
+def evaluate_development_detailed(
+    repo_root: str | Path,
+    manifest_path: str | Path,
+    *,
+    execution_code_commit_sha: str,
+    registered_code_commit_sha: str,
+    experiment_family_id: str,
+) -> DevelopmentEvaluationDetail:
+    """Run the walk-forward and return the strict result plus raw fold returns.
 
     Verifies the frozen M2 dossier, the committed development partition, and
     the committed walk-forward protocol before evaluating; touches no
@@ -647,7 +682,7 @@ def evaluate_development(
 
     full_train = _full_train_exploratory(research_train, protocol, boundary, ppy)
 
-    return DevelopmentResults(
+    results = DevelopmentResults(
         development_results_schema_version=DEVELOPMENT_RESULTS_SCHEMA_VERSION,
         package_version=__version__,
         execution_code_commit_sha=require_str(
@@ -671,6 +706,12 @@ def evaluate_development(
         bootstrap_cells=tuple(bootstrap_cells),
         development_gate_event_count=0,
         final_holdout_event_count=0,
+    )
+    return DevelopmentEvaluationDetail(
+        results=results,
+        fold_returns=fold_returns,
+        periods_per_year=ppy,
+        research_train_last_open_time=boundary,
     )
 
 
@@ -790,8 +831,13 @@ _EXPECTED_LIST_COUNTS: dict[str, int] = {
     "bootstrap_cells": 9,
 }
 _DICT_CELL_KEYS: frozenset[str] = frozenset(
-    {"fold_results", "independent_fold_summaries", "pooled_reset_oos",
-     "full_train_exploratory", "bootstrap_cells"}
+    {
+        "fold_results",
+        "independent_fold_summaries",
+        "pooled_reset_oos",
+        "full_train_exploratory",
+        "bootstrap_cells",
+    }
 )
 
 

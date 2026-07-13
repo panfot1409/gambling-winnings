@@ -17,7 +17,6 @@ that froze the walk-forward protocol), so it cannot be quietly repointed.
 from __future__ import annotations
 
 import argparse
-import os
 import subprocess
 import sys
 import tempfile
@@ -115,15 +114,12 @@ def generate(
 
 
 def result_bundle_sha256(results_bytes: bytes, report_md: str) -> str:
-    """SHA-256 of the results JSON bytes concatenated with the report bytes."""
+    """SHA-256 of the results JSON bytes concatenated with the report bytes.
+
+    A pure hashing helper (not a write path); real-data publication happens
+    only through the fail-closed orchestrator.
+    """
     return sha256_bytes(results_bytes + report_md.encode("utf-8"))
-
-
-def _atomic_write(path: Path, data: bytes) -> None:
-    """Write ``data`` to ``path`` via a temp file and an atomic rename."""
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_bytes(data)
-    os.replace(tmp, path)
 
 
 def _committed_provenance(repo_root: Path) -> tuple[str, str, str]:
@@ -137,42 +133,62 @@ def _committed_provenance(repo_root: Path) -> tuple[str, str, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI: replay-verify the committed v1 artifacts, preview the report, or run
+    a pre-registered experiment through the fail-closed orchestrator.
+
+    There is deliberately **no** unregistered real-data write path (closure
+    defect R1): the only way to publish real research-train artifacts is
+    ``--run-experiment``, which routes through
+    :func:`eth_research.development_orchestrator.run_registered_development_experiment`
+    and its registry-gated, transactional publication.
+    """
     parser = argparse.ArgumentParser(prog="eth_research.develop_m3a")
     parser.add_argument("--repo-root", default=".")
-    parser.add_argument(
-        "--execution-commit",
-        default=None,
-        help="the pre-registration code commit whose code produces the results (write mode)",
-    )
-    parser.add_argument("--write", action="store_true", help="write the tracked artifacts")
     parser.add_argument("--check", action="store_true", help="compare against committed artifacts")
+    parser.add_argument(
+        "--run-experiment",
+        default=None,
+        metavar="EXPERIMENT_ID",
+        help="run a pre-registered experiment through the fail-closed orchestrator",
+    )
     args = parser.parse_args(argv)
     root = Path(args.repo_root)
 
+    if args.run_experiment is not None:
+        from eth_research.development_orchestrator import (
+            OrchestratorError,
+            run_registered_development_experiment,
+        )
+
+        try:
+            completed = run_registered_development_experiment(root, args.run_experiment)
+        except OrchestratorError as exc:
+            print(f"orchestrated experiment refused or failed: {exc}", file=sys.stderr)
+            return 1
+        print(f"completed {completed.experiment_id}")
+        print(f"results_json_sha256={completed.results_json_sha256}")
+        print(f"report_markdown_sha256={completed.report_markdown_sha256}")
+        print(f"return_evidence_sha256={completed.return_evidence_sha256}")
+        print(f"result_bundle_sha256={completed.result_bundle_sha256}")
+        return 0
+
+    # Replay verification / preview of the committed v1 experiment (read-only).
     try:
-        if args.check:
-            execution, registered, family = _committed_provenance(root)
-            history_registered = registered_commit_from_history(root)
-            if registered != history_registered:
-                print(
-                    f"registered_code_commit_sha {registered} does not equal the protocol "
-                    f"freeze commit {history_registered}",
-                    file=sys.stderr,
-                )
-                return 1
-            if not _commit_exists(root, execution):
-                print(
-                    f"execution_code_commit_sha {execution} is not a real commit object",
-                    file=sys.stderr,
-                )
-                return 1
-        else:
-            registered = registered_commit_from_history(root)
-            execution = args.execution_commit
-            if execution is None:
-                print("--execution-commit is required in write mode", file=sys.stderr)
-                return 1
-            family = EXPERIMENT_FAMILY_ID
+        execution, registered, family = _committed_provenance(root)
+        history_registered = registered_commit_from_history(root)
+        if registered != history_registered:
+            print(
+                f"registered_code_commit_sha {registered} does not equal the protocol "
+                f"freeze commit {history_registered}",
+                file=sys.stderr,
+            )
+            return 1
+        if not _commit_exists(root, execution):
+            print(
+                f"execution_code_commit_sha {execution} is not a real commit object",
+                file=sys.stderr,
+            )
+            return 1
         results_bytes, report_md = generate(
             root,
             execution_code_commit_sha=execution,
@@ -196,30 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         print("development experiment reproducible" if ok else "MISMATCH")
         return 0 if ok else 1
 
-    if args.write:
-        results_path = root / RESULTS_RELPATH
-        report_path = root / REPORT_RELPATH
-        # Transactional publish: write both artifacts, then read both back,
-        # strict-parse the results, regenerate from the recorded provenance,
-        # and require byte-exact reproduction before reporting success.
-        _atomic_write(results_path, results_bytes)
-        _atomic_write(report_path, report_md.encode("utf-8"))
-        execution2, registered2, family2 = _committed_provenance(root)
-        regen_bytes, regen_md = generate(
-            root,
-            execution_code_commit_sha=execution2,
-            registered_code_commit_sha=registered2,
-            experiment_family_id=family2,
-        )
-        if results_path.read_bytes() != regen_bytes or report_path.read_text("utf-8") != regen_md:
-            print("published artifacts failed read-back verification", file=sys.stderr)
-            return 1
-        print(f"wrote and verified {RESULTS_RELPATH} and {REPORT_RELPATH}")
-        print(f"results_json_sha256={sha256_bytes(regen_bytes)}")
-        print(f"report_markdown_sha256={sha256_bytes(regen_md.encode('utf-8'))}")
-        print(f"result_bundle_sha256={result_bundle_sha256(regen_bytes, regen_md)}")
-    else:
-        print(report_md)
+    print(report_md)
     return 0
 
 

@@ -121,5 +121,5 @@ class TestGrid:
         ev = _build()
         payload = json.loads(ev.to_json_bytes())
         raw = json.dumps(payload).replace("0.0", "NaN", 1).encode("utf-8")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="NaN|not valid JSON|net_return"):
             ReturnEvidence.from_json_bytes(raw)

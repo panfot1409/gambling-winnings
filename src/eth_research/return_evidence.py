@@ -245,6 +245,14 @@ class ReturnEvidence:
     def pooled_returns(self, strategy: str, scenario: str) -> np.ndarray:
         return self.pooled_series(strategy, scenario).to_numpy(dtype=float)
 
+    def fold_series(self, strategy: str, scenario: str) -> tuple[pd.Series[float], ...]:
+        """The per-fold daily OOS return series (fold order), each timestamp-indexed."""
+        axis_by_fold = {a.fold_index: a.oos_open_times_index() for a in self.fold_axes}
+        return tuple(
+            pd.Series(list(s.net_returns), index=axis_by_fold[s.fold_index], dtype=float)
+            for s in self._series(strategy, scenario)
+        )
+
     def to_json_bytes(self) -> bytes:
         payload = {
             "return_evidence_schema_version": self.return_evidence_schema_version,

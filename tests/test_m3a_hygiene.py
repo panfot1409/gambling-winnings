@@ -75,16 +75,19 @@ class TestTrackedArtifacts:
         # archive, verified byte-for-byte against the registry by
         # verify_experiment_archive; only their names/paths are checked here.
         tracked = {
-            f for f in _tracked("research/m3a")
-            if not f.startswith("research/m3a/experiments/")
+            f for f in _tracked("research/m3a") if not f.startswith("research/m3a/experiments/")
         }
         assert tracked, "expected committed M3A artifacts"
         unexpected = tracked - _ALLOWED_M3A_FILES
         assert unexpected == set(), f"unexpected tracked M3A files: {sorted(unexpected)}"
 
     def test_archive_files_are_allowlisted_names_only(self) -> None:
-        allowed_names = {"development_results.json", "development_report.md",
-                         "return_evidence.json", "artifact_manifest.json"}
+        allowed_names = {
+            "development_results.json",
+            "development_report.md",
+            "return_evidence.json",
+            "artifact_manifest.json",
+        }
         for rel in _tracked("research/m3a/experiments"):
             if rel == "research/m3a/experiments/experiment_index.json":
                 continue

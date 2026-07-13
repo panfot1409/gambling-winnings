@@ -769,3 +769,108 @@ def load_development_results_v2(path: str | Path) -> DevelopmentResultsV2:
         return DevelopmentResultsV2.from_json_bytes(raw)
     except ValueError as exc:
         raise DevelopmentResultsV2Error(f"invalid v2 development results: {exc}") from exc
+
+
+def _pct(value: float) -> str:
+    return f"{value * 100:+.2f}%"
+
+
+def _interval_str(iv: FoldAwareInterval) -> str:
+    return f"[{_pct(iv.ci_lower)}, {_pct(iv.ci_upper)}] (point {_pct(iv.point_estimate)})"
+
+
+def render_development_report_v2(results: DevelopmentResultsV2) -> str:
+    """Render the run-003 Markdown report purely from the validated v2 model.
+
+    Deterministic: a fresh clone renders the identical bytes from the committed
+    results, so replay byte-compares it. Reports the fold-aware bootstrap v2
+    (primary + hierarchical sensitivity) intervals and states the correction
+    lineage honestly.
+    """
+    lines: list[str] = []
+    add = lines.append
+    scenarios = list(results.cost_scenarios)
+    pooled_by = {(p.strategy, p.cost_scenario): p for p in results.pooled_reset_oos}
+    boot_by = {(b.strategy, b.cost_scenario): b for b in results.bootstrap_cells}
+    summ_by = {(s.strategy, s.cost_scenario): s for s in results.independent_fold_summaries}
+
+    add("# Milestone 3A development walk-forward report (run-003, corrected inference)")
+    add("")
+    add("## 1. Research-only disclaimer")
+    add("")
+    add(
+        "> Research observations on historical data — **not** a profitability claim, "
+        "**not** expected future returns, and **not** investment advice. No alpha is "
+        "claimed; the fixed parameters were never optimized. This run corrects "
+        "**methodology and publication governance only** — every per-fold financial "
+        "result is bit-identical to run-002; no strategy parameter changed."
+    )
+    add("")
+    add(f"- Experiment id: `{results.experiment_id}`")
+    add(f"- Methodology: `{results.methodology_id}` (`{results.methodology_protocol_path}`)")
+    add(f"- Execution source-tree fingerprint: `{results.execution_source_tree_fingerprint}`")
+    add("")
+    add("## 2. Data-access boundaries")
+    add("")
+    add("| level | dates (UTC) | rows | M3A access |")
+    add("| --- | --- | ---: | --- |")
+    add("| research train | 2016-05-23 .. 2022-06-21 | 2221 | evaluated |")
+    add("| development gate | 2022-06-22 .. 2024-06-30 | 740 | **not evaluated (forbidden)** |")
+    add("| final holdout | 2024-07-01 .. 2026-07-11 | 741 | **not evaluated (forbidden)** |")
+    add("")
+    add(
+        f"- Development-gate ledger events: **{results.development_gate_event_count}** "
+        f"(byte-empty). Final-holdout ledger events: **{results.final_holdout_event_count}** "
+        "(byte-empty). This is fixed-rule rolling-origin OOS evaluation with expanding "
+        "information sets — no estimator is fit."
+    )
+    add("")
+    add("## 3. Corrected fold-aware bootstrap (v2)")
+    add("")
+    add(
+        "Run-001 and run-002 used the historical moving-block bootstrap v1, whose blocks "
+        "could cross independent-reset fold seams. Run-003 uses the **primary** "
+        "fold-stratified bootstrap v2 (blocks drawn strictly within a fold) and reports a "
+        "**hierarchical** fold-block sensitivity bootstrap. All intervals are in-sample "
+        "research diagnostics on five folds — weak evidence — and every one is reported, "
+        "including inconvenient results. Intervals are of mean daily paired excess return "
+        "versus buy-and-hold."
+    )
+    add("")
+    add("| strategy | scenario | primary 95% CI | sensitivity 95% CI |")
+    add("| --- | --- | --- | --- |")
+    for sc in scenarios:
+        for st in results.strategies:
+            if (st, sc) not in boot_by:
+                continue
+            cell = boot_by[(st, sc)]
+            primary = _interval_str(cell.primary)
+            sens = _interval_str(cell.sensitivity)
+            add(f"| {st} | {sc} | {primary} | {sens} |")
+    add("")
+    add("## 4. Pooled reset-OOS diagnostics (mean daily return)")
+    add("")
+    add("| strategy | scenario | obs | mean daily | beats B&H (folds) |")
+    add("| --- | --- | ---: | --- | --- |")
+    for sc in scenarios:
+        for st in results.strategies:
+            pooled = pooled_by[(st, sc)]
+            summary = summ_by[(st, sc)]
+            add(
+                f"| {st} | {sc} | {pooled.observation_count} | {_pct(pooled.mean_daily_return)} | "
+                f"{summary.fraction_beating_buy_and_hold:.0%} |"
+            )
+    add("")
+    add("## 5. Honest finding")
+    add("")
+    add(
+        "Over the research-train period — an ETH bull market — buy-and-hold dominates "
+        "median return; the active strategies beat buy-and-hold in a minority of folds, "
+        "and every fold-aware bootstrap interval of mean daily paired excess return versus "
+        "buy-and-hold straddles zero. No alpha is claimed, nothing was tuned, and losing "
+        "folds and severe-cost failures are retained exactly as computed. This is in-sample "
+        "development evidence, not live performance and not test performance. No candidate "
+        "is promoted; the development gate and the final holdout remain sealed."
+    )
+    add("")
+    return "\n".join(lines) + "\n"
