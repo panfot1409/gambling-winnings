@@ -772,7 +772,53 @@ def load_development_results_payload(path: str | Path) -> dict[str, Any]:
         )
     if payload["development_gate_event_count"] != 0 or payload["final_holdout_event_count"] != 0:
         raise DevelopmentEvaluationError("a committed M3A result must record zero access events")
+    _validate_results_structure(payload)
     return payload
+
+
+# Exact expected shape of a committed v1 development-results payload. This makes
+# load_development_results_payload strict (closure defect R3): a forged schema
+# version, a non-list container, an incomplete/oversized grid, or a non-dict cell
+# is refused rather than silently accepted.
+_EXPECTED_LIST_COUNTS: dict[str, int] = {
+    "strategies": 4,
+    "cost_scenarios": 3,
+    "fold_results": 60,
+    "independent_fold_summaries": 12,
+    "pooled_reset_oos": 12,
+    "full_train_exploratory": 12,
+    "bootstrap_cells": 9,
+}
+_DICT_CELL_KEYS: frozenset[str] = frozenset(
+    {"fold_results", "independent_fold_summaries", "pooled_reset_oos",
+     "full_train_exploratory", "bootstrap_cells"}
+)
+
+
+def _validate_results_structure(payload: dict[str, Any]) -> None:
+    version = payload["development_results_schema_version"]
+    if isinstance(version, bool) or version != DEVELOPMENT_RESULTS_SCHEMA_VERSION:
+        raise DevelopmentEvaluationError(
+            f"development results schema version must be {DEVELOPMENT_RESULTS_SCHEMA_VERSION}, "
+            f"got {version!r}"
+        )
+    for key, expected in _EXPECTED_LIST_COUNTS.items():
+        value = payload[key]
+        if not isinstance(value, list):
+            raise DevelopmentEvaluationError(
+                f"{key} must be a JSON array, got {type(value).__name__}"
+            )
+        if len(value) != expected:
+            raise DevelopmentEvaluationError(
+                f"{key} must have exactly {expected} entries, got {len(value)}"
+            )
+        if key in _DICT_CELL_KEYS and any(not isinstance(cell, dict) for cell in value):
+            raise DevelopmentEvaluationError(f"every {key} entry must be a JSON object")
+    if not isinstance(payload["data_access_declaration"], dict):
+        raise DevelopmentEvaluationError("data_access_declaration must be a JSON object")
+    for label in ("experiment_family_id", "package_version"):
+        if not isinstance(payload[label], str) or not payload[label]:
+            raise DevelopmentEvaluationError(f"{label} must be a non-empty string")
 
 
 def _pct(value: float) -> str:

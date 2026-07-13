@@ -60,30 +60,33 @@ class TestR2NonTransactionalPublish:
 
 
 class TestR3LooseResultsParsing:
-    """The results parser accepts forged nested values and schema versions."""
+    """FIXED: the results parser refuses forged schema versions and containers."""
 
-    def test_forged_results_are_accepted(self) -> None:
-        from typing import Any
+    def _forged(self, **mut: object) -> Path:
+        from eth_research.development_evaluation import _TOP_LEVEL_KEYS
 
+        forged: dict[str, object] = dict.fromkeys(_TOP_LEVEL_KEYS, "x")
+        forged["development_gate_event_count"] = 0
+        forged["final_holdout_event_count"] = 0
+        forged.update(mut)
+        p = Path(tempfile.mkdtemp()) / "r.json"
+        p.write_bytes(json.dumps(forged).encode("utf-8"))
+        return p
+
+    def test_forged_results_are_now_rejected(self) -> None:
         from eth_research.development_evaluation import (
-            _TOP_LEVEL_KEYS,
+            DevelopmentEvaluationError,
             load_development_results_payload,
         )
 
-        forged: dict[str, Any] = dict.fromkeys(_TOP_LEVEL_KEYS, "x")
-        forged["development_results_schema_version"] = 999
-        forged["fold_results"] = "not-a-list-at-all"
-        forged["bootstrap_cells"] = [{"forged": True}]
-        forged["development_gate_event_count"] = 0
-        forged["final_holdout_event_count"] = 0
-        forged["data_access_declaration"] = {"x": "y"}
-        with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / "r.json"
-            p.write_bytes(json.dumps(forged).encode("utf-8"))
-            out = load_development_results_payload(p)
-        # R3 reproduced: forged schema version and non-list fold_results accepted.
-        assert out["development_results_schema_version"] == 999
-        assert out["fold_results"] == "not-a-list-at-all"
+        # R3 fixed: schema version, container types, and grid counts are enforced.
+        for mut in (
+            {"development_results_schema_version": 999},
+            {"fold_results": "not-a-list-at-all"},
+            {"bootstrap_cells": [{"forged": True}]},
+        ):
+            with pytest.raises(DevelopmentEvaluationError):
+                load_development_results_payload(self._forged(**mut))
 
 
 class TestR4SeamCrossingBootstrap:
