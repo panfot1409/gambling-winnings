@@ -80,6 +80,21 @@ jobs:
           fi
       - name: Tests on the authoritative runtime
         run: uv run --no-sync --python 3.12.3 pytest
+      - name: The standing end-to-end lifecycle must execute here (never skip)
+        # The successful production lifecycle (register -> started -> publish ->
+        # readback -> completed -> replay -> single-use refusal) must run on the
+        # authoritative runtime even after run-003 is completed. Fail if pytest
+        # reports it skipped, deselected, or xfailed rather than passed.
+        run: |
+          set -euo pipefail
+          node="tests/test_m3a_orchestrator_e2e.py::TestSuccessfulEndToEnd::test_full_production_lifecycle"
+          out=$(uv run --no-sync --python 3.12.3 pytest "$node" -rsxX 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -qE "[0-9]+ passed" || { echo "FAIL: E2E lifecycle did not pass"; exit 1; }
+          if echo "$out" | grep -qiE "skipped|deselected|xfailed|no tests ran"; then
+            echo "FAIL: the standing E2E lifecycle was skipped/deselected on the authoritative runtime"
+            exit 1
+          fi
 
   readiness:
     # The exact honest state of the one-time test, asserted on every fresh

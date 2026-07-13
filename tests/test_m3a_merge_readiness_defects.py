@@ -157,27 +157,28 @@ class TestK2ReportUniversalStraddleClaimIsFalse:
 
 
 # --------------------------------------------------------------------------- #
-# K3 — the successful E2E lifecycle test skips once run-003 is completed.
+# K3 — the successful E2E lifecycle is now STANDING (skip is runtime-gated only).
 # --------------------------------------------------------------------------- #
-class TestK3EndToEndLifecycleCurrentlySkips:
+class TestK3EndToEndLifecycleIsStanding:
     def test_run003_is_completed_in_the_real_repo(self) -> None:
         import test_m3a_orchestrator_e2e as e2e
 
+        # The precondition that used to trip the (now removed) completion gate.
         assert e2e._run003_state_in_real_repo() == "completed"
 
-    def test_current_rehearsable_skip_condition_fires_after_completion(self) -> None:
+    def test_rehearsable_skip_is_runtime_gated_not_completion_gated(self) -> None:
         import test_m3a_orchestrator_e2e as e2e
 
-        # Reconstruct the current skip predicate: it skips off the frozen runtime
-        # OR once run-003 is completed. Because run-003 is completed, the
-        # successful-lifecycle classes are skipped regardless of runtime — so the
-        # production happy path is no longer exercised in any CI job.
-        skip_fires = (not e2e._on_frozen_runtime()) or (
-            e2e._run003_state_in_real_repo() == "completed"
-        )
-        assert skip_fires is True
-        # Specifically, the completion gate is active.
-        assert e2e._run003_state_in_real_repo() == "completed"
+        # The skip predicate now depends ONLY on the runtime, never on run-003's
+        # completion — so the successful lifecycle runs on the authoritative
+        # CPython 3.12.3 runtime even though run-003 is already completed.
+        (condition,) = e2e._REHEARSABLE.mark.args
+        assert condition == (not e2e._on_frozen_runtime())
+        # Completion no longer forces a skip: on the frozen runtime the standing
+        # lifecycle is not skipped despite run-003 being completed.
+        if e2e._on_frozen_runtime():
+            assert condition is False
+            assert e2e._run003_state_in_real_repo() == "completed"
 
 
 # --------------------------------------------------------------------------- #

@@ -76,32 +76,56 @@ def _run003_state_in_real_repo() -> str:
 
 
 # The rehearsal registers and runs run-003 inside a disposable clone under the
-# frozen runtime. Once run-003 is *completed* in the real repository the clone
-# inherits its immutable archive and migrated aliases (which the registry-only
-# reset below cannot undo), and the live run-003 plus the State A/B replay and
-# registry-verifier tests supersede the rehearsal — so skip it there.
+# frozen runtime. It is STANDING: it restores the clone's M3A artifact state to
+# the recorded execution-source commit E (before run-003) regardless of run-003's
+# state in the real repository, so the successful production lifecycle is
+# exercised on the authoritative runtime even after run-003 is completed. It
+# skips ONLY off the frozen runtime, where the orchestrator fail-closes by design
+# (e.g. the 3.13 compatibility job) — never because run-003 is complete.
 _REHEARSABLE = pytest.mark.skipif(
-    not _on_frozen_runtime() or _run003_state_in_real_repo() == "completed",
-    reason="the run-003 rehearsal runs on the frozen runtime before run-003 completes; "
-    "the live run and State A/B replay tests cover the completed state",
+    not _on_frozen_runtime(),
+    reason="the driven run-003 lifecycle runs only on the frozen CPython 3.12.3 runtime; "
+    "off it the orchestrator fail-closes by design",
 )
 
 
-def _reset_clone_registry(clone: Path) -> None:
-    """Truncate the clone's registry to the immutable six-line v1 prefix.
+def _pre_run003_execution_source() -> str:
+    """Commit E: the real run-003 registered event's execution_code_commit_sha."""
+    from eth_research.experiment_registry import EXPERIMENT_REGISTRY_RELPATH, read_registry
 
-    The rehearsal must register run-003 itself, so if the real repository already
-    registered it (State A) the clone would otherwise inherit that event and the
-    append would refuse. The clone is disposable and the real registry is never
-    touched; at State A the clone's archive/aliases/index are still v1, so this
-    single truncation restores the full pre-registration state.
+    repo = Path(eth_research.__file__).resolve().parents[2]
+    for event in read_registry(repo / EXPERIMENT_REGISTRY_RELPATH):
+        if event.experiment_id == RUN_ID and event.event == "registered":
+            return event.execution_code_commit_sha
+    raise AssertionError("run-003 is not registered in the real repository")
+
+
+def _restore_clone_to_pre_run003(clone: Path) -> str:
+    """Restore the clone's ``research/m3a`` subtree to commit E (before run-003).
+
+    Resolves E from the real run-003 registered event, asserts E is an ancestor of
+    the clone HEAD, then resets ``research/m3a`` to E's exact bytes: the six-line
+    v1 registry prefix, run-002 v1 aliases, the run-001/002 archives only (no
+    run-003 archive), and no errata. The current production source was overlaid
+    and committed by :func:`make_m3a_checkout`, so the clone runs the *current*
+    package against E's pre-run-003 artifact state. The clone is disposable; the
+    real repository is never touched. Returns E.
     """
-    registry = clone / _REGISTRY_REL
-    lines = registry.read_bytes().split(b"\n")[:-1]
-    if len(lines) > 6:
-        registry.write_bytes(b"\n".join(lines[:6]) + b"\n")
-        _git(clone, "add", _REGISTRY_REL)
-        _git(clone, "commit", "--quiet", "-m", "reset rehearsal clone to the v1 registry prefix")
+    e_commit = _pre_run003_execution_source()
+    ancestor = subprocess.run(
+        ["git", "-C", str(clone), "merge-base", "--is-ancestor", e_commit, "HEAD"],
+        capture_output=True,
+        check=False,
+    )
+    assert ancestor.returncode == 0, f"E {e_commit} is not an ancestor of the clone HEAD"
+    # Reset the whole M3A subtree to E (removing the completed run-003 archive,
+    # migrated v2 aliases, and errata that postdate E), then commit so the tree is
+    # clean before the rehearsal registers run-003 itself.
+    _git(clone, "rm", "-rf", "--quiet", "research/m3a")
+    _git(clone, "checkout", e_commit, "--", "research/m3a")
+    _git(clone, "add", "-A", "research/m3a")
+    _git(clone, "commit", "--quiet", "-m", "restore clone M3A artifact state to E (pre-run-003)")
+    return e_commit
 
 
 def _run(clone: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -144,7 +168,7 @@ def _register_and_commit_r(clone: Path) -> None:
 class TestSuccessfulEndToEnd:
     def test_full_production_lifecycle(self, tmp_path: Path) -> None:
         clone = make_m3a_checkout(tmp_path)
-        _reset_clone_registry(clone)
+        _restore_clone_to_pre_run003(clone)
 
         # The package under PYTHONPATH is the clone's own source, not the real repo.
         probe = subprocess.run(
@@ -267,7 +291,7 @@ class TestFailureTransitions:
 
     def test_unregistered_run_refuses_before_any_started(self, tmp_path: Path) -> None:
         clone = make_m3a_checkout(tmp_path)
-        _reset_clone_registry(clone)
+        _restore_clone_to_pre_run003(clone)
         # No registration: the orchestrator refuses and appends no 'started'.
         run = _run(
             clone, "eth_research.develop_m3a", "--repo-root", str(clone), "--run-experiment", RUN_ID
