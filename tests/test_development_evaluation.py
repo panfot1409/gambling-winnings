@@ -156,8 +156,7 @@ class TestFirewallSpies:
         # firewall must reject it before any engine call.
         from eth_research import development_evaluation as de
         from eth_research.development import DevelopmentAccessError
-
-        real_build = de.build_fold_frames
+        from eth_research.walkforward import build_fold_frames as real_build
 
         def poisoned(research_train: pd.DataFrame, protocol: Any) -> Any:
             frames = real_build(research_train, protocol)
