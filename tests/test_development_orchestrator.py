@@ -27,7 +27,6 @@ _REGISTRY = REPO_ROOT / EXPERIMENT_REGISTRY_RELPATH
 _GATE_LEDGER = REPO_ROOT / "research/m3a/development_gate_access.jsonl"
 _HOLDOUT_LEDGER = REPO_ROOT / "research/m2b/test_evaluations.jsonl"
 _EMPTY = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-_PREFIX = "7920d9fdf4e936ef6c6d79dfd1c10cdd12dcb9b2db264b9ab9d5640332e9af67"
 
 
 class TestStartedRunContextIsRegistryVerified:
@@ -103,18 +102,19 @@ class TestFailClosedPreStart:
 
     def test_no_registered_v2_experiment_refuses_without_side_effects(self) -> None:
         before = self._snapshot()
-        assert before[0] == _PREFIX  # registry is the immutable v1 prefix
-        assert before[1] == before[2] == _EMPTY
+        assert before[1] == before[2] == _EMPTY  # both sealed ledgers byte-empty
+        # A deliberately never-registered v2 id — this must never name run-003's
+        # real id, so an already-registered run-003 can never be executed here.
         with pytest.raises(OrchestratorError):
             run_registered_development_experiment(
                 REPO_ROOT,
-                "m3a-fixed-baseline-comparison-v2-run-003",
+                "m3a-unregistered-probe-experiment",
                 clock=lambda: pd.Timestamp("2026-07-13T17:00:00+00:00"),
             )
         after = self._snapshot()
-        # Nothing appended; both sealed ledgers still byte-empty; prefix intact.
+        # Nothing appended; both sealed ledgers still byte-empty.
         assert after == before
-        assert sha256_file(_REGISTRY) == _PREFIX
+        assert after[1] == after[2] == _EMPTY
 
     def test_running_an_already_completed_v1_id_refuses(self) -> None:
         before = self._snapshot()
