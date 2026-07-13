@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 from typing import NoReturn
 
+from eth_research.artifact_errata import ArtifactErrataError, verify_artifact_errata
 from eth_research.data.provenance import sha256_bytes, sha256_file
 from eth_research.develop_m3a import REPORT_RELPATH, RESULTS_RELPATH, result_bundle_sha256
 from eth_research.experiment_archive import bundle_sha256, verify_experiment_archive
@@ -134,6 +135,12 @@ def main() -> int:
     # Every completed experiment's archive + the index verify (and no extras).
     verify_experiment_archive(REPO)
     _verify_ledgers()
+    # Every append-only artifact erratum must verify against its target + results,
+    # so a bound correction can never be orphaned or drift from the immutable bytes.
+    try:
+        errata = verify_artifact_errata(REPO)
+    except ArtifactErrataError as exc:
+        fail(f"artifact errata do not verify: {exc}")
 
     completed_events = [e for e in events if e.event == "completed"]
     if not completed_events:
@@ -158,9 +165,11 @@ def main() -> int:
         _verify_v1(completed, registered)
         schema = "v1"
 
+    errata_note = f"; {len(errata)} bound erratum verified" if errata else ""
+    alias_prefix = completed.results_json_sha256[:12]
     print(
         f"M3A registry verified ({schema}): {completed.experiment_id} binds the committed aliases "
-        f"({completed.results_json_sha256[:12]}...) with both sealed ledgers byte-empty"
+        f"({alias_prefix}...) with both sealed ledgers byte-empty{errata_note}"
     )
     return 0
 

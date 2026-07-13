@@ -108,6 +108,12 @@ class TestTrackedArtifacts:
             assert name.endswith((".json", ".md")), f"unexpected errata file: {rel}"
             assert ".." not in rel
 
+    def test_artifact_errata_verify_against_the_committed_tree(self) -> None:
+        from eth_research.artifact_errata import verify_artifact_errata
+
+        verified = verify_artifact_errata(REPO_ROOT)
+        assert verified == ("m3a-run003-report-zero-inclusion-v1",)
+
     def test_archive_files_are_allowlisted_names_only(self) -> None:
         allowed_names = {
             "development_results.json",

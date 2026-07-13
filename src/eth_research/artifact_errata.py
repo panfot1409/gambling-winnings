@@ -799,5 +799,40 @@ def verify_artifact_errata(repo_root: str | Path) -> tuple[str, ...]:
                     f"{entry.erratum_id}: {source.strategy} primary {source.cost_scenario} "
                     "unexpectedly excludes zero"
                 )
+
+        # Completeness: for an incorrect-statistical-summary erratum the affected
+        # cells must be *exactly* the intervals that exclude zero — no omission
+        # (a zero-excluding interval left undeclared) and no fabrication.
+        if erratum.error_class == ERROR_CLASS_INCORRECT_SUMMARY:
+            excluding: set[tuple[str, str, str]] = set()
+            for source in results.bootstrap_cells:
+                if not interval_contains_zero(source.primary.ci_lower, source.primary.ci_upper):
+                    excluding.add((source.strategy, source.cost_scenario, "primary"))
+                if not interval_contains_zero(
+                    source.sensitivity.ci_lower, source.sensitivity.ci_upper
+                ):
+                    excluding.add((source.strategy, source.cost_scenario, "sensitivity"))
+            declared = {
+                (c.strategy, c.cost_scenario, c.interval_kind) for c in erratum.affected_cells
+            }
+            if declared != excluding:
+                raise ArtifactErrataError(
+                    f"{entry.erratum_id}: affected cells are not exactly the zero-excluding "
+                    f"intervals (declared={sorted(declared)}, expected={sorted(excluding)})"
+                )
         verified.append(erratum.erratum_id)
+
+    # No orphan files: every file under the errata directory must be referenced
+    # by a registry entry (as either the JSON document or its rendered Markdown).
+    referenced = {e.erratum_relpath for e in entries} | {
+        e.erratum_markdown_relpath for e in entries
+    }
+    errata_dir = root / ERRATA_DIR_RELPATH
+    if errata_dir.is_dir():
+        for path in sorted(errata_dir.rglob("*")):
+            if path.is_dir():
+                continue
+            rel = path.relative_to(root).as_posix()
+            if rel not in referenced:
+                raise ArtifactErrataError(f"orphan errata file not in the registry: {rel}")
     return tuple(verified)

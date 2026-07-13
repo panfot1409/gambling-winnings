@@ -174,6 +174,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Dispatch replay on the latest completed experiment's schema: v1 (run-002)
     # reproduces from the v1 evaluator; v2 (run-003) reproduces the v2 archive.
+    from eth_research.artifact_errata import ArtifactErrataError, verify_artifact_errata
     from eth_research.replay_m3a_v2 import ReplayV2Error, latest_completed_is_v2, verify_v2_replay
 
     try:
@@ -189,7 +190,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{RESULTS_RELPATH} does not match: {exc}", file=sys.stderr)
                 print("MISMATCH")
                 return 1
-            print(f"development experiment reproducible (v2 {experiment_id})")
+            try:
+                errata = verify_artifact_errata(root)
+            except (ArtifactErrataError, RuntimeError, ValueError) as exc:
+                print(f"artifact errata do not verify: {exc}", file=sys.stderr)
+                print("MISMATCH")
+                return 1
+            suffix = f", {len(errata)} verified bound erratum" if errata else ""
+            print(f"development experiment reproducible (v2 {experiment_id}{suffix})")
             return 0
         print((root / REPORT_RELPATH).read_text("utf-8"))
         return 0
