@@ -60,10 +60,48 @@ def _on_frozen_runtime() -> bool:
     return True
 
 
-_FROZEN_ONLY = pytest.mark.skipif(
-    not _on_frozen_runtime(),
-    reason="the orchestrated run-003 executes only under the frozen numerical runtime",
+def _run003_state_in_real_repo() -> str:
+    """run-003's lifecycle stage in the real repository: absent/registered/completed."""
+    from eth_research.experiment_registry import EXPERIMENT_REGISTRY_RELPATH, read_registry
+
+    repo = Path(eth_research.__file__).resolve().parents[2]
+    stages = [
+        e.event
+        for e in read_registry(repo / EXPERIMENT_REGISTRY_RELPATH)
+        if e.experiment_id == RUN_ID
+    ]
+    if not stages:
+        return "absent"
+    return "completed" if "completed" in stages else "registered"
+
+
+# The rehearsal registers and runs run-003 inside a disposable clone under the
+# frozen runtime. Once run-003 is *completed* in the real repository the clone
+# inherits its immutable archive and migrated aliases (which the registry-only
+# reset below cannot undo), and the live run-003 plus the State A/B replay and
+# registry-verifier tests supersede the rehearsal — so skip it there.
+_REHEARSABLE = pytest.mark.skipif(
+    not _on_frozen_runtime() or _run003_state_in_real_repo() == "completed",
+    reason="the run-003 rehearsal runs on the frozen runtime before run-003 completes; "
+    "the live run and State A/B replay tests cover the completed state",
 )
+
+
+def _reset_clone_registry(clone: Path) -> None:
+    """Truncate the clone's registry to the immutable six-line v1 prefix.
+
+    The rehearsal must register run-003 itself, so if the real repository already
+    registered it (State A) the clone would otherwise inherit that event and the
+    append would refuse. The clone is disposable and the real registry is never
+    touched; at State A the clone's archive/aliases/index are still v1, so this
+    single truncation restores the full pre-registration state.
+    """
+    registry = clone / _REGISTRY_REL
+    lines = registry.read_bytes().split(b"\n")[:-1]
+    if len(lines) > 6:
+        registry.write_bytes(b"\n".join(lines[:6]) + b"\n")
+        _git(clone, "add", _REGISTRY_REL)
+        _git(clone, "commit", "--quiet", "-m", "reset rehearsal clone to the v1 registry prefix")
 
 
 def _run(clone: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -102,10 +140,11 @@ def _register_and_commit_r(clone: Path) -> None:
     _git(clone, "commit", "--quiet", "-m", "pre-register run-003 (registry only)")
 
 
-@_FROZEN_ONLY
+@_REHEARSABLE
 class TestSuccessfulEndToEnd:
     def test_full_production_lifecycle(self, tmp_path: Path) -> None:
         clone = make_m3a_checkout(tmp_path)
+        _reset_clone_registry(clone)
 
         # The package under PYTHONPATH is the clone's own source, not the real repo.
         probe = subprocess.run(
@@ -220,7 +259,7 @@ class TestSuccessfulEndToEnd:
         assert "not awaiting execution" in rerun.stderr
 
 
-@_FROZEN_ONLY
+@_REHEARSABLE
 class TestFailureTransitions:
     """End-to-end refusal proof. The publication-rollback, started->failed, and
     crash-recovery transitions run against the real models in the focused
@@ -228,6 +267,7 @@ class TestFailureTransitions:
 
     def test_unregistered_run_refuses_before_any_started(self, tmp_path: Path) -> None:
         clone = make_m3a_checkout(tmp_path)
+        _reset_clone_registry(clone)
         # No registration: the orchestrator refuses and appends no 'started'.
         run = _run(
             clone, "eth_research.develop_m3a", "--repo-root", str(clone), "--run-experiment", RUN_ID
