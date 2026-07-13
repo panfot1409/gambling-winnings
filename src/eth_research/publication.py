@@ -271,6 +271,39 @@ class _Transaction:
                 _fsync_dir(prep.final.parent)
 
 
+def durable_write_bytes(path: str | Path, data: bytes) -> None:
+    """Atomically and durably write ``data`` to ``path``.
+
+    Writes a unique ``O_EXCL`` temp beside the target, ``fsync``-s it, atomically
+    renames it into place, then ``fsync``-s the parent directory. This is *not* a
+    batch transaction — it is the single-file primitive behind the small
+    crash-recovery completion intent (N6), which must survive a crash on its own.
+    """
+    final = Path(path)
+    parent = final.parent
+    if not parent.is_dir():
+        raise PublicationError(f"durable-write parent {parent} is not a directory")
+    if final.is_symlink() or (final.exists() and not final.is_file()):
+        raise PublicationError(f"durable-write target {final} is not a regular file")
+    temp = _write_temp(final, data)
+    try:
+        _replace(temp, final)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            temp.unlink()
+        raise
+    _fsync_dir(parent)
+
+
+def durable_remove(path: str | Path) -> None:
+    """Remove ``path`` if present and ``fsync`` its parent directory (idempotent)."""
+    final = Path(path)
+    if final.is_symlink() or final.exists():
+        final.unlink()
+        with contextlib.suppress(OSError):  # pragma: no cover - degraded durability only
+            _fsync_dir(final.parent)
+
+
 def prepare_batch(repo_root: str | Path, artifacts: list[Artifact]) -> _Transaction:
     """Open a publication transaction (prepares temps on ``__enter__``)."""
     return _Transaction(repo_root, artifacts)

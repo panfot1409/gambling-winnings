@@ -519,16 +519,30 @@ def _publish_and_complete(
     context: StartedRunContext,
     now: Callable[[], pd.Timestamp],
 ) -> ExperimentEventV2:
-    """Build, publish transactionally, verify, and append 'completed'.
+    """Build, record a recovery intent, publish transactionally, and complete.
 
     The completed event is built (from the artifact hashes) *before* the
-    manifest, so the manifest can bind the exact completed-event bytes; the
-    same event is appended after publication succeeds and verifies. Like the
-    evaluation boundary, this re-proves from the canonical registry that the run
-    is genuinely ``registered`` → ``started`` (N1) before publishing anything.
+    manifest, so the manifest can bind the exact completed-event bytes. That same
+    event, plus every published file's hash, is then recorded in a durable
+    completion intent (N6) *before* publication, so a crash after publication but
+    before the ``completed`` append can be finalized calculation-free by
+    :mod:`eth_research.m3a_recovery`. The event is appended after publication
+    succeeds and verifies, and the intent is cleared once the append lands. Like
+    the evaluation boundary, this re-proves from the canonical registry that the
+    run is genuinely ``registered`` → ``started`` (N1) before publishing anything.
     """
     _verify_started_run_context(prep.repo_root, context)
-    from eth_research.development_publication import publish_run_artifacts, render_run_artifacts
+    from eth_research.development_completion import (
+        CompletionArtifact,
+        CompletionIntent,
+        clear_completion_intent,
+        write_completion_intent,
+    )
+    from eth_research.development_publication import (
+        build_publication_batch,
+        publish_prepared_batch,
+        render_run_artifacts,
+    )
 
     artifacts = render_run_artifacts(prep, detail)
     registry_path = prep.repo_root / prep.registry_relpath
@@ -546,6 +560,19 @@ def _publish_and_complete(
         return_evidence_sha256=artifacts.return_evidence_sha256,
         result_bundle_sha256=artifacts.bundle_sha256,
     )
-    publish_run_artifacts(prep, artifacts, completed, position)
+    prepared = build_publication_batch(prep, artifacts, completed, position)
+    # N6: record the crash-recovery intent durably before any bytes are committed.
+    intent = CompletionIntent(
+        experiment_id=completed.experiment_id,
+        completed_event_line=completed.to_json_line()[:-1],
+        previous_event_sha256=previous,
+        artifacts=tuple(
+            CompletionArtifact(relpath=a.relpath, sha256=sha256_bytes(a.data))
+            for a in prepared.batch
+        ),
+    )
+    write_completion_intent(prep.repo_root, intent)
+    publish_prepared_batch(prep, prepared)
     append_registry_event(registry_path, completed)
+    clear_completion_intent(prep.repo_root)
     return completed

@@ -211,23 +211,37 @@ def _updated_index(prep: PreparedRun, manifest: ArtifactManifest, position: int)
     return ExperimentIndex(archive_schema_version=ARCHIVE_SCHEMA_VERSION, entries=tuple(entries))
 
 
-def publish_run_artifacts(
+@dataclass(frozen=True)
+class PreparedPublication:
+    """The fully-built publication batch plus what the verify phase needs.
+
+    Built before any bytes are written so the orchestrator can record a durable
+    crash-recovery completion intent over the exact per-file bytes (N6) *before*
+    it commits them.
+    """
+
+    artifacts: RunArtifacts
+    batch: tuple[Artifact, ...]
+    manifest_bytes: bytes
+
+
+def build_publication_batch(
     prep: PreparedRun,
     artifacts: RunArtifacts,
     completed_event: ExperimentEventV2,
     position: int,
-) -> None:
-    """Publish the immutable archive, index, and aliases as one durable batch.
+) -> PreparedPublication:
+    """Assemble the immutable archive, aliases, manifest, and index as a batch.
 
-    Then read every artifact back, strictly parse it, reconcile the return
-    evidence, and verify every hash before returning.
+    No I/O to tracked paths: it only builds the bytes and the ordered
+    :class:`~eth_research.publication.Artifact` list that
+    :func:`publish_prepared_batch` publishes transactionally.
     """
     registered = prep.registered_event
     manifest = _build_manifest(prep, artifacts, completed_event, position)
     manifest_bytes = manifest.to_json_bytes()
     index_bytes = _updated_index(prep, manifest, position).to_json_bytes()
-
-    batch = [
+    batch = (
         Artifact(registered.immutable_results_path, artifacts.results_bytes, immutable=True),
         Artifact(registered.immutable_report_path, artifacts.report_bytes, immutable=True),
         Artifact(registered.return_evidence_path, artifacts.return_evidence_bytes, immutable=True),
@@ -242,14 +256,21 @@ def publish_run_artifacts(
         Artifact(
             EXPERIMENT_INDEX_RELPATH, index_bytes, immutable=False, is_completeness_marker=True
         ),
-    ]
-    # Verify inside the transaction, before commit: a read-back / strict-parse /
-    # reconciliation failure rolls the whole publication back to the prior bytes
-    # (N4) instead of leaving a finished-looking archive and migrated aliases.
+    )
+    return PreparedPublication(artifacts=artifacts, batch=batch, manifest_bytes=manifest_bytes)
+
+
+def publish_prepared_batch(prep: PreparedRun, prepared: PreparedPublication) -> None:
+    """Publish a prepared batch as one durable transaction, then verify it.
+
+    Verify runs inside the transaction, before commit: a read-back / strict-parse
+    / reconciliation failure rolls the whole publication back to the prior bytes
+    (N4) instead of leaving a finished-looking archive and migrated aliases.
+    """
     publish_batch(
         prep.repo_root,
-        batch,
-        verify=lambda _root: _verify_published(prep, artifacts, manifest_bytes),
+        list(prepared.batch),
+        verify=lambda _root: _verify_published(prep, prepared.artifacts, prepared.manifest_bytes),
     )
 
 
