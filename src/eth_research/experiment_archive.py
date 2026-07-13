@@ -35,7 +35,7 @@ from eth_research.data.provenance import (
     sha256_bytes,
 )
 from eth_research.data.validation import require_commit_sha, require_evaluation_id
-from eth_research.experiment_registry import ExperimentEvent
+from eth_research.experiment_registry import ExperimentEvent, ExperimentEventV2, RegistryEvent
 
 ARCHIVE_SCHEMA_VERSION: int = 1
 EXPERIMENTS_RELDIR: str = "research/m3a/experiments"
@@ -332,13 +332,15 @@ def _read_under_root(repo_root: Path, relpath: str) -> bytes:
 
 
 def verify_archived_experiment(
-    repo_root: str | Path, manifest: ArtifactManifest, completed_event: ExperimentEvent
+    repo_root: str | Path, manifest: ArtifactManifest, completed_event: RegistryEvent
 ) -> None:
     """Verify one archived experiment's bytes and its binding to the registry.
 
     The archived results/report/(evidence) must hash to the manifest, the
     manifest hashes must equal the experiment's completed-event hashes, and the
     completed event's exact line bytes must hash to the recorded position hash.
+    Works for both v1 (run-001/002) and v2 (run-003) completed events; a v2
+    event additionally binds the manifest's return-evidence hash.
     """
     root = Path(repo_root)
     if manifest.experiment_id != completed_event.experiment_id:
@@ -365,6 +367,11 @@ def verify_archived_experiment(
         raise ArchiveError(f"{manifest.experiment_id}: manifest report hash != completed event")
     if manifest.bundle_sha256 != completed_event.result_bundle_sha256:
         raise ArchiveError(f"{manifest.experiment_id}: manifest bundle hash != completed event")
+    if isinstance(completed_event, ExperimentEventV2):
+        if manifest.return_evidence_sha256 != completed_event.return_evidence_sha256:
+            raise ArchiveError(
+                f"{manifest.experiment_id}: manifest return-evidence hash != completed event"
+            )
     if sha256_bytes(completed_event.to_json_line()) != manifest.registry_completed_event_sha256:
         raise ArchiveError(f"{manifest.experiment_id}: completed-event line hash mismatch")
 
