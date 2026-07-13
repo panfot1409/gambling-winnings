@@ -607,9 +607,7 @@ class DevelopmentResultsV2:
             execution_source_commit_sha=require_str(
                 "execution_source_commit_sha", payload["execution_source_commit_sha"]
             ),
-            run_head_commit_sha=require_str(
-                "run_head_commit_sha", payload["run_head_commit_sha"]
-            ),
+            run_head_commit_sha=require_str("run_head_commit_sha", payload["run_head_commit_sha"]),
             methodology_freeze_commit_sha=require_str(
                 "methodology_freeze_commit_sha", payload["methodology_freeze_commit_sha"]
             ),
