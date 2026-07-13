@@ -172,6 +172,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"result_bundle_sha256={completed.result_bundle_sha256}")
         return 0
 
+    # Dispatch replay on the latest completed experiment's schema: v1 (run-002)
+    # reproduces from the v1 evaluator; v2 (run-003) reproduces the v2 archive.
+    from eth_research.replay_m3a_v2 import ReplayV2Error, latest_completed_is_v2, verify_v2_replay
+
+    try:
+        is_v2 = latest_completed_is_v2(root)
+    except (RuntimeError, ValueError) as exc:
+        print(f"development experiment failed: {exc}", file=sys.stderr)
+        return 1
+    if is_v2:
+        if args.check:
+            try:
+                experiment_id = verify_v2_replay(root)
+            except (ReplayV2Error, RuntimeError, ValueError) as exc:
+                print(f"{RESULTS_RELPATH} does not match: {exc}", file=sys.stderr)
+                print("MISMATCH")
+                return 1
+            print(f"development experiment reproducible (v2 {experiment_id})")
+            return 0
+        print((root / REPORT_RELPATH).read_text("utf-8"))
+        return 0
+
     # Replay verification / preview of the committed v1 experiment (read-only).
     try:
         execution, registered, family = _committed_provenance(root)

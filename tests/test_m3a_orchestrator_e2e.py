@@ -47,6 +47,20 @@ def _run(clone: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _run_script(clone: Path, relpath: str) -> subprocess.CompletedProcess[str]:
+    """Run a repo script (e.g. the CI registry verifier) inside the clone."""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(clone / "src")
+    return subprocess.run(
+        [sys.executable, relpath],
+        cwd=str(clone),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def _register_and_commit_r(clone: Path) -> None:
     """Append the run-003 registered event and commit the registry-only R commit."""
     appended = _run(clone, "eth_research.m3a_register", "--repo-root", str(clone), "--append")
@@ -78,6 +92,11 @@ class TestSuccessfulEndToEnd:
         assert [e.event for e in registered if e.experiment_id == RUN_ID] == ["registered"]
         # Aliases are still run-002 v1 and no run-003 archive exists yet (State A).
         assert not (clone / f"research/m3a/experiments/{RUN_ID}").exists()
+        # State A: the CI registry verifier accepts a registered-only run-003
+        # (latest completed is still v1 run-002, binding the v1 aliases).
+        state_a = _run_script(clone, ".github/scripts/verify_m3a_registry.py")
+        assert state_a.returncode == 0, state_a.stderr
+        assert "verified (v1)" in state_a.stdout
 
         # 12B — execute run-003 exactly once through the production orchestrator.
         run = _run(
@@ -139,12 +158,27 @@ class TestSuccessfulEndToEnd:
         assert summary.pooled_reset_oos == 12
         assert summary.full_train_exploratory == 12
 
+        # State B: develop_m3a --check dispatches to v2 replay and reproduces the
+        # v2 archive byte-for-byte from the committed raw bytes.
+        state_b_check = _run(
+            clone, "eth_research.develop_m3a", "--repo-root", str(clone), "--check"
+        )
+        assert state_b_check.returncode == 0, state_b_check.stderr
+        assert "reproducible (v2" in state_b_check.stdout
+        # State B: the CI registry verifier binds the migrated v2 aliases.
+        state_b_verify = _run_script(clone, ".github/scripts/verify_m3a_registry.py")
+        assert state_b_verify.returncode == 0, state_b_verify.stderr
+        assert "verified (v2)" in state_b_verify.stdout
+
         # Recovery reports nothing pending after a clean completion.
         status = _run(clone, "eth_research.m3a_recovery", "--repo-root", str(clone), "--status")
         assert status.returncode == 0
         assert "no-intent" in status.stdout
 
-        # A second invocation of the consumed id is refused (single-use).
+        # Commit the run outputs (P) so the tree is clean, then prove the consumed
+        # id cannot be re-run: preflight now refuses for the single-use reason.
+        _git(clone, "add", "-A")
+        _git(clone, "commit", "--quiet", "-m", "record run-003 outputs (P)")
         rerun = _run(
             clone, "eth_research.develop_m3a", "--repo-root", str(clone), "--run-experiment", RUN_ID
         )

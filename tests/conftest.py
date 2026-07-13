@@ -517,16 +517,18 @@ def make_m3a_checkout(tmp_path: Path) -> Path:
     )
     _git(clone, "config", "user.email", "test@example.com")
     _git(clone, "config", "user.name", "Test Researcher")
-    # Overlay the working-tree source so the rehearsal exercises the *current*
-    # package (which may carry uncommitted changes); commit it only if it differs
-    # from the cloned HEAD, so a clean tree needs no extra commit.
-    shutil.copytree(
-        _REAL_REPO_ROOT / "src",
-        clone / "src",
-        dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__"),
-    )
-    _git(clone, "add", "-A", "src")
+    # Overlay the working-tree source and the CI verifier scripts so the rehearsal
+    # exercises the *current* package and CI gates (which may carry uncommitted
+    # changes); commit only if they differ from the cloned HEAD, so a clean tree
+    # needs no extra commit.
+    for rel in ("src", ".github/scripts"):
+        shutil.copytree(
+            _REAL_REPO_ROOT / rel,
+            clone / rel,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+    _git(clone, "add", "-A", "src", ".github/scripts")
     if _git(clone, "status", "--porcelain"):
         _git(clone, "commit", "--quiet", "-m", "sync working source into the e2e checkout")
     return clone
