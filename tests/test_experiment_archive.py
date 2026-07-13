@@ -26,6 +26,7 @@ from eth_research.experiment_registry import EXPERIMENT_REGISTRY_RELPATH, read_r
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 RUN1 = "m3a-fixed-baseline-comparison-v1-run-001"
 RUN2 = "m3a-fixed-baseline-comparison-v1-run-002"
+RUN3 = "m3a-fixed-baseline-comparison-v2-run-003"
 
 
 def _manifest(exp_id: str) -> ArtifactManifest:
@@ -37,7 +38,7 @@ def _manifest(exp_id: str) -> ArtifactManifest:
 class TestCommittedArchive:
     def test_archive_verifies_against_the_registry(self) -> None:
         ids = verify_experiment_archive(REPO_ROOT)
-        assert ids == (RUN1, RUN2)
+        assert ids == (RUN1, RUN2, RUN3)
 
     def test_run001_is_recovered_from_history(self) -> None:
         m = _manifest(RUN1)
@@ -50,13 +51,20 @@ class TestCommittedArchive:
         assert m.materialization == "originally_present"
         assert m.registry_event_position == 6
 
+    def test_run003_is_originally_present(self) -> None:
+        # The corrective v2 run: its body is committed with the run, not
+        # recovered from history.
+        m = _manifest(RUN3)
+        assert m.materialization == "originally_present"
+        assert m.registry_event_position == 9
+
     def test_archived_bytes_match_the_completed_events(self) -> None:
         events = {
             e.experiment_id: e
             for e in read_registry(REPO_ROOT / EXPERIMENT_REGISTRY_RELPATH)
             if e.event == "completed"
         }
-        for exp_id in (RUN1, RUN2):
+        for exp_id in (RUN1, RUN2, RUN3):
             m = _manifest(exp_id)
             results = (REPO_ROOT / m.results_relpath).read_bytes()
             report = (REPO_ROOT / m.report_relpath).read_bytes()
@@ -65,7 +73,7 @@ class TestCommittedArchive:
 
     def test_index_lists_exactly_the_completed_experiments(self) -> None:
         index = load_experiment_index(REPO_ROOT / EXPERIMENT_INDEX_RELPATH)
-        assert [e.experiment_id for e in index.entries] == [RUN1, RUN2]
+        assert [e.experiment_id for e in index.entries] == [RUN1, RUN2, RUN3]
 
 
 class TestManifestValidation:

@@ -161,12 +161,17 @@ class TestR4SeamCrossingBootstrap:
 
 
 class TestR5MissingRunIdentity:
-    """The committed results cannot identify their own run."""
+    """FIXED (run-003): the committed results carry their own run identity."""
 
-    def test_results_have_family_but_no_experiment_id(self) -> None:
+    def test_results_carry_experiment_id_and_family(self) -> None:
+        # R5 fixed: the corrective run-003 (schema v2) records experiment_id
+        # alongside experiment_family_id in the committed alias, so the results
+        # identify exactly which run produced them. (The strict-model regression
+        # lives in tests/test_development_results_v2.py.)
         payload = json.loads((REPO_ROOT / "research/m3a/development_results.json").read_bytes())
-        assert "experiment_family_id" in payload
-        assert "experiment_id" not in payload  # R5 reproduced
+        assert payload["development_results_schema_version"] == 2
+        assert payload["experiment_id"] == "m3a-fixed-baseline-comparison-v2-run-003"
+        assert payload["experiment_family_id"] == "m3a-fixed-baseline-comparison-v2"
 
 
 class TestR6HistoricalBodiesNotRetained:
@@ -196,8 +201,16 @@ class TestR7UnverifiedInstaller:
 
 
 class TestR8MisleadingTrainingTerminology:
-    """The report calls expanding information sets 'training' rows."""
+    """FIXED (run-003): the re-rendered report describes expanding information
+    sets, not model 'training'."""
 
-    def test_report_uses_training_terminology(self) -> None:
+    def test_report_avoids_training_terminology(self) -> None:
+        # R8 fixed: the corrective run-003 report calls the fixed-rule
+        # rolling-origin OOS evaluation "expanding information sets" and states
+        # no estimator is fit; the misleading "training rows"/"training window"
+        # wording of the frozen run-002 report is gone.
         report = (REPO_ROOT / "research/m3a/development_report.md").read_text("utf-8")
-        assert "training rows" in report  # R8 reproduced
+        assert "training rows" not in report
+        assert "training window" not in report
+        assert "expanding information sets" in report
+        assert "no estimator is fit" in report

@@ -9,6 +9,7 @@ the published bytes.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -18,13 +19,26 @@ import pandas as pd
 from eth_research.data.provenance import sha256_bytes
 from eth_research.develop_m3a import REPORT_RELPATH, RESULTS_RELPATH, result_bundle_sha256
 from eth_research.development import DEVELOPMENT_PARTITION_RELPATH
-from eth_research.development_evaluation import load_development_results_payload
 from eth_research.experiment_registry import EXPERIMENT_REGISTRY_RELPATH, read_registry
 from eth_research.walkforward import WALK_FORWARD_PROTOCOL_RELPATH
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESEARCH_TRAIN_BOUNDARY = pd.Timestamp("2022-06-21", tz="UTC")
 EMPTY_SHA = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+
+def _alias_results() -> dict[str, Any]:
+    """The committed compatibility-alias results as a raw dict.
+
+    The alias migrates from schema v1 (run-002) to v2 (run-003) when run-003
+    completes; the fold-result / summary / view / declaration substructures keep
+    the same JSON shape across versions, so these hygiene checks read the raw
+    dict rather than a version-specific parser.
+    """
+    payload = json.loads((REPO_ROOT / RESULTS_RELPATH).read_bytes())
+    assert isinstance(payload, dict)
+    return payload
+
 
 GATE_LEDGER_RELPATH = "research/m3a/development_gate_access.jsonl"
 HOLDOUT_LEDGER_RELPATH = "research/m2b/test_evaluations.jsonl"
@@ -108,7 +122,7 @@ class TestTrackedArtifacts:
 
 class TestNoForbiddenPartitionInResults:
     def test_every_oos_window_ends_within_research_train(self) -> None:
-        payload = load_development_results_payload(REPO_ROOT / RESULTS_RELPATH)
+        payload = _alias_results()
         for row in payload["fold_results"]:
             first = pd.Timestamp(row["oos_first_open_time"])
             last = pd.Timestamp(row["oos_last_open_time"])
@@ -116,11 +130,11 @@ class TestNoForbiddenPartitionInResults:
             assert last <= RESEARCH_TRAIN_BOUNDARY, last
 
     def test_full_train_row_count_is_the_research_train_size(self) -> None:
-        payload = load_development_results_payload(REPO_ROOT / RESULTS_RELPATH)
+        payload = _alias_results()
         assert {row["row_count"] for row in payload["full_train_exploratory"]} == {2221}
 
     def test_results_declare_zero_forbidden_access(self) -> None:
-        payload = load_development_results_payload(REPO_ROOT / RESULTS_RELPATH)
+        payload = _alias_results()
         assert payload["development_gate_event_count"] == 0
         assert payload["final_holdout_event_count"] == 0
         decl = payload["data_access_declaration"]
@@ -138,17 +152,20 @@ class TestNoForbiddenPartitionInResults:
 
 
 class TestHonestViewsNeverConflated:
-    def test_report_labels_the_three_views_distinctly(self) -> None:
+    def test_report_presents_diagnostics_with_honest_caveats(self) -> None:
+        # The corrected v2 run-003 report presents the fold-aware bootstrap and
+        # the pooled reset-OOS diagnostics as distinct sections and carries the
+        # honest caveats; it claims no alpha and promotes no candidate.
         report = (REPO_ROOT / REPORT_RELPATH).read_text("utf-8")
-        assert "## 8. Independent-fold summary" in report
-        assert "## 9. Pooled reset-OOS" in report
-        assert "## 10. Full-train exploratory results" in report
-        # The pooled and full-train sections must carry their honest caveats.
-        assert "continuously tradable portfolio" in report
+        assert "Corrected fold-aware bootstrap (v2)" in report
+        assert "Pooled reset-OOS diagnostics" in report
+        assert "Honest finding" in report
         assert "in-sample" in report
+        assert "No alpha is claimed" in report
+        assert "No candidate is promoted" in report
 
     def test_results_keep_the_three_views_in_separate_arrays(self) -> None:
-        payload = load_development_results_payload(REPO_ROOT / RESULTS_RELPATH)
+        payload = _alias_results()
         assert len(payload["independent_fold_summaries"]) == 12
         assert len(payload["pooled_reset_oos"]) == 12
         assert len(payload["full_train_exploratory"]) == 12
@@ -179,12 +196,15 @@ class TestRegistryBindsPublishedBytes:
 
     def test_results_provenance_agrees_with_registration(self) -> None:
         _completed, registered = self._latest_completed()
-        payload = load_development_results_payload(REPO_ROOT / RESULTS_RELPATH)
-        assert payload["execution_code_commit_sha"] == registered.execution_code_commit_sha
-        assert payload["registered_code_commit_sha"] == registered.registered_code_commit_sha
+        payload = _alias_results()
+        # v2 alias (run-003): distinct commit-identity fields (N8) — the
+        # execution-source commit and methodology-freeze commit carried in the
+        # results equal the registered event's execution and registered commits.
+        assert payload["execution_source_commit_sha"] == registered.execution_code_commit_sha
+        assert payload["methodology_freeze_commit_sha"] == registered.registered_code_commit_sha
         assert payload["experiment_family_id"] == registered.experiment_family
         assert payload["development_partition_sha256"] == registered.development_partition_sha256
-        assert payload["walk_forward_protocol_sha256"] == registered.walk_forward_protocol_sha256
+        assert payload["methodology_id"] == registered.methodology_id
 
 
 class TestPartitionProtocolCrossBinding:

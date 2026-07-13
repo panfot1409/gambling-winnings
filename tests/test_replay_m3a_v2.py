@@ -5,21 +5,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 import eth_research
-from eth_research.replay_m3a_v2 import ReplayV2Error, latest_completed_is_v2, verify_v2_replay
+from eth_research.replay_m3a_v2 import latest_completed_is_v2, verify_v2_replay
 
 _REPO = Path(eth_research.__file__).resolve().parents[2]
 
 
 class TestV2Dispatch:
-    def test_current_repo_latest_completed_is_v1(self) -> None:
-        # Before run-003, the latest completed experiment is v1 run-002.
-        assert latest_completed_is_v2(_REPO) is False
+    def test_current_repo_latest_completed_is_v2(self) -> None:
+        # run-003 (v2) is the latest completed experiment.
+        assert latest_completed_is_v2(_REPO) is True
 
-    def test_v2_replay_refuses_when_latest_is_v1(self) -> None:
-        # verify_v2_replay must refuse (before any reconstruction) when the latest
-        # completed experiment is not v2 — the caller dispatches to the v1 path.
-        with pytest.raises(ReplayV2Error, match="not schema v2"):
-            verify_v2_replay(_REPO)
+    def test_v2_replay_reproduces_the_committed_run003(self) -> None:
+        # verify_v2_replay regenerates the v2 archive from the committed raw bytes
+        # and the recorded commit identities, and byte-compares to the committed
+        # aliases + immutable archive; it returns the reproduced experiment id.
+        assert verify_v2_replay(_REPO) == "m3a-fixed-baseline-comparison-v2-run-003"

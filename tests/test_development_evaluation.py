@@ -22,6 +22,7 @@ from eth_research.development_evaluation import (
     evaluate_development,
     expected_shortfall,
     exposure_fraction,
+    load_development_results_payload,
     longest_drawdown_duration,
     render_development_report,
 )
@@ -31,6 +32,13 @@ REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 ATTEMPT = "coinbase-eth-usd-001"
 BOUNDARY = pd.Timestamp("2022-06-21", tz="UTC")
 FAMILY = "m3a-fixed-baseline-comparison-v1"
+# The v1 evaluator reproduces the v1 experiment run-002; its provenance is read
+# from run-002's immutable archive (the compatibility alias migrates to schema
+# v2 once run-003 completes, so it is no longer a v1 provenance source).
+RUN002_RESULTS = (
+    REPO_ROOT
+    / "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-002/development_results.json"
+)
 
 pytestmark = pytest.mark.skipif(
     not (REPO_ROOT / "research/m2b/raw/coinbase" / ATTEMPT).is_dir(),
@@ -50,15 +58,13 @@ def _evaluate(manifest: Path) -> Any:
     # experiment's own (never fabricated `"a"*40`/`"b"*40` commits). Synthetic
     # fixtures cover the pure unit diagnostics; the firewall spies below assert
     # no forbidden row reaches the engine.
-    from eth_research.develop_m3a import _committed_provenance
-
-    execution, registered, family = _committed_provenance(REPO_ROOT)
+    payload = load_development_results_payload(RUN002_RESULTS)
     return evaluate_development(
         REPO_ROOT,
         manifest,
-        execution_code_commit_sha=execution,
-        registered_code_commit_sha=registered,
-        experiment_family_id=family,
+        execution_code_commit_sha=payload["execution_code_commit_sha"],
+        registered_code_commit_sha=payload["registered_code_commit_sha"],
+        experiment_family_id=payload["experiment_family_id"],
     )
 
 

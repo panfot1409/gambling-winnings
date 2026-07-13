@@ -1,4 +1,4 @@
-"""M3A experiment publisher: deterministic generation and committed reproduction."""
+"""M3A experiment publisher: deterministic generation and v1 archive reproduction."""
 
 from __future__ import annotations
 
@@ -10,9 +10,6 @@ import pytest
 import eth_research
 from eth_research.develop_m3a import (
     EXPERIMENT_FAMILY_ID,
-    REPORT_RELPATH,
-    RESULTS_RELPATH,
-    _committed_provenance,
     generate,
     registered_commit_from_history,
     result_bundle_sha256,
@@ -22,10 +19,30 @@ from eth_research.development_evaluation import load_development_results_payload
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 ATTEMPT = "coinbase-eth-usd-001"
 
+# develop_m3a is the v1 publisher; it reproduces the v1 experiment run-002
+# byte-for-byte. Once run-003 completes, the compatibility alias
+# (research/m3a/development_results.json) migrates to schema v2, so these v1
+# reproduction checks read run-002's own immutable archive instead of the alias.
+# (v2 reproduction is proven by test_replay_m3a_v2 and the e2e orchestrator.)
+RUN002_ID = "m3a-fixed-baseline-comparison-v1-run-002"
+RUN002_ARCHIVE = REPO_ROOT / "research/m3a/experiments" / RUN002_ID
+RUN002_RESULTS = RUN002_ARCHIVE / "development_results.json"
+RUN002_REPORT = RUN002_ARCHIVE / "development_report.md"
+
 pytestmark = pytest.mark.skipif(
     not (REPO_ROOT / "research/m2b/raw/coinbase" / ATTEMPT).is_dir(),
     reason="real committed acquisition not present",
 )
+
+
+def _run002_provenance() -> tuple[str, str, str]:
+    """(execution commit, registered commit, family) from run-002's v1 archive."""
+    payload = load_development_results_payload(RUN002_RESULTS)
+    return (
+        payload["execution_code_commit_sha"],
+        payload["registered_code_commit_sha"],
+        payload["experiment_family_id"],
+    )
 
 
 class TestGenerate:
@@ -34,7 +51,7 @@ class TestGenerate:
     # experiment's own provenance rather than fabricated `"a"*40`/`"b"*40`
     # commits, and never publish a new real-data artifact.
     def _committed(self) -> tuple[bytes, str]:
-        execution, registered, family = _committed_provenance(REPO_ROOT)
+        execution, registered, family = _run002_provenance()
         return generate(
             REPO_ROOT,
             execution_code_commit_sha=execution,
@@ -63,29 +80,22 @@ class TestBundleHash:
 
 
 class TestCommittedArtifacts:
-    """Once the real experiment is published, the committed files must
-    reproduce byte-for-byte from the provenance recorded inside them."""
+    """The committed v1 experiment (run-002) reproduces byte-for-byte from the
+    provenance recorded inside its own immutable archive."""
 
     def test_committed_results_reproduce(self) -> None:
-        results_path = REPO_ROOT / RESULTS_RELPATH
-        report_path = REPO_ROOT / REPORT_RELPATH
-        if not results_path.exists():
-            pytest.skip("development results not yet published")
-        payload = load_development_results_payload(results_path)
+        payload = load_development_results_payload(RUN002_RESULTS)
         results_bytes, report_md = generate(
             REPO_ROOT,
             execution_code_commit_sha=payload["execution_code_commit_sha"],
             registered_code_commit_sha=payload["registered_code_commit_sha"],
             experiment_family_id=payload["experiment_family_id"],
         )
-        assert results_bytes == results_path.read_bytes()
-        assert report_md == report_path.read_text("utf-8")
+        assert results_bytes == RUN002_RESULTS.read_bytes()
+        assert report_md == RUN002_REPORT.read_text("utf-8")
 
     def test_registered_label_matches_protocol_freeze(self) -> None:
-        results_path = REPO_ROOT / RESULTS_RELPATH
-        if not results_path.exists():
-            pytest.skip("development results not yet published")
-        payload = load_development_results_payload(results_path)
+        payload = load_development_results_payload(RUN002_RESULTS)
         try:
             history = registered_commit_from_history(REPO_ROOT)
         except (RuntimeError, OSError):  # pragma: no cover - shallow CI checkout
