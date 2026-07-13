@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -134,10 +135,22 @@ class TestHonestViewsNeverConflated:
 
 
 class TestRegistryBindsPublishedBytes:
-    def test_completed_event_binds_the_committed_results_and_report(self) -> None:
+    """The latest completed experiment binds the currently committed files.
+    Earlier experiments (a superseded run whose report was later corrected)
+    remain in the append-only registry as history."""
+
+    def _latest_completed(self) -> tuple[Any, Any]:
         events = read_registry(REPO_ROOT / EXPERIMENT_REGISTRY_RELPATH)
-        assert [e.event for e in events] == ["registered", "started", "completed"]
-        completed = events[-1]
+        completed = [e for e in events if e.event == "completed"]
+        assert completed, "no completed experiment in the registry"
+        latest = completed[-1]
+        registered = next(
+            e for e in events if e.event == "registered" and e.experiment_id == latest.experiment_id
+        )
+        return latest, registered
+
+    def test_completed_event_binds_the_committed_results_and_report(self) -> None:
+        completed, _registered = self._latest_completed()
         results_bytes = (REPO_ROOT / RESULTS_RELPATH).read_bytes()
         report_text = (REPO_ROOT / REPORT_RELPATH).read_text("utf-8")
         assert completed.results_json_sha256 == sha256_bytes(results_bytes)
@@ -145,8 +158,7 @@ class TestRegistryBindsPublishedBytes:
         assert completed.result_bundle_sha256 == result_bundle_sha256(results_bytes, report_text)
 
     def test_results_provenance_agrees_with_registration(self) -> None:
-        events = read_registry(REPO_ROOT / EXPERIMENT_REGISTRY_RELPATH)
-        registered = events[0]
+        _completed, registered = self._latest_completed()
         payload = load_development_results_payload(REPO_ROOT / RESULTS_RELPATH)
         assert payload["execution_code_commit_sha"] == registered.execution_code_commit_sha
         assert payload["registered_code_commit_sha"] == registered.registered_code_commit_sha

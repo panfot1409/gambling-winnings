@@ -24,13 +24,15 @@ Expanding-window walk-forward on the research-train partition: 1095 initial trai
 
 ## 5. Fold table
 
+`context rows` is the warm-up context each fold makes available (capped at 55 bars); a strategy consumes up to its own need — cash and buy-and-hold 0, SMA(20/50) 50, Donchian(55/20) 55 — so the per-strategy usage in `development_results.json` is 0/0/50/55.
+
 | fold | training rows | context rows | OOS rows | OOS window |
 | ---: | ---: | ---: | ---: | --- |
-| 0 | 1095 | 0 | 226 | 2019-05-23 .. 2020-01-03 |
-| 1 | 1321 | 0 | 225 | 2020-01-04 .. 2020-08-15 |
-| 2 | 1546 | 0 | 225 | 2020-08-16 .. 2021-03-28 |
-| 3 | 1771 | 0 | 225 | 2021-03-29 .. 2021-11-08 |
-| 4 | 1996 | 0 | 225 | 2021-11-09 .. 2022-06-21 |
+| 0 | 1095 | 55 | 226 | 2019-05-23 .. 2020-01-03 |
+| 1 | 1321 | 55 | 225 | 2020-01-04 .. 2020-08-15 |
+| 2 | 1546 | 55 | 225 | 2020-08-16 .. 2021-03-28 |
+| 3 | 1771 | 55 | 225 | 2021-03-29 .. 2021-11-08 |
+| 4 | 1996 | 55 | 225 | 2021-11-09 .. 2022-06-21 |
 
 ## 6. Cost scenarios
 
@@ -225,6 +227,7 @@ This experiment evaluates 4 strategies x 3 cost scenarios x 5 folds. With many c
 - Fixed parameters (SMA 20/50, Donchian 55/20); nothing tuned, and nothing should be inferred about other parameters.
 - Research-train walk-forward is in-sample development evidence, not live performance and not test performance.
 - Independent fold resets and the pooled reset-OOS series are diagnostics, not tradable paths.
+- Under the pre-registered 55-bar context budget, Donchian(55/20) — whose channel excludes the current bar — is not yet live at the final context bar, so it enters each fold's first OOS bar flat (a conservative one-bar warm-up); SMA(20/50) is live at the first OOS bar. The asymmetry follows from the pinned context budget and is not look-ahead.
 - The bootstrap quantifies sampling variability only; it does not prove alpha or remove uncertainty.
 - Costs are a simplified constant fee plus directional slippage; no spread, impact, or liquidity model.
 - Computational sealing of the forbidden partitions is not epistemic sealing.

@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 """CI gate: the M3A experiment registry binds the committed results/report bytes.
 
-Re-validates the append-only registry lifecycle (registered -> started ->
-completed) and requires the terminal event's three publication hashes to equal
-the SHA-256s of the committed results JSON, report Markdown, and their bundle.
-Also requires the committed results' provenance SHAs to agree with the
-registration context. Exits non-zero on any mismatch. Read-only.
+Re-validates the append-only registry lifecycle and requires the **latest**
+completed experiment's three publication hashes to equal the SHA-256s of the
+committed results JSON, report Markdown, and their bundle. Earlier experiments
+(e.g. a superseded run whose report was later corrected) remain in the registry
+as history; only the most recent completed experiment binds the current files.
+Also requires the committed results' provenance SHAs to agree with that
+experiment's registration context. Exits non-zero on any mismatch. Read-only.
 """
 
 from __future__ import annotations
@@ -28,10 +30,13 @@ def fail(message: str) -> NoReturn:
 
 
 def main() -> int:
-    events = read_registry(REPO / EXPERIMENT_REGISTRY_RELPATH)
-    if [e.event for e in events] != ["registered", "started", "completed"]:
-        fail(f"expected registered -> started -> completed, got {[e.event for e in events]}")
-    registered, _started, completed = events
+    events = read_registry(REPO / EXPERIMENT_REGISTRY_RELPATH)  # validates all lifecycles
+    completed_events = [e for e in events if e.event == "completed"]
+    if not completed_events:
+        fail("no completed experiment in the registry")
+    completed = completed_events[-1]  # the latest completed experiment binds the current files
+    registered_by_id = {e.experiment_id: e for e in events if e.event == "registered"}
+    registered = registered_by_id[completed.experiment_id]
     if (
         completed.results_json_sha256 is None
         or completed.report_markdown_sha256 is None
