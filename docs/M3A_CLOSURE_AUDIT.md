@@ -4,10 +4,24 @@ This is the final read-only audit of the Milestone 3A closure remediation. It
 records exactly what changed, proves the sealed invariants held throughout, and
 names the single remaining scientifically-honest step.
 
+> **Update — terminal milestone.** The single remaining step named below (§16,
+> §17, §30 — the corrective run-003) has since been executed and closed by the
+> run-003 terminal-completion milestone. run-003 was pre-registered (12A),
+> executed exactly once through the fail-closed orchestrator (12B), proven
+> financially bit-identical to run-002 across all 60 fold cells and the 12+12+12
+> summaries, and committed; both access ledgers stayed byte-empty and the v1
+> registry prefix is unchanged. See `M3A_RUN003_TERMINAL_PLAN.md`,
+> `M3A_RUN003_BOOTSTRAP_COMPARISON.md`, and the terminal audit
+> `M3A_RUN003_TERMINAL_AUDIT.md`. The sections below are preserved as the
+> closure-checkpoint record.
+
 ## 1. Starting SHA, final SHA, branch, PR state
 
 - Starting HEAD: `8e076165ad07fcbeb4c5350e9d835439495b1489`
-- Final HEAD: `d1dbb6870edcc91abcf855d23d0a3a0d1ab49188`
+- Final HEAD: `18de74334723c37f49bc7a0ab10d152430716930` (this audit handoff
+  commit; its parent `d1dbb68` is the last pre-audit commit, at which the CI and
+  working-tree observations in §26–§27 were taken — a commit cannot contain its
+  own SHA)
 - Branch: `claude/m3a-development-research-lab`
 - PR: **#4 open and draft** — not merged, not undrafted.
 
@@ -166,10 +180,12 @@ The full run-003 pipeline is implemented, strict, and green on Python 3.12 and
    v1-vs-v2 interval changes; migrate the replay/`--check` path and the M3A
    Replay CI to the v2 alias; push and confirm final CI green.
 
-This step was **deferred**: it requires a real registry mutation that must be
-committed, pushed, and CI-green *before* the run, and a replay/CI migration that
-must itself stay green — a multi-round CI-gated sequence left set up rather than
-rushed. Nothing about it is blocked; it is the next action.
+This step was **deferred** at the closure checkpoint: it requires a real registry
+mutation that must be committed, pushed, and CI-green *before* the run, and a
+replay/CI migration that must itself stay green — a multi-round CI-gated sequence
+left set up rather than rushed. It was **not blocked**, and it has since been
+executed and closed by the terminal milestone (see the update note at the top of
+this document).
 
 ## 18. Exact experiment id carried by every new artifact
 

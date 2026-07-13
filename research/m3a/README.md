@@ -29,9 +29,9 @@ holdout are sealed here and their access ledgers stay byte-empty.
 | `development_gate_access.jsonl` | **present, empty — pristine** | Append-only development-gate access ledger. Empty means **no development-gate access has ever occurred**. Empty SHA-256 `e3b0c442…b7852b855`. The final-holdout ledger lives at `../m2b/test_evaluations.jsonl` and is likewise byte-empty. |
 | `development_partition.json` | **frozen** | The immutable three-level split, binding the frozen M2 dossier SHA-256, the dataset content fingerprint, and each level's row count and time bounds. |
 | `walk_forward_protocol.json` | **pre-registered** | The expanding-window protocol: 1095 initial training rows, five contiguous OOS folds over the remaining 1126 rows (226, 225, 225, 225, 225), gap 0, context ≤ 55 bars, independent 10 000 USD per fold, the exact four fixed strategies, and the three predeclared cost scenarios. Bound to the committed partition. |
-| `experiment_registry.jsonl` | **recorded** | Append-only experiment history. Carries the fixed-baseline experiment as `registered → started → completed`; the terminal event pins the SHA-256 of the published results, report, and their bundle. Experiment ids are single-use. |
-| `development_results.json` | **recorded** | The strict, byte-reproducible research-train walk-forward results (four strategies × three cost scenarios × five folds), three honest aggregation views, and the bootstrap intervals. Records zero development-gate and zero final-holdout events. |
-| `development_report.md` | **recorded** | The honest Markdown report, rendered purely from the validated results model. |
+| `experiment_registry.jsonl` | **recorded** | Append-only experiment history (a schema-v1 prefix with a v2 append-chain). Carries three fixed-baseline experiments — run-001 and run-002 (v1) and the corrective run-003 (v2) — each `registered → started → completed`; each terminal event pins the SHA-256 of that run's published results, report, and their bundle. Experiment ids are single-use. |
+| `development_results.json` | **recorded (run-003 v2)** | The compatibility alias for the latest completed experiment (run-003): the strict, byte-reproducible research-train walk-forward results (four strategies × three cost scenarios × five folds), three honest aggregation views, and the corrected fold-aware bootstrap intervals. Carries `experiment_id`/`methodology_id`; records zero development-gate and zero final-holdout events. |
+| `development_report.md` | **recorded (run-003 v2)** | The honest Markdown report for run-003, rendered purely from the validated results model. |
 
 ## Closure remediation
 
@@ -58,10 +58,10 @@ bug-hunt table in `../../docs/M3A_BUG_LOG.md`) hardens the milestone:
   fold-stratified bootstrap v2 (blocks strictly within a fold) plus a
   hierarchical fold-block sensitivity bootstrap; see
   `../../docs/M3A_BOOTSTRAP_METHOD_NOTE.md`.
-- **Immutable history.** Run-001 and run-002 bodies are archived under
-  `experiments/` and hash-verified against their registry events; they are never
-  modified. A per-run **return-evidence** artifact will let run-003's pooled and
-  bootstrap numbers be recomputed from raw daily observations.
+- **Immutable history.** Run-001, run-002, and the corrective run-003 bodies are
+  archived under `experiments/` and hash-verified against their registry events;
+  they are never modified. Each run's per-run **return-evidence** artifact lets
+  its pooled and bootstrap numbers be recomputed from raw daily observations.
 
 All intervals remain in-sample research diagnostics over five folds — weak
 evidence. No candidate is promoted; the development gate and the final holdout
@@ -77,11 +77,14 @@ uv run --no-sync python -m eth_research.develop_m3a --repo-root . --check
 uv run --no-sync python .github/scripts/verify_m3a_registry.py
 ```
 
-The first check reconstructs the dataset from the committed raw bytes and
-reproduces `development_results.json` and `development_report.md`
-byte-for-byte, binding the registration commit label to the walk-forward
-protocol freeze commit in git history. The second re-validates the registry
-lifecycle and its binding to the published bytes. The `M3A Replay` workflow
+The first check dispatches on the latest completed experiment's schema: for the
+corrective run-003 (v2) it regenerates the immutable v2 archive from the
+committed raw bytes and the recorded commit identities, then byte-compares the
+committed compatibility aliases and the archive; for a v1 latest it reconstructs
+the dataset and reproduces the results and report byte-for-byte, binding the
+registration commit label to the walk-forward protocol freeze commit in git
+history. The second re-validates the registry lifecycle for all three
+experiments and their binding to the published bytes. The `M3A Replay` workflow
 runs both on the authoritative CPython 3.12.3 runtime and on Python
 3.12 / 3.13, and asserts both access ledgers stay byte-empty.
 
@@ -107,11 +110,18 @@ assert no timestamp after 2022-06-21 ever reaches the engine or a strategy.
 Over the research-train period — an ETH bull market — **buy-and-hold
 dominates median return**; the active strategies beat buy-and-hold in only
 ~40% of folds (a demonstration of temporal instability across a single
-validation period), and every moving-block-bootstrap interval of mean daily
-paired excess return versus buy-and-hold **straddles zero**. No alpha is
-claimed, nothing was tuned, and losing folds and severe-cost failures are
-retained exactly as computed. This is in-sample development evidence, not
-live performance and not test performance.
+validation period). Under run-003's corrected **primary** bootstrap
+(fold-stratified v2, whose blocks never cross an independent-reset fold seam),
+the SMA and Donchian intervals of mean daily paired excess return versus
+buy-and-hold still **straddle zero**; the one interval that excludes zero is
+`cash`, and it does so on the **negative** (underperformance) side — the
+opposite of alpha, and exactly what holding nothing versus a rising asset
+should do. The wider hierarchical sensitivity straddles zero for every
+strategy. No alpha is claimed, nothing was tuned, and losing folds and
+severe-cost failures are retained exactly as computed. This is in-sample
+development evidence, not live performance and not test performance. See
+`../../docs/M3A_RUN003_BOOTSTRAP_COMPARISON.md` for the full-precision
+v1/v2/hierarchical record.
 
 ## Not authorized in Milestone 3A
 

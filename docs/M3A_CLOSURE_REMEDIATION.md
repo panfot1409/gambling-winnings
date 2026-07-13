@@ -6,6 +6,14 @@ supply-chain gaps an audit reproduced, while keeping the **development gate and
 final holdout completely sealed**. No gate or holdout access is authorized by
 any part of this work.
 
+> **Update — run-003 executed.** The corrective run-003 pre-registration and
+> execution sequence described in §9 has since been carried out by the run-003
+> terminal-completion milestone, which first corrected ten further defects
+> (N1–N10). run-003 is registered, executed once, financially bit-identical to
+> run-002, and committed; both ledgers stayed byte-empty and the v1 registry
+> prefix is unchanged. See `M3A_RUN003_TERMINAL_PLAN.md` and the terminal audit
+> `M3A_RUN003_TERMINAL_AUDIT.md`.
+
 ## 0. Ground rules (unchanged throughout)
 
 - The existing six registry lines are immutable. Their exact byte prefix hashes

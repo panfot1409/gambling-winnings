@@ -343,10 +343,12 @@ Status: **the research-train walk-forward is run and recorded; no candidate
 is promoted; the development gate and the final holdout are sealed and their
 ledgers are byte-empty.** Over the research-train period (an ETH bull
 market) buy-and-hold dominates median return, the active strategies beat
-buy-and-hold in only ~40% of folds, and every bootstrap interval of mean
-daily excess return versus buy-and-hold straddles zero — no alpha is
-claimed and nothing was tuned. No live-readiness or profitability claim is
-made; this is not investment advice. See
+buy-and-hold in only ~40% of folds, and under the corrective run's
+fold-stratified bootstrap the SMA and Donchian intervals of mean daily excess
+return versus buy-and-hold straddle zero — the only interval that excludes
+zero is cash, on the underperformance side, which is the opposite of alpha.
+No alpha is claimed and nothing was tuned. No live-readiness or profitability
+claim is made; this is not investment advice. See
 [research/m3a/README.md](research/m3a/README.md),
 [docs/M3A_PLAN.md](docs/M3A_PLAN.md), and
 [docs/M3A_CLOSURE_REMEDIATION.md](docs/M3A_CLOSURE_REMEDIATION.md).

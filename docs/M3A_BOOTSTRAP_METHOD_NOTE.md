@@ -41,7 +41,7 @@ concatenates the five resampled folds, and takes the observation-weighted mean.
 inside a single fold. Each fold contributes its original observation count, the
 statistic is unchanged, and `block_length > min fold length` is refused (never
 silently shortened). The configuration — block length 30, 5000 resamples, 95%
-interval, seed 20260713, PCG64 — is frozen before run-003 executes.
+interval, seed 20260713, PCG64 — was frozen and CI-green before run-003 executed.
 
 ## The sensitivity method — `hierarchical-fold-block-bootstrap-v1`
 
@@ -54,11 +54,14 @@ only — never as the primary interval or a decision rule.
 
 ## Why the method is fixed by design, before seeing the corrected intervals
 
-The corrected algorithm, its configuration, and this note are committed and
-green in CI **before** run-003 computes any corrected interval. The choice is
+The corrected algorithm, its configuration, and this note were committed and
+green in CI **before** run-003 computed any corrected interval. The choice was
 not "whichever method produces the nicer interval": run-003 reports the v1
 historical interval, the v2 primary interval, and the hierarchical sensitivity
-interval together, including any inconvenient change.
+interval together, including the one inconvenient change that did materialize —
+the fold-stratified `cash` interval marginally **excludes** zero, on the
+**underperformance** side (the opposite of alpha). See
+`M3A_RUN003_BOOTSTRAP_COMPARISON.md` for the full-precision record.
 
 ## Limitations that no bootstrap removes
 

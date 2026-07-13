@@ -110,6 +110,13 @@ recorded exactly. It quantifies sampling variability of an in-sample
 research-train diagnostic; it is not a profitability proof and its interval
 is not annualized.
 
+> **Correction (run-003).** A closure audit found that v1 blocks can cross the
+> independent-reset fold seams. The corrective run-003 keeps v1 for run-001/002
+> history but adopts a `fold-stratified-moving-block-bootstrap-v2` primary
+> (blocks strictly within a fold) plus a hierarchical fold-block sensitivity;
+> per-fold financials are unchanged. See `M3A_BOOTSTRAP_METHOD_NOTE.md` and
+> `M3A_RUN003_BOOTSTRAP_COMPARISON.md`.
+
 ## Experiment registry + development-gate ledger
 
 `research/m3a/experiment_registry.jsonl` records every real-data M3A
