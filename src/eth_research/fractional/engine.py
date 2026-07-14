@@ -22,7 +22,9 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+import pandas.api.types as pdt
 
+from eth_research.data.schema import SchemaError, frame_interval, validate_ohlcv
 from eth_research.fractional.accounting import (
     DEFAULT_TOLERANCES,
     Fill,
@@ -118,6 +120,59 @@ def _simple_returns_through(closes: np.ndarray, count: int) -> np.ndarray:
     return returns
 
 
+def _require_canonical(label: str, frame: pd.DataFrame) -> None:
+    """Reject a frame that is not strict canonical OHLCV (never repair it)."""
+    try:
+        validate_ohlcv(frame)
+    except (SchemaError, ValueError, TypeError) as exc:
+        raise EngineError(f"{label} is not canonical OHLCV: {exc}") from exc
+
+
+def _validate_context(context: pd.DataFrame, frame: pd.DataFrame) -> None:
+    """The warm-up context must be strictly-past, same-schema, and contiguous.
+
+    A strictly-past prefix stops any future / out-of-sample row entering signal,
+    liquidity, or volatility estimation; the same interval + contiguous seam stop
+    a silently-gapped or mis-scaled context from perturbing the warm-up.
+    """
+    _require_canonical("context", context)
+    if context.index.max() >= frame.index.min():
+        raise EngineError(
+            "context must be strictly before the frame "
+            "(context.index.max() must be < frame.index.min())"
+        )
+    interval = frame_interval(frame)
+    if len(context) >= 2 and frame_interval(context) != interval:
+        raise EngineError("context interval must match the evaluation interval")
+    if frame.index[0] - context.index[-1] != interval:
+        raise EngineError("context must be contiguous with the evaluation frame at the seam")
+
+
+def _validate_signal(signal: object, full_index: pd.Index) -> np.ndarray:
+    """Validate a strategy's target series against the full-frame index.
+
+    The high-priority guarantee: a Series with the right length but a different
+    (e.g. shuffled) index is **refused**, never applied positionally. The index
+    is validated *before* the values are ever read as an array.
+    """
+    if not isinstance(signal, pd.Series):
+        raise EngineError(f"strategy must return a pandas Series, got {type(signal).__name__}")
+    if len(signal) != len(full_index):
+        raise EngineError("signal length must equal the frame length")
+    if not signal.index.equals(full_index):
+        raise EngineError(
+            "signal index must be identical to the frame index (no positional application)"
+        )
+    if pdt.is_bool_dtype(signal) or not pdt.is_numeric_dtype(signal):
+        raise EngineError("signal must be a finite numeric Series")
+    values: np.ndarray = signal.to_numpy(dtype="float64")
+    if not np.isfinite(values).all():
+        raise EngineError("signal has non-finite values")
+    if (values < 0.0).any() or (values > 1.0).any():
+        raise EngineError("signal targets must be within [0, 1]")
+    return values
+
+
 def run_fractional_backtest(
     frame: pd.DataFrame,
     strategy: FractionalStrategy,
@@ -133,20 +188,17 @@ def run_fractional_backtest(
         raise EngineError("cannot backtest an empty frame")
     if initial_cash <= 0.0:
         raise EngineError(f"initial_cash must be positive, got {initial_cash!r}")
-    if context is not None and not context.empty and context.index.max() >= frame.index.min():
-        # Defense in depth: warm-up context must be a strictly-past prefix, so a
-        # future / out-of-sample row can never enter signal, liquidity, or
-        # volatility estimation through the context path.
-        raise EngineError(
-            "context must be strictly before the frame "
-            "(context.index.max() must be < frame.index.min())"
-        )
+    _require_canonical("evaluation frame", frame)
+    if context is not None and not context.empty:
+        _validate_context(context, frame)
 
     full = frame if context is None or context.empty else pd.concat([context, frame])
     context_bars = len(full) - len(frame)
 
-    signals = strategy.signal.target_positions(full).to_numpy(dtype="float64")
+    signals = _validate_signal(strategy.signal.target_positions(full), full.index)
     initial_target = float(strategy.signal.initial_target)
+    if not np.isfinite(initial_target) or initial_target < 0.0 or initial_target > 1.0:
+        raise EngineError(f"initial target must be within [0, 1], got {initial_target!r}")
     opens = frame["open"].to_numpy(dtype="float64")
     closes = frame["close"].to_numpy(dtype="float64")
     full_closes = full["close"].to_numpy(dtype="float64")

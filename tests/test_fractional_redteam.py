@@ -94,8 +94,11 @@ class TestLookAhead:
         k = 90
         mutated = frame.copy()
         close = mutated["close"].to_numpy().copy()
+        low = mutated["low"].to_numpy().copy()
         close[k] *= 0.6
+        low[k] = min(low[k], close[k])  # keep OHLC valid; the engine never reads low
         mutated["close"] = close
+        mutated["low"] = low
         base = run_fractional_backtest(
             frame, STRATEGIES_BY_NAME["buy_and_hold"], CAUSAL_PROXY_BASE, initial_cash=INITIAL_CASH
         )

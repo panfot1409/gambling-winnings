@@ -155,21 +155,18 @@ class TestR6LiquidityStrictness:
 # R7 — the public engine must strictly validate its signal + frame
 # ---------------------------------------------------------------------------
 class TestR7EngineBoundaryStrictness:
-    @pytest.mark.xfail(reason="R7: a shuffled-index signal is applied positionally", strict=True)
     def test_shuffled_signal_index_is_rejected(self) -> None:
         frame = _tiny_frame()
         strat = _strategy(_ConstSignal(shuffle=True))
         with pytest.raises(_REJECT):
             run_fractional_backtest(frame, strat, COMPATIBILITY_V1, initial_cash=10_000.0)
 
-    @pytest.mark.xfail(reason="R7: a signal value outside [0,1] is not refused", strict=True)
     def test_out_of_range_signal_is_rejected(self) -> None:
         frame = _tiny_frame()
         strat = _strategy(_ConstSignal(value=1.5))
         with pytest.raises(_REJECT):
             run_fractional_backtest(frame, strat, COMPATIBILITY_V1, initial_cash=10_000.0)
 
-    @pytest.mark.xfail(reason="R7: a non-finite signal value is not refused", strict=True)
     def test_non_finite_signal_is_rejected(self) -> None:
         frame = _tiny_frame()
         strat = _strategy(_ConstSignal(value=float("nan")))
