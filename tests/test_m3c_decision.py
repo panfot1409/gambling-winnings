@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 import pytest
@@ -237,7 +239,7 @@ class TestRoundTrip:
         ).encode("utf-8")
         assert raw == reencoded
 
-    def test_load_round_trips(self, tmp_path) -> None:
+    def test_load_round_trips(self, tmp_path: Path) -> None:
         decision = evaluate_candidate_decision(_synthetic_results(), verification_passed=True)
         path = tmp_path / "candidate_decision.json"
         path.write_bytes(decision.to_json_bytes())
@@ -245,9 +247,9 @@ class TestRoundTrip:
 
 
 class TestStrictParsing:
-    def _payload(self) -> dict:
+    def _payload(self) -> dict[str, Any]:
         decision = evaluate_candidate_decision(_synthetic_results(), verification_passed=True)
-        return json.loads(decision.to_json_bytes())
+        return cast(dict[str, Any], json.loads(decision.to_json_bytes()))
 
     def test_forged_eligible_outcome_is_rejected(self) -> None:
         # A rejected decision (P6 false) whose outcome is hand-edited to eligible must
@@ -286,7 +288,7 @@ class TestStrictParsing:
 
 
 class TestConstructionInvariants:
-    def _decision(self, **overrides) -> CandidateDecision:
+    def _decision(self, **overrides: Any) -> CandidateDecision:
         base = evaluate_candidate_decision(_synthetic_results(), verification_passed=True)
         return dataclasses.replace(base, **overrides)
 

@@ -10,7 +10,7 @@ import pytest
 
 from eth_research.data.schema import validate_ohlcv
 from eth_research.fractional.cost_model import COMPATIBILITY_V1
-from eth_research.fractional.engine import run_fractional_backtest
+from eth_research.fractional.engine import FractionalBacktestResult, run_fractional_backtest
 from eth_research.fractional.strategies import STRATEGIES_BY_NAME
 from eth_research.m3c.archive import (
     M3C_MANIFEST_RELPATH,
@@ -79,7 +79,7 @@ def test_bundle_is_order_sensitive_concatenation() -> None:
     assert bundle_sha256(a, b, c) == sha256_bytes(a + b + c)
 
 
-def _tiny_result():
+def _tiny_result() -> FractionalBacktestResult:
     n = 320
     close = 100.0 * (1.001 ** np.arange(n))
     idx = pd.date_range("2016-01-01", periods=n, freq="D", tz="UTC")

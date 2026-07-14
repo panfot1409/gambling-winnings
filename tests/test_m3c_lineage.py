@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -60,7 +61,7 @@ def test_wrong_candidate_family_count_is_rejected() -> None:
 
 
 def test_duplicate_fingerprint_is_rejected() -> None:
-    data = build_m3c_lineage().to_dict()
+    data: Any = build_m3c_lineage().to_dict()
     data["entries"][2]["canonical_fingerprint"] = data["entries"][3]["canonical_fingerprint"]
     with pytest.raises(_REJECT):
         ResearchLineage.from_dict(data)
@@ -74,7 +75,7 @@ def test_forged_new_candidate_fingerprint_is_rejected() -> None:
 
 
 def test_benchmark_cannot_be_a_budgeted_candidate() -> None:
-    data = build_m3c_lineage().to_dict()
+    data: Any = build_m3c_lineage().to_dict()
     bench = next(e for e in data["entries"] if e["kind"] == "benchmark")
     bench["counts_against_candidate_budget"] = True
     with pytest.raises(_REJECT):
@@ -93,11 +94,11 @@ def test_unknown_or_missing_key_is_rejected() -> None:
 
 
 def test_bool_as_int_and_abbreviated_hash_are_rejected() -> None:
-    data = build_m3c_lineage().to_dict()
+    data: Any = build_m3c_lineage().to_dict()
     data["entries"][0]["immutable_result_sha256"] = "abc123"  # too short
     with pytest.raises(_REJECT):
         ResearchLineage.from_dict(data)
-    data2 = build_m3c_lineage().to_dict()
+    data2: Any = build_m3c_lineage().to_dict()
     data2["entries"][2]["formally_promotion_tested"] = 1  # bool expected, int rejected
     with pytest.raises(_REJECT):
         ResearchLineage.from_dict(data2)

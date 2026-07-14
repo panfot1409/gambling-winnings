@@ -12,6 +12,7 @@ import dataclasses
 import hashlib
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -94,11 +95,11 @@ def results() -> M3CResults:
     return _build_real_results()
 
 
-def _payload(results: M3CResults) -> dict:
-    return json.loads(results.to_json_bytes())
+def _payload(results: M3CResults) -> dict[str, Any]:
+    return cast(dict[str, Any], json.loads(results.to_json_bytes()))
 
 
-def _reparse(payload: dict) -> M3CResults:
+def _reparse(payload: dict[str, Any]) -> M3CResults:
     return M3CResults.from_json_bytes(json.dumps(payload).encode("utf-8"))
 
 
