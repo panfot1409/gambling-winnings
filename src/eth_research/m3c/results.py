@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 from eth_research._json import require_canonical_file_bytes
-from eth_research.data.provenance import content_fingerprint
+from eth_research.data.provenance import content_fingerprint, sha256_bytes
 from eth_research.fractional.cost_model import SCENARIOS, SCENARIOS_BY_NAME, CostScenario
 from eth_research.fractional.engine import FractionalBacktestResult
 from eth_research.m3c.candidate import M3C_CANDIDATE_ID, M3C_STRATEGY_NAMES
@@ -1158,6 +1158,14 @@ def render_m3c_report(results: M3CResults, decision: CandidateDecision) -> str:
     frames the run as research-train-only development evidence for an adaptively
     motivated candidate — never an out-of-sample, alpha, or trading claim.
     """
+    # Self-defend the human-facing artifact: the decision handed in must be the one
+    # derived from THESE results, so the digests and verdict the report prints are
+    # actually coupled to the financials it shows (defense in depth beyond the
+    # replay verifier, which also re-derives and re-renders byte-for-byte).
+    if decision.results_sha256 != sha256_bytes(results.to_json_bytes()):
+        raise M3CResultsError("decision.results_sha256 does not match the results being rendered")
+    if decision.protocol_sha256 != results.protocol_sha256:
+        raise M3CResultsError("decision.protocol_sha256 does not match the results being rendered")
     lines: list[str] = []
     add = lines.append
     eligible = decision.outcome == "eligible_for_development_gate_review"

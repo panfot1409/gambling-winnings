@@ -293,6 +293,18 @@ class TestReport:
         for banned in ("proven", "profitable", "validated", "robust", "significant"):
             assert banned not in report
 
+    def test_report_rejects_a_decision_not_coupled_to_the_results(
+        self, results: M3CResults
+    ) -> None:
+        # Defense in depth: rendering must refuse a decision whose recorded digests
+        # do not match the results being shown, so the human-facing artifact cannot
+        # pair one run's verdict with another run's financials.
+        decision = evaluate_candidate_decision(results, verification_passed=True)
+        with pytest.raises(M3CResultsError):
+            render_m3c_report(results, dataclasses.replace(decision, results_sha256="0" * 64))
+        with pytest.raises(M3CResultsError):
+            render_m3c_report(results, dataclasses.replace(decision, protocol_sha256="0" * 64))
+
 
 class TestLoad:
     def test_load_requires_canonical_bytes(self, results: M3CResults, tmp_path: Path) -> None:
