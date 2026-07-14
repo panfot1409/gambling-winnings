@@ -117,3 +117,61 @@ no_trade_epsilon = 1e-9`), consistent only for equity ≳ $1000. The fixes make 
 guarantees hold independent of capital (weight-scale dust honesty; clamped
 exposure). The preregistered run additionally uses an initial capital that keeps
 equity well above this regime across the research-train period.
+
+## Post-run red team (Phase 22)
+
+After the one preregistered run (`m3b-fractional-execution-risk-v1-run-001`) was
+executed and published, **three independent read-only auditors** re-verified the
+committed result: (1) causality / look-ahead on the exact engine that produced
+it, (2) prohibited functionality and the absolute scope boundaries, and (3)
+reproducibility and provenance integrity.
+
+### Cleared clean (no defect)
+
+- **Causality / look-ahead** (Auditor 1). Verified against the published-run code
+  path: the fill of bar `t` reads only `open[t]`; the signal is `signals[info_pos-1]`
+  (no off-by-one); the liquidity slice is strict `< as_of`; the volatility window
+  ends at `close[t-1]`; prior exposure/equity are marked at `close[t-1]`; per-fold
+  warm-up context is strictly before the OOS block and creates no P&L; no
+  `center=`/`ffill`/`bfill`/`shift(-n)` anywhere; all engine callers feed the same
+  strictly-past context.
+- **Prohibited functionality / scope** (Auditor 2). No network / wallet / signing /
+  exchange-auth / order-routing / leverage / short / margin / derivatives / ML /
+  optimizer import anywhere in the fractional package; runtime imports are stdlib +
+  numpy/pandas + intra-package. Long-only is positively enforced (solver rejects a
+  target outside `[0, 1]`; accounting rejects negative cash/quantity). Both sealed
+  ledgers are byte-empty; the results declare zero forbidden access; no git tag was
+  created; the M3A branch and every M2B/M3A immutable artifact are untouched.
+- **Reproducibility / integrity** (Auditor 3). Independently (re-deriving digests
+  with `hashlib` and re-deriving the aggregates in plain Python): the registry
+  hash-chain, the manifest bindings, the 75-cell/15-aggregate model, the
+  byte-exact results/report reproduction, and the sealed-ledger emptiness all
+  verify. `replay --check` prints `completed: results_reproduced, report_reproduced,
+  archive_verified`.
+
+### Findings and resolutions
+
+#### F1 — MEDIUM — the orchestrator E2E rehearsal went red after publication (test-state coupling, not artifact drift)
+Auditor 3. Once run-001 is committed to the real repository,
+`tests/test_fractional_orchestrator.py` failed (1 failure + 6 setup errors)
+because `make_m3a_checkout` clones the now-completed real repo, so the rehearsal
+could not register the single-use id and a "fresh" clone replayed as `completed`
+rather than `pristine`. **Artifact integrity was never in question** — the
+production `replay.py` is deliberately dual-state and every binding verified
+independently; only the test module was stale.
+**Fix:** the rehearsal (and the pristine-replay test) now restore the clone's
+`research/m3b` tree to pristine (empty registry, no artifacts) before driving the
+lifecycle, mirroring the M3A standing E2E, so it registers/executes/replays the id
+inside the throwaway clone regardless of the real repo's published state.
+**Test:** `tests/test_fractional_orchestrator.py` (the rehearsal itself is the
+regression test; green again on the completed tree).
+
+### Accepted (no change)
+
+- The fold-median cost monotonicity observed in the findings is an *observation*,
+  not a pre-registered invariant; per-cell cross-scenario ordering is deliberately
+  not asserted (see the "Accepted caveats" above).
+- A post-run `ruff format` reformatted four non-computation files (archive/replay
+  + two tests); the published results are unaffected and still reproduce
+  byte-for-byte (they record the code-freeze commit's fingerprint, and formatting
+  changes no computation).
