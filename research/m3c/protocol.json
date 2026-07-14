@@ -1,0 +1,53 @@
+{
+  "bootstrap_algorithm": "fold-stratified-moving-block-v1",
+  "bootstrap_block_length_rule": "floor(n**(1/3))",
+  "bootstrap_confidence": 0.95,
+  "bootstrap_resamples": 20000,
+  "bootstrap_seed": 20260714,
+  "budget_path": "research/m3c/research_budget.json",
+  "budget_sha256": "81706025850427f35aee70fcc1d135faa7ef68a9b4b48ee481ace5b7b47405af",
+  "candidate_fingerprint": "d45d3bdf7a3dca7003e8382995e5a350d0c9e61edf47e87e294d151070f4cae6",
+  "candidate_id": "dual_horizon_trend_63_252_vol_target_30d_50pct",
+  "cost_scenarios": [
+    "compatibility_v1",
+    "causal_proxy_base",
+    "causal_proxy_stressed"
+  ],
+  "decision_alpha": 0.05,
+  "development_gate_ledger_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "development_partition_sha256": "14d61c9ad36a20b70b3f830e8470dc416319ef4accf36b90c5d2b4094ead7ac2",
+  "experiment_family": "m3c-dual-horizon-trend-v1",
+  "experiment_id": "m3c-dual-horizon-trend-v1-run-001",
+  "final_holdout_ledger_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "frozen_m2_dossier_sha256": "20ce9be93d955189244c3b57c932dafbbe54a2babde4d4860275ca1d624d432e",
+  "initial_cash": 10000.0,
+  "initial_training_rows": 1095,
+  "lineage_path": "research/m3c/research_lineage.json",
+  "lineage_sha256": "57cfd3a3aa180ab5c3b68b0da0cd11f0fcc99b3ea46f3c31b829e81f5e919f40",
+  "m3c_protocol_schema_version": 1,
+  "max_context_bars": 252,
+  "oos_fold_count": 5,
+  "package_version": "0.6.0",
+  "permitted_data_level": "research_train",
+  "primary_comparator": "buy_and_hold",
+  "primary_scenario": "causal_proxy_base",
+  "primary_statistic": "mean_paired_daily_log_excess",
+  "promotion_criteria": [
+    "P1",
+    "P2",
+    "P3",
+    "P4",
+    "P5",
+    "P6",
+    "P7"
+  ],
+  "research_train_content_fingerprint": "sha256:60aa988e9db786db5723c925abc794463c23ff701791173b745196c7a8b12033",
+  "research_train_row_count": 2221,
+  "strategies": [
+    "cash",
+    "buy_and_hold",
+    "donchian_55_20",
+    "vol_target_donchian_55_20_30d_50pct",
+    "dual_horizon_trend_63_252_vol_target_30d_50pct"
+  ]
+}
