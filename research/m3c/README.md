@@ -40,14 +40,15 @@ holdout are never accessed.
 2. **registered** — the `registered` event committed (registry-only), binding the
    committed protocol/lineage/budget digests.
 3. **completed** — `registered → started → completed`, with the four immutable
-   artifacts published and reproducible byte-for-byte.
+   artifacts published and reproducible (byte-for-byte except a named handful of
+   secondary statistical scalars — see below).
 
 ## Reproduce
 
 From a fresh clone, on the locked runtime (`uv sync --locked --all-extras`):
 
 ```bash
-# Tri-state replay: pristine / registered / completed, byte-for-byte when published.
+# Tri-state replay: pristine / registered / completed (reproduces the run when published).
 python -m eth_research.m3c.replay --repo-root . --check
 
 # Comprehensive archive verification (re-derives results, decision, and report):
@@ -59,10 +60,13 @@ python -m eth_research.m3c.recovery --repo-root . --status
 
 The replay reconstructs the research-train partition offline from the committed
 raw Coinbase bytes, re-runs the 5×3×5 grid through the one shared pipeline, and
-requires the committed results, decision, and report to reproduce exactly —
-including the fold-seam-aware bootstrap interval (seed `20260714`, 20 000
-resamples). The mechanical decision is re-derived from the committed results and
-must match byte-for-byte; a hand-edited outcome is rejected.
+requires the committed run to reproduce — the decision and report byte-for-byte and
+every financial field of the results byte-for-byte, allowing only a named set of
+secondary statistical scalars (the fold-seam-aware bootstrap interval, the per-fold
+paired log-excess, the PSR) to differ by a cross-machine transcendental last ULP,
+and additionally requiring the **identical mechanical verdict** (see
+`docs/M3C_STATISTICAL_METHOD_NOTE.md` §8). The decision is re-derived from the
+committed results and must match byte-for-byte; a hand-edited outcome is rejected.
 
 ## Honest reading
 

@@ -6,8 +6,11 @@ mechanically re-derived decision, the byte-for-byte re-rendered report, the
 manifest/bundle chain, the promotion verdict, both sealed access ledgers
 byte-empty, no pending completion intent, and the run directory shape. With
 ``--deep`` it additionally reconstructs the research-train partition offline and
-re-runs the 75-cell grid to reproduce the committed results, decision, and report
-**byte-for-byte** (the full replay).
+re-runs the 75-cell grid, reproducing the committed decision and report
+byte-for-byte and the committed results byte-for-byte except for a named set of
+secondary statistical scalars that may differ by a cross-machine transcendental
+last ULP (see :mod:`eth_research.m3c.replay` and
+``docs/M3C_STATISTICAL_METHOD_NOTE.md`` §8).
 
 It evaluates no sealed partition, touches the network, or mutates a byte::
 
@@ -41,8 +44,9 @@ def verify_m3c_run_archive(repo_root: str | Path, *, deep: bool = False) -> tupl
 
     Returns the ordered passed checks. Raises the underlying typed error (or
     :class:`M3CRunArchiveError`) on the first violation. ``deep`` additionally
-    reproduces the results/decision/report byte-for-byte from the raw committed
-    data and is therefore slow.
+    reproduces the decision and report byte-for-byte and the results to the
+    replay's cross-machine transcendental tolerance from the raw committed data,
+    and is therefore slow.
     """
     root = Path(repo_root)
     checks: list[str] = []
@@ -78,7 +82,7 @@ def verify_m3c_run_archive(repo_root: str | Path, *, deep: bool = False) -> tupl
         state, *_ = check_replay(root)
         if state != "completed":
             raise M3CRunArchiveError(f"deep replay expected a completed run, got {state!r}")
-        checks.append("deep_replay_reproduces_byte_for_byte")
+        checks.append("deep_replay_reproduces_run")
 
     return tuple(checks)
 

@@ -1,9 +1,10 @@
 """The one deterministic build pipeline shared by execution and replay.
 
-The orchestrator (single real execution) and the fresh-clone replay must produce
-*byte-identical* results, so the reduction from the 75 reconciled cell runs to the
-strict :class:`M3CResults` lives here once and is called by both. It is a pure
-function of the frozen engine + committed data:
+The orchestrator (single real execution) and the fresh-clone replay must run the
+*identical* reduction, so the mapping from the 75 reconciled cell runs to the
+strict :class:`M3CResults` lives here once and is called by both — any difference
+is then purely runtime, never logic. It is a pure function of the frozen engine +
+committed data:
 
 * per-cell **trace commitment** — the SHA-256 of the full canonical bar-record
   sequence of that cell, so tampering with any single bar is detectable and the
@@ -166,8 +167,11 @@ def assemble_m3c_results(
 ) -> M3CResults:
     """Reduce the reconciled cell runs to the strict, byte-stable results model.
 
-    Called identically by the single real execution and by the fresh-clone replay,
-    so the committed results reproduce byte-for-byte.
+    Called identically by the single real execution and by the fresh-clone replay.
+    On the execution host the two rebuilds are byte-identical (the P6 determinism
+    gate); across hosts every financial field still reproduces byte-for-byte, while
+    the secondary statistical scalars (bootstrap interval, paired log-excess, PSR)
+    may differ by a transcendental last ULP — see :mod:`eth_research.m3c.replay`.
     """
     trace_commitments = build_trace_commitments(cell_runs)
     bootstrap, psr = compute_primary_inference(cell_runs)

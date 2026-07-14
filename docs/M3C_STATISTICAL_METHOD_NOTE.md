@@ -130,3 +130,53 @@ touched in M3C — is the instrument that would. A passing primary yields **only
 | resamples | `20000` |
 | interval | two-sided 95% percentile |
 | decision alpha | `0.05` |
+
+## 8. Cross-machine numerical reproducibility (post-run, empirically observed)
+
+IEEE-754 mandates *correctly-rounded* results only for `+ - * /` and `sqrt`. It does
+**not** mandate correct rounding for the transcendental library functions, so a
+conforming `log1p`, integer power (`x**3`, `x**4`), or `erf` may return a value whose
+last unit-in-the-last-place (ULP) differs between libm builds and CPU
+microarchitectures (the "table-maker's dilemma"). This is a property of portable
+floating point, not a defect.
+
+Every **financial** figure in `candidate_results.json` is produced by the reviewed
+M3B backtest engine, which reproduces byte-for-byte across machines — the green
+`m3b-replay` CI on independent GitHub runners is the standing proof. The **only**
+result fields that carry a transcendental in their derivation are the M3C-new
+secondary statistics:
+
+| field(s) | transcendental path |
+| --- | --- |
+| `bootstrap.point_estimate` / `ci_lower` / `ci_upper` | `np.log1p` (paired excess) → mean / percentile |
+| `paired_comparisons[*].mean_daily_paired_log_excess` | `np.log1p` |
+| `psr_diagnostic.observed_sharpe` / `skewness` / `kurtosis` | `np.log1p` series → integer-power moments |
+| `psr_diagnostic.psr` | `math.erf` |
+
+Empirically, the values committed by the one execution (on its host) and the values a
+fresh clone recomputes on a different host agree to roughly `1e-13` relative — a last
+ULP or two. The replay (`eth_research.m3c.replay`) therefore enforces the honest
+reproducibility contract:
+
+- **every** financial, structural, provenance, and cost field must reproduce
+  **byte-for-byte**, on any machine;
+- the named statistical scalars above must agree to a tight relative tolerance
+  (`1e-9`, with a `1e-12` absolute floor) — about six orders of magnitude tighter than
+  the P1 decision threshold, whose magnitude is ~`2.3e-3`;
+- any other difference, or a statistical scalar exceeding that tolerance, **fails
+  closed** (the replay lists the exact offending fields as a CI annotation);
+- and the raw-data reproduction must re-derive the **identical mechanical promotion
+  verdict** (the same per-criterion pass/fail vector), so the tolerated drift is proven
+  decision-irrelevant, not merely small.
+
+The decision and the human-readable report are byte-unaffected regardless: the report
+prints these statistics at `.6g` (six significant figures, far coarser than the
+~13th-figure drift), and the mechanical decision depends only on the **sign** of
+`bootstrap.ci_lower` (P1), which is `-2.3e-3` — nine orders of magnitude from a sign
+flip. On the execution host itself, the orchestrator's independent second rebuild (the
+P6 determinism gate) still requires bit-for-bit identical output, so same-host
+non-determinism remains a hard failure.
+
+This is deliberately a *stronger* honesty posture than a blanket "bit-identical on all
+hardware" claim, which no numerically-literate reviewer would accept for `erf` or
+`log1p`. The discovery and its resolution are recorded in `docs/M3C_BUG_LOG.md`.

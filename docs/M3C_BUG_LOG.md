@@ -127,3 +127,41 @@ full M3C test suite is green (including the new coupling and replay tests); and 
 disposable-clone end-to-end rehearsal reproduces the run byte-for-byte with
 `verify_archive --deep` reporting 14 checks. The candidate's mechanical outcome is
 unchanged and honest: `rejected_for_development_gate_promotion`.
+
+## Post-run finding — cross-machine transcendental reproducibility (fixed)
+
+**Discovered after publication**, when `m3c-replay` went red on the `completed`
+checkpoint while every local check — a fresh, CI-identical clone included — stayed
+green.
+
+- **Symptom.** `replay --check` reproduced the committed `candidate_results.json`
+  byte-for-byte on the execution host but not on the GitHub runners. The freeze
+  (pristine) and register (registered) checkpoints, which reproduce nothing, stayed
+  green; only the `completed` checkpoint — the one that rebuilds results from raw
+  data — failed, on all three runners (authoritative 3.12.3 and compat 3.12 / 3.13).
+- **Root cause (portable-FP property, not a defect).** IEEE-754 does not mandate
+  correctly-rounded transcendentals, so `np.log1p`, integer powers, and `math.erf`
+  legitimately differ by a last ULP across libm builds / CPU microarchitectures.
+  Ruled out as causes, each byte-identical locally: SIMD dispatch
+  (`NPY_DISABLE_CPU_FEATURES`), `PYTHONHASHSEED`, and interpreter version; the
+  numerical stack is lockfile-pinned. The shared M3B engine reproduces byte-for-byte
+  on the same runners (green `m3b-replay`), which localises the drift to exactly the
+  four M3C-new statistical scalars that carry a transcendental — the fold-seam-aware
+  bootstrap interval, the per-fold paired daily log-excess, and the descriptive PSR.
+- **Fix (no re-execution; the single-use id stays spent).** `check_replay` now
+  compares the raw-data rebuild to the committed results field by field: every
+  financial, structural, provenance, and cost field must be **byte-for-byte**; the
+  named statistical scalars must agree to `1e-9` relative (with a `1e-12` absolute
+  floor); and **any** other difference — or a statistical scalar beyond tolerance —
+  fails closed with the offending fields listed as a CI annotation. The reproduction
+  must additionally re-derive the **identical mechanical verdict** (the same
+  per-criterion pass/fail vector), proving the tolerated drift cannot move a
+  promotion criterion. The decision and report still reproduce byte-for-byte (they
+  read the committed results and print statistics at `.6g`), and the execution-host
+  P6 determinism gate still demands bit-identical output. See
+  `docs/M3C_STATISTICAL_METHOD_NOTE.md` §8, `tests/test_m3c_replay.py`
+  (`test_reproduction_*`), and the corrected reproducibility wording across the
+  findings, terminal audit, README, and CI comment.
+- **Outcome unchanged.** The mechanical verdict is still
+  `rejected_for_development_gate_promotion`; the observed cross-host drift is ~`1e-13`
+  relative, ~10 orders of magnitude from flipping P1's sign.

@@ -5,9 +5,12 @@ name: M3C Replay
 # — no run-001 event, no published candidate artifacts) and after it (completed —
 # the research-train partition is reconstructed offline from the committed raw
 # Coinbase bytes, the 5x3x5 grid is re-run, and the candidate results JSON, the
-# report Markdown, and the decision JSON reproduce byte-for-byte, including the
-# fold-seam-aware bootstrap interval). No networking. Both sealed access ledgers —
-# the development gate and the final holdout — must stay byte-empty in every state.
+# report Markdown, and the decision JSON reproduce byte-for-byte — except a named
+# set of secondary statistical scalars, e.g. the fold-seam-aware bootstrap
+# interval, that IEEE-754 does not make cross-machine reproducible past a
+# transcendental last ULP, and which cannot move the mechanical verdict; see
+# eth_research.m3c.replay). No networking. Both sealed access ledgers — the
+# development gate and the final holdout — must stay byte-empty in every state.
 
 on:
   push:
@@ -53,7 +56,7 @@ jobs:
           set -euo pipefail
           test "$(sha256sum "$GATE_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
           test "$(sha256sum "$HOLDOUT_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
-      - name: Dual-state replay (reproduce the candidate run byte-for-byte if present)
+      - name: Dual-state replay (reproduce the candidate run if present)
         run: uv run --no-sync --python 3.12.3 python -m eth_research.m3c.replay --repo-root . --check
       - name: Comprehensive run-archive verification (deep, when the run is published)
         run: |
@@ -72,8 +75,9 @@ jobs:
           test "$(sha256sum "$HOLDOUT_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
 
   compat-replay:
-    # The results, report, and decision must reproduce identically on every
-    # supported interpreter (pure computed JSON; the numerical stack is locked).
+    # The reduction is interpreter-independent: the report and decision reproduce
+    # byte-for-byte and the results to the replay's cross-machine transcendental
+    # tolerance on every supported interpreter (the numerical stack is locked).
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -95,7 +99,7 @@ jobs:
           set -euo pipefail
           test "$(sha256sum "$GATE_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
           test "$(sha256sum "$HOLDOUT_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
-      - name: Dual-state replay (reproduce the candidate run byte-for-byte if present)
+      - name: Dual-state replay (reproduce the candidate run if present)
         run: uv run --no-sync python -m eth_research.m3c.replay --repo-root . --check
       - name: Both sealed ledgers are byte-empty after
         run: |
