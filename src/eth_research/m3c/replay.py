@@ -1,22 +1,27 @@
 """Version-independent fresh-clone replay of the one M3C candidate run.
 
-``check_replay`` is tri-state, so the same CI is green at each of the three
-committed checkpoints:
+``check_replay`` accepts exactly four committed checkpoints, so the same CI is
+green at each:
 
 * **pristine** — the registry carries no run-001 event and none of the four
   immutable artifacts exist. The only guarantees are the two byte-empty sealed
   ledgers and the absent outputs.
 * **registered** — the registry carries exactly ``registered`` (the committed
-  pre-registration) and no artifacts exist yet. The registered event's protocol /
-  lineage / budget digests must equal the committed artifacts, so a registration
-  cannot bind stale inputs.
+  pre-registration) and no artifacts exist yet. Every one of the five recorded
+  inputs — protocol, lineage, budget, development partition, and frozen dossier —
+  must equal the committed file, so a registration cannot bind a stale or tampered
+  input while staying green.
 * **completed** — the registry carries ``registered`` → ``started`` →
   ``completed``. From the committed raw Coinbase bytes alone the research-train
   partition is reconstructed offline, the 75-cell grid is re-run and reduced
   through the one shared pipeline, and the results JSON, the decision JSON, and the
   report Markdown are re-derived and compared **byte-for-byte** to the committed
   artifacts; then :func:`verify_published_run` re-checks the
-  registry/decision/report/manifest/bundle chain.
+  registry/decision/report/manifest/bundle chain and re-binds the five inputs.
+* **failed** — the registry carries ``registered`` → ``started`` → ``failed``: the
+  single-use id was honestly consumed by a run that did not complete, with no
+  artifacts published. This is a real committed state (not a mid-lifecycle
+  inconsistency), so an honest failure does not brick CI.
 
 Both sealed ledgers must be byte-empty in every state. No networking; no sealed row
 is ever read (the loader returns research-train rows only).
@@ -29,6 +34,7 @@ import sys
 from pathlib import Path
 
 from eth_research.data.provenance import sha256_file
+from eth_research.development import DEVELOPMENT_PARTITION_RELPATH, FROZEN_M2_DOSSIER_RELPATH
 from eth_research.m3c.archive import (
     M3C_MANIFEST_RELPATH,
     rederive_committed_decision,
@@ -38,9 +44,11 @@ from eth_research.m3c.decision import M3C_DECISION_RELPATH, CandidateDecision
 from eth_research.m3c.pipeline import reproduce_results
 from eth_research.m3c.registry import (
     EVENT_COMPLETED,
+    EVENT_FAILED,
     EVENT_REGISTERED,
     EVENT_STARTED,
     M3C_REGISTRY_RELPATH,
+    M3CRegistryEvent,
     read_registry,
 )
 from eth_research.m3c.results import (
@@ -75,6 +83,30 @@ def _require_ledgers_byte_empty(root: Path) -> None:
             raise M3CReplayError(f"sealed ledger {relpath} is not byte-empty")
 
 
+def _require_registration_binds_inputs(root: Path, registered: M3CRegistryEvent) -> None:
+    """Every committed input file must match the digest the run registered.
+
+    Binds all five recorded inputs — protocol, lineage, budget, development
+    partition, and frozen dossier — so a registered (or failed) checkpoint cannot
+    silently carry a tampered or stale input while CI stays green.
+    """
+    for label, relpath, recorded in (
+        ("protocol", M3C_PROTOCOL_RELPATH, registered.protocol_sha256),
+        ("lineage", M3C_LINEAGE_RELPATH, registered.lineage_sha256),
+        ("budget", _BUDGET_RELPATH, registered.research_budget_sha256),
+        (
+            "development partition",
+            DEVELOPMENT_PARTITION_RELPATH,
+            registered.development_partition_sha256,
+        ),
+        ("frozen dossier", FROZEN_M2_DOSSIER_RELPATH, registered.frozen_m2_dossier_sha256),
+    ):
+        if sha256_file(root / relpath) != recorded:
+            raise M3CReplayError(
+                f"registered {label} digest disagrees with the committed {relpath}"
+            )
+
+
 def check_replay(repo_root: str | Path) -> tuple[str, ...]:
     """Tri-state replay check; returns ``(state, *checks)``. Raises on any drift."""
     root = Path(repo_root)
@@ -101,21 +133,24 @@ def check_replay(repo_root: str | Path) -> tuple[str, ...]:
                 f"run-001 is only registered but artifacts exist: {artifacts_present}"
             )
         registered = run_events[0]
-        for label, relpath, recorded in (
-            ("protocol", M3C_PROTOCOL_RELPATH, registered.protocol_sha256),
-            ("lineage", M3C_LINEAGE_RELPATH, registered.lineage_sha256),
-            ("budget", _BUDGET_RELPATH, registered.research_budget_sha256),
-        ):
-            if sha256_file(root / relpath) != recorded:
-                raise M3CReplayError(
-                    f"registered {label} digest disagrees with the committed {relpath}"
-                )
+        _require_registration_binds_inputs(root, registered)
         return (
             "registered",
             "ledgers_byte_empty",
             "preregistered_no_artifacts",
             "registration_binds_committed_inputs",
         )
+
+    if lifecycle == [EVENT_REGISTERED, EVENT_STARTED, EVENT_FAILED]:
+        # A legitimately recorded one-shot failure: the single-use id is spent and no
+        # artifacts were published. This is a real committed checkpoint (CI must stay
+        # green), not a mid-lifecycle inconsistency — the run honestly did not complete.
+        if artifacts_present:
+            raise M3CReplayError(
+                f"failed run must not have published artifacts: {artifacts_present}"
+            )
+        _require_registration_binds_inputs(root, run_events[0])
+        return ("failed", "ledgers_byte_empty", "run_failed_no_artifacts")
 
     if lifecycle != [EVENT_REGISTERED, EVENT_STARTED, EVENT_COMPLETED]:
         raise M3CReplayError(f"run-001 is mid-lifecycle {lifecycle!r}; not a committed state")

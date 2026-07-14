@@ -24,7 +24,8 @@ from pathlib import Path
 from typing import Any
 
 from eth_research._json import require_canonical_file_bytes, strict_json_loads
-from eth_research.data.provenance import sha256_bytes
+from eth_research.data.provenance import sha256_bytes, sha256_file
+from eth_research.development import DEVELOPMENT_PARTITION_RELPATH, FROZEN_M2_DOSSIER_RELPATH
 from eth_research.m3c.decision import (
     M3C_DECISION_RELPATH,
     CandidateDecision,
@@ -40,6 +41,8 @@ from eth_research.m3c.registry import (
 from eth_research.m3c.results import (
     M3C_EXPERIMENT_FAMILY,
     M3C_EXPERIMENT_ID,
+    M3C_LINEAGE_RELPATH,
+    M3C_PROTOCOL_RELPATH,
     M3C_REPORT_RELPATH,
     M3C_RESULTS_RELPATH,
     M3CResults,
@@ -57,6 +60,7 @@ from eth_research.m3c.validation import (
 M3C_MANIFEST_SCHEMA_VERSION: int = 1
 _RUN_SLUG: str = "run-001"
 M3C_MANIFEST_RELPATH: str = f"research/m3c/experiments/{_RUN_SLUG}/manifest.json"
+_BUDGET_RELPATH: str = "research/m3c/research_budget.json"
 
 
 class M3CArchiveError(RuntimeError):
@@ -237,6 +241,25 @@ def verify_published_run(repo_root: str | Path) -> tuple[str, ...]:
         )
     registered, started, completed = run_events
     checks.append("registry_lifecycle_complete")
+
+    # Re-bind every committed input to the digest the run registered, so a post-run
+    # edit to the protocol, lineage, budget, development partition, or frozen dossier
+    # is caught here (not left to git history alone). The partition and dossier are
+    # additionally re-derived by the offline dataset reconstruction in the replay.
+    for label, relpath, recorded in (
+        ("protocol", M3C_PROTOCOL_RELPATH, registered.protocol_sha256),
+        ("lineage", M3C_LINEAGE_RELPATH, registered.lineage_sha256),
+        ("budget", _BUDGET_RELPATH, registered.research_budget_sha256),
+        (
+            "development partition",
+            DEVELOPMENT_PARTITION_RELPATH,
+            registered.development_partition_sha256,
+        ),
+        ("frozen dossier", FROZEN_M2_DOSSIER_RELPATH, registered.frozen_m2_dossier_sha256),
+    ):
+        if sha256_file(root / relpath) != recorded:
+            raise M3CArchiveError(f"committed {label} digest disagrees with the registered event")
+    checks.append("committed_inputs_match_registration")
 
     results_bytes = require_canonical_file_bytes(
         (root / M3C_RESULTS_RELPATH).read_bytes(), "m3c results"
