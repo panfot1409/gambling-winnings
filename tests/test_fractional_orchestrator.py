@@ -2,12 +2,13 @@
 
 ``make_m3a_checkout`` clones the real repository (its committed raw data, frozen
 dossier, development partition, walk-forward protocol, the committed M3B
-fractional protocol, the pristine M3B registry, and both byte-empty sealed
-ledgers) and overlays the current working ``src``, so the clone's HEAD is the
-execution-source commit ``E`` carrying this branch's engine. The rehearsal
-registers, commits the registry-only ``R`` commit, executes, publishes, and
-replay-verifies run-001 — consuming the single-use id only in the throwaway
-clone. The real repository is never touched.
+fractional protocol, and both byte-empty sealed ledgers) and overlays the
+current working ``src``, so the clone's HEAD carries this branch's engine.
+Because the real repository now carries the committed, single-use run-001, the
+rehearsal first **restores the clone's ``research/m3b`` tree to pristine** (empty
+registry, no published artifacts) so it can register, commit the registry-only
+``R`` commit, execute, publish, and replay-verify run-001 — consuming the id only
+in the throwaway clone. The real repository is never touched.
 
 The ``_running_package_root`` patch is the only accommodation: it points the
 package-root pre-check at the clone's own ``src`` (byte-identical to the running
@@ -17,6 +18,7 @@ still genuinely proven against the clone's HEAD.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -53,7 +55,26 @@ def _patch_package_root(mp: pytest.MonkeyPatch, clone: Path) -> None:
     )
 
 
+def _restore_clone_to_pristine(clone: Path) -> None:
+    """Reset the clone's ``research/m3b`` tree to the pre-run (pristine) state.
+
+    ``make_m3a_checkout`` clones the real repository, which now carries the
+    committed, single-use run-001. The rehearsal must start from a pristine M3B
+    tree — an empty registry and no published artifacts — to register and execute
+    the id inside the throwaway clone, so this truncates the registry and removes
+    the published outputs, then commits so the tracked tree is clean.
+    """
+    (clone / M3B_REGISTRY_RELPATH).write_bytes(b"")
+    for rel in (FRACTIONAL_RESULTS_RELPATH, FRACTIONAL_REPORT_RELPATH):
+        (clone / rel).unlink(missing_ok=True)
+    shutil.rmtree(clone / "research/m3b/experiments", ignore_errors=True)
+    _git(clone, "add", "-A", "research/m3b")
+    if _git(clone, "status", "--porcelain"):
+        _git(clone, "commit", "--quiet", "-m", "restore clone M3B tree to pristine (pre-run)")
+
+
 def _register_commit_execute(clone: Path) -> tuple[str, ...]:
+    _restore_clone_to_pristine(clone)
     with pytest.MonkeyPatch.context() as mp:
         _patch_package_root(mp, clone)
         register_fractional_run(clone, event_time_utc=_RUN_TIME)
@@ -157,6 +178,7 @@ class TestPreconditionRefusals:
 
     def test_pristine_clone_replays_as_pristine(self, tmp_path: Path) -> None:
         clone = make_m3a_checkout(tmp_path)
+        _restore_clone_to_pristine(clone)  # the real repo now carries run-001
         state, *checks = check_replay(clone)
         assert state == "pristine"
         assert "no_run_no_artifacts" in checks
