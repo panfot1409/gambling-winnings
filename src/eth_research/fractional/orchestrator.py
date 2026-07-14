@@ -37,6 +37,12 @@ from eth_research.fractional.archive import (
     bundle_sha256,
     verify_published_run,
 )
+from eth_research.fractional.completion import (
+    CompletionArtifact,
+    CompletionIntent,
+    clear_completion_intent,
+    write_completion_intent,
+)
 from eth_research.fractional.dataset import verify_dataset_integrity_only
 from eth_research.fractional.experiment import (
     build_fractional_results,
@@ -47,6 +53,13 @@ from eth_research.fractional.protocol import (
     FRACTIONAL_PROTOCOL_RELPATH,
     RUN_001_EXPERIMENT_ID,
     load_fractional_protocol,
+)
+from eth_research.fractional.recovery import (
+    STATE_ALREADY_FINALIZED,
+    STATE_FINALIZABLE,
+)
+from eth_research.fractional.recovery import (
+    assess as assess_recovery,
 )
 from eth_research.fractional.registry import (
     EVENT_COMPLETED,
@@ -305,6 +318,21 @@ def execute_and_publish_fractional_run(
     try:
         checks = _run_and_publish(root, pre, registered, started, event_time_utc)
     except Exception as exc:
+        # R1: never mislabel a published success as 'failed'. If publication
+        # durably landed — the completion intent is present and every recorded
+        # artifact is verified on disk — the run is finalizable calculation-free,
+        # so refuse to record 'failed' and direct the operator to the recovery
+        # finalizer instead of consuming the id on a run that actually published.
+        recovery = assess_recovery(root)
+        if recovery.state in (STATE_FINALIZABLE, STATE_ALREADY_FINALIZED):
+            raise OrchestratorError(
+                f"run published but 'completed' was not appended before the failure ({exc}); "
+                "finalize calculation-free with "
+                "`python -m eth_research.fractional.recovery --repo-root <root> --finalize`"
+            ) from exc
+        # A genuine pre-publication failure: discard any unfulfilled intent and
+        # record an honest 'failed' event, consuming the single-use id.
+        clear_completion_intent(root)
         failed = dataclasses.replace(
             registered,
             event=EVENT_FAILED,
@@ -386,8 +414,10 @@ def _run_and_publish(
             if (published_root / relpath).read_bytes() != expected:
                 raise OrchestratorError(f"byte-readback mismatch for {relpath}")
 
-    publish_batch(root, artifacts, verify=_readback)
-
+    # Build the exact 'completed' event now: it chains onto the 'started' line
+    # (nothing appends between 'started' and 'completed'), so its
+    # previous_event_sha256 is the started line's digest.
+    started_line_sha = sha256_bytes(started.to_json_line()[:-1])
     completed = dataclasses.replace(
         registered,
         event=EVENT_COMPLETED,
@@ -395,8 +425,28 @@ def _run_and_publish(
         results_json_sha256=results_sha,
         report_markdown_sha256=report_sha,
         result_bundle_sha256=bundle,
-        previous_event_sha256=latest_registry_line_sha256(root / M3B_REGISTRY_RELPATH),
+        previous_event_sha256=started_line_sha,
     )
+
+    # Record a durable completion intent BEFORE publishing (R1): a crash after
+    # publication but before the 'completed' append is then finalizable
+    # calculation-free from the recorded event bytes and artifact digests, and the
+    # orchestrator's failure path can tell a published success from a real failure.
+    intent = CompletionIntent(
+        experiment_id=RUN_001_EXPERIMENT_ID,
+        completed_event_line=completed.to_json_line()[:-1],
+        previous_event_sha256=started_line_sha,
+        artifacts=(
+            CompletionArtifact(FRACTIONAL_RESULTS_RELPATH, results_sha),
+            CompletionArtifact(FRACTIONAL_REPORT_RELPATH, report_sha),
+            CompletionArtifact(FRACTIONAL_MANIFEST_RELPATH, sha256_bytes(manifest_bytes)),
+        ),
+    )
+    write_completion_intent(root, intent)
+
+    publish_batch(root, artifacts, verify=_readback)
+
     append_registry_event(root / M3B_REGISTRY_RELPATH, completed)
+    clear_completion_intent(root)
 
     return verify_published_run(root)
