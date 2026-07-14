@@ -57,12 +57,16 @@ class ArchiveV2Error(RuntimeError):
     """The run-001 immutable archive v2 is missing, incomplete, or inconsistent."""
 
 
-def _completed_event_sha256(root: Path) -> str:
+def _completed_run001_event(root: Path) -> Any:
     events = read_registry(root / M3B_REGISTRY_RELPATH)
     run_events = [e for e in events if e.experiment_id == RUN_001_EXPERIMENT_ID]
     if [e.event for e in run_events][-1:] != [EVENT_COMPLETED]:
         raise ArchiveV2Error("run-001 has no terminal 'completed' registry event")
-    return sha256_bytes(run_events[-1].to_json_line()[:-1])
+    return run_events[-1]
+
+
+def _completed_event_sha256(root: Path) -> str:
+    return sha256_bytes(_completed_run001_event(root).to_json_line()[:-1])
 
 
 def build_archive_v2(repo_root: str | Path) -> dict[str, Any]:
@@ -165,6 +169,20 @@ def verify_archive_v2(repo_root: str | Path) -> tuple[str, ...]:
     if committed != render_archive_v2(root):
         raise ArchiveV2Error("archive_v2.json does not re-derive from the live singletons/manifest")
 
+    # The certified digests live in the hash-chained registry 'completed' event,
+    # which is immutable and cannot be forged without breaking the chain. Anchor
+    # the archived copies to THOSE (not only to the mutable manifest), so a
+    # coordinated singleton+copy+manifest+record tamper is still caught here.
+    completed = _completed_run001_event(root)
+    if payload["completed_event_sha256"] != sha256_bytes(completed.to_json_line()[:-1]):
+        raise ArchiveV2Error("archive_v2 completed_event_sha256 disagrees with the registry line")
+    if payload["bundle_sha256"] != completed.result_bundle_sha256:
+        raise ArchiveV2Error("archive_v2 bundle disagrees with the registry 'completed' event")
+    certified = {
+        "results": completed.results_json_sha256,
+        "report": completed.report_markdown_sha256,
+    }
+
     for artifact in payload["artifacts"]:
         source = root / artifact["source_path"]
         archived = root / artifact["archive_path"]
@@ -175,8 +193,13 @@ def verify_archive_v2(repo_root: str | Path) -> tuple[str, ...]:
             raise ArchiveV2Error(
                 f"archived copy {artifact['archive_path']} is not byte-identical to its singleton"
             )
-        if sha256_bytes(archived_bytes) != artifact["sha256"]:
+        digest = sha256_bytes(archived_bytes)
+        if digest != artifact["sha256"]:
             raise ArchiveV2Error(f"archived copy {artifact['archive_path']} digest disagrees")
+        if digest != certified.get(artifact["role"]):
+            raise ArchiveV2Error(
+                f"archived {artifact['role']} digest disagrees with the registry 'completed' event"
+            )
     return (
         "archive_v2_canonical",
         "archive_v2_rederives",
