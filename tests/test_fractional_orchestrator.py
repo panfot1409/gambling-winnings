@@ -34,6 +34,7 @@ from eth_research.fractional.orchestrator import (
     register_fractional_run,
 )
 from eth_research.fractional.registry import M3B_REGISTRY_RELPATH, read_registry
+from eth_research.fractional.replay import check_replay
 from eth_research.fractional.results import (
     FRACTIONAL_REPORT_RELPATH,
     FRACTIONAL_RESULTS_RELPATH,
@@ -114,6 +115,16 @@ class TestSuccessfulLifecycle:
         for ledger in (_GATE_LEDGER, _HOLDOUT_LEDGER):
             assert sha256_file(clone / ledger) == _EMPTY_SHA
 
+    def test_completed_state_replays_byte_for_byte(
+        self, published: tuple[Path, tuple[str, ...]]
+    ) -> None:
+        clone, _ = published
+        state, *checks = check_replay(clone)
+        assert state == "completed"
+        assert "results_reproduced" in checks
+        assert "report_reproduced" in checks
+        assert "archive_verified" in checks
+
     def test_second_execution_is_refused(
         self, published: tuple[Path, tuple[str, ...]]
     ) -> None:
@@ -147,3 +158,9 @@ class TestPreconditionRefusals:
             _patch_package_root(mp, clone)
             with pytest.raises(OrchestratorError, match="not byte-empty"):
                 register_fractional_run(clone, event_time_utc=_RUN_TIME)
+
+    def test_pristine_clone_replays_as_pristine(self, tmp_path: Path) -> None:
+        clone = make_m3a_checkout(tmp_path)
+        state, *checks = check_replay(clone)
+        assert state == "pristine"
+        assert "no_run_no_artifacts" in checks
