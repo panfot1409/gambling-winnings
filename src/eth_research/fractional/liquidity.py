@@ -69,14 +69,27 @@ def estimate_liquidity(
     ``lookback`` of those rows form the window. ``close`` and ``volume`` of the
     current or any future bar are never read.
     """
+    if isinstance(lookback, bool) or isinstance(min_observations, bool):
+        raise LiquidityError("lookback and min_observations must be integers, not booleans")
     if lookback <= 0 or min_observations <= 0:
         raise LiquidityError("lookback and min_observations must be positive")
+    if min_observations > lookback:
+        raise LiquidityError("min_observations must be <= lookback")
     if "close" not in frame.columns or "volume" not in frame.columns:
         raise LiquidityError("frame must carry 'close' and 'volume' columns")
+
+    # Validate as_of BEFORE any index comparison: a naive/non-UTC as_of would
+    # otherwise raise an incidental pandas TypeError from the `< as_of` slice.
+    if not isinstance(as_of, pd.Timestamp) or as_of.tz is None:
+        raise LiquidityError(f"as_of must be a tz-aware UTC timestamp, got {as_of!r}")
+    if not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
+        raise LiquidityError("liquidity history must have a tz-aware UTC DatetimeIndex")
 
     lagged = frame.loc[frame.index < as_of]
     if not lagged.index.is_monotonic_increasing:
         raise LiquidityError("liquidity history index is not monotonically increasing")
+    if not lagged.index.is_unique:
+        raise LiquidityError("liquidity history has duplicate timestamps (no repair)")
 
     window = lagged.tail(lookback)
     count = len(window)

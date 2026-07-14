@@ -116,22 +116,18 @@ class TestR4ResultsParserStrictness:
 # R5 — invalid accounting values must not cross the domain boundary
 # ---------------------------------------------------------------------------
 class TestR5AccountingStrictness:
-    @pytest.mark.xfail(reason="R5: PortfolioState has no NaN/inf validation", strict=True)
     def test_nan_cash_state_is_rejected(self) -> None:
         with pytest.raises(_REJECT):
             PortfolioState(cash=float("nan"), quantity=0.0)
 
-    @pytest.mark.xfail(reason="R5: PortfolioState has no finiteness validation", strict=True)
     def test_inf_quantity_state_is_rejected(self) -> None:
         with pytest.raises(_REJECT):
             PortfolioState(cash=0.0, quantity=float("inf"))
 
-    @pytest.mark.xfail(reason="R5: equity_at returns NaN instead of refusing", strict=True)
     def test_equity_at_nan_close_is_rejected(self) -> None:
         with pytest.raises(_REJECT):
             equity_at(PortfolioState(cash=100.0, quantity=1.0), float("nan"))
 
-    @pytest.mark.xfail(reason="R5: Tolerances accepts a NaN tolerance", strict=True)
     def test_nan_tolerance_is_rejected(self) -> None:
         with pytest.raises(_REJECT):
             dataclasses.replace(DEFAULT_TOLERANCES, cash_tolerance=float("nan"))
@@ -141,7 +137,6 @@ class TestR5AccountingStrictness:
 # R6 — invalid liquidity configuration/history must be refused
 # ---------------------------------------------------------------------------
 class TestR6LiquidityStrictness:
-    @pytest.mark.xfail(reason="R6: naive as_of is not an explicit LiquidityError", strict=True)
     def test_naive_as_of_is_rejected_explicitly(self) -> None:
         # It is currently rejected only incidentally (pandas tz-compare TypeError);
         # the closure requires an explicit LiquidityError.
@@ -149,7 +144,6 @@ class TestR6LiquidityStrictness:
         with pytest.raises(LiquidityError):
             estimate_liquidity(frame, pd.Timestamp("2020-01-05"), lookback=3, min_observations=2)
 
-    @pytest.mark.xfail(reason="R6: duplicate history timestamps are not refused", strict=True)
     def test_duplicate_history_is_rejected(self) -> None:
         frame = _tiny_frame()
         dup = pd.concat([frame.iloc[:3], frame.iloc[2:3]])
@@ -182,7 +176,6 @@ class TestR7EngineBoundaryStrictness:
         with pytest.raises(_REJECT):
             run_fractional_backtest(frame, strat, COMPATIBILITY_V1, initial_cash=10_000.0)
 
-    @pytest.mark.xfail(reason="R7: duplicate-timestamp frame not refused", strict=True)
     def test_duplicate_timestamp_frame_is_rejected(self) -> None:
         frame = _tiny_frame()
         dup = pd.concat([frame.iloc[:1], frame])  # duplicate first timestamp
