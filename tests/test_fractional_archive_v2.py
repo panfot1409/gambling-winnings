@@ -83,8 +83,10 @@ def test_coordinated_tamper_with_untouched_registry_is_caught(tmp_path: Path) ->
     # Only the hash-chained registry 'completed' event still carries the original
     # certified digests, so the registry anchor must reject this.
     root = _copy_m3b(tmp_path)
-    tampered = (root / FRACTIONAL_RESULTS_RELPATH).read_bytes().replace(
-        b'"marked_total_return"', b'"marked_total_retvrn"', 1
+    tampered = (
+        (root / FRACTIONAL_RESULTS_RELPATH)
+        .read_bytes()
+        .replace(b'"marked_total_return"', b'"marked_total_retvrn"', 1)
     )
     (root / FRACTIONAL_RESULTS_RELPATH).write_bytes(tampered)
     (root / _ARCHIVED_RESULTS).write_bytes(tampered)
