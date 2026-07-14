@@ -1,0 +1,13 @@
+{
+  "bundle_sha256": "c4ed0b6d06f97d7a215a0ea28f6e2a0b978c2e14268ffa4b8cf67bb1532f4a16",
+  "experiment_family": "m3b-fractional-execution-risk-v1",
+  "experiment_id": "m3b-fractional-execution-risk-v1-run-001",
+  "manifest_schema_version": 1,
+  "package_version": "0.5.0",
+  "registered_event_sha256": "30f53601dd4df7fbb5b9b33dc51c84e84915928e1668f3a756382b0f15736d60",
+  "report_path": "research/m3b/fractional_report.md",
+  "report_sha256": "68501639e7ba0660c7114c5b502861996b25bc0dff7e136500f4aca28260ae96",
+  "results_path": "research/m3b/fractional_results.json",
+  "results_sha256": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc",
+  "started_event_sha256": "86436e8149d229bd46db34d5fbcb437061279b94d8934b8c429475645eb9a529"
+}
