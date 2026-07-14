@@ -154,14 +154,25 @@ class TestPartialFills:
         assert result.executed_quantity == 0.0
         assert result.fill is None
 
-    def test_dust_trade_is_dropped(self) -> None:
+    def test_dust_below_notional_floor_is_an_honest_partial(self) -> None:
         # E=500; a target 1.5e-9 above w0 clears the no-trade band but the solved
-        # notional (~7.5e-7) is below the 1e-6 notional floor -> dust, not partial.
+        # notional (~7.5e-7) is below the 1e-6 notional floor, so the trade is
+        # dropped to avoid churn. Because the untraded weight gap (1.5e-9) still
+        # exceeds weight_tolerance, honesty is on the weight scale: it is reported
+        # as a partial, never a silent no-trade that would fail the reconciler.
         state = PortfolioState(cash=500.0, quantity=0.0)
         result = _solve(state, 100.0, 1.5e-9)
-        assert result.reason == "no_trade_dust"
-        assert not result.partial
+        assert result.reason == "partial_dust_below_notional_floor"
+        assert result.partial
         assert result.executed_quantity == 0.0
+        assert abs(result.target_error) > TOL.weight_tolerance
+
+    def test_within_band_target_is_a_clean_no_trade(self) -> None:
+        # A target within the no-trade band is a genuine no-trade (not dust).
+        state = PortfolioState(cash=500.0, quantity=0.0)
+        result = _solve(state, 100.0, 0.5e-9)
+        assert result.reason == "no_trade_band"
+        assert not result.partial
 
 
 class TestInvariantsAndMonotonicity:

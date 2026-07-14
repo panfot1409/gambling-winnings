@@ -133,6 +133,14 @@ def run_fractional_backtest(
         raise EngineError("cannot backtest an empty frame")
     if initial_cash <= 0.0:
         raise EngineError(f"initial_cash must be positive, got {initial_cash!r}")
+    if context is not None and not context.empty and context.index.max() >= frame.index.min():
+        # Defense in depth: warm-up context must be a strictly-past prefix, so a
+        # future / out-of-sample row can never enter signal, liquidity, or
+        # volatility estimation through the context path.
+        raise EngineError(
+            "context must be strictly before the frame "
+            "(context.index.max() must be < frame.index.min())"
+        )
 
     full = frame if context is None or context.empty else pd.concat([context, frame])
     context_bars = len(full) - len(frame)

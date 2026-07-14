@@ -163,3 +163,21 @@ class TestSolverInterface:
         buy, _sell, _fee_rate, cap = solver_prices(COMPATIBILITY_V1, 100.0, None)
         assert cap == math.inf
         assert buy(3.0) == pytest.approx(100.05)  # no impact, needs no liquidity
+
+
+class TestScenarioValidation:
+    def test_negative_rate_is_rejected(self) -> None:
+        with pytest.raises(CostModelError, match="non-negative"):
+            dataclasses.replace(CAUSAL_PROXY_BASE, base_slippage_rate=-0.001)
+
+    def test_concession_at_least_one_is_rejected(self) -> None:
+        with pytest.raises(CostModelError, match="< 1"):
+            dataclasses.replace(CAUSAL_PROXY_BASE, impact_cap=1.0)
+
+    def test_non_positive_max_participation_is_rejected(self) -> None:
+        with pytest.raises(CostModelError, match="max_participation"):
+            dataclasses.replace(CAUSAL_PROXY_BASE, max_participation=0.0)
+
+    def test_cost_breakdown_rejects_negative_quantity(self) -> None:
+        with pytest.raises(CostModelError, match="quantity"):
+            cost_breakdown(CAUSAL_PROXY_BASE, 100.0, "buy", -1.0, 1_000_000.0)

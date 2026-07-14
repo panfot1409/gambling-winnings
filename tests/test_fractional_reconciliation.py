@@ -81,6 +81,33 @@ class TestReconciliation:
         with pytest.raises(ReconciliationError, match="equity"):
             reconcile_result(tampered, COMPATIBILITY_V1)
 
+    def test_tampered_terminal_liquidation_is_caught(self) -> None:
+        result = run_fractional_backtest(
+            _frame(),
+            STRATEGIES_BY_NAME["buy_and_hold"],
+            CAUSAL_PROXY_BASE,
+            initial_cash=INITIAL_CASH,
+        )
+        tampered = dataclasses.replace(
+            result, terminal_liquidation_equity=result.terminal_liquidation_equity + 100.0
+        )
+        with pytest.raises(ReconciliationError, match="terminal liquidation"):
+            reconcile_result(tampered, CAUSAL_PROXY_BASE)
+
+    def test_tampered_fill_ledger_is_caught(self) -> None:
+        result = run_fractional_backtest(
+            _frame(),
+            STRATEGIES_BY_NAME["buy_and_hold"],
+            COMPATIBILITY_V1,
+            initial_cash=INITIAL_CASH,
+        )
+        assert result.num_fills >= 1
+        fills = list(result.fills)
+        fills[0] = dataclasses.replace(fills[0], cash_after=fills[0].cash_after + 500.0)
+        tampered = dataclasses.replace(result, fills=tuple(fills))
+        with pytest.raises(ReconciliationError, match="fill ledger legs"):
+            reconcile_result(tampered, COMPATIBILITY_V1)
+
 
 class TestMetrics:
     def test_cash_strategy_is_flat(self) -> None:

@@ -164,3 +164,17 @@ class TestValidation:
                 COMPATIBILITY_V1,
                 initial_cash=0.0,
             )
+
+    def test_context_not_strictly_before_frame_is_rejected(self) -> None:
+        # Defense in depth: a context overlapping/following the frame could leak a
+        # future row into signal/liquidity/volatility estimation and is refused.
+        frame = _synthetic_frame(n=80)
+        bad_context = frame.iloc[-10:]  # overlaps the frame in time
+        with pytest.raises(EngineError, match="context must be strictly before"):
+            run_fractional_backtest(
+                frame,
+                STRATEGIES_BY_NAME["cash"],
+                COMPATIBILITY_V1,
+                initial_cash=INITIAL_CASH,
+                context=bad_context,
+            )

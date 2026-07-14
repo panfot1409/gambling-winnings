@@ -48,6 +48,25 @@ class CostScenario:
     liquidity_min_observations: int
     max_participation: float | None
 
+    def __post_init__(self) -> None:
+        for label, rate in (
+            ("fee_rate", self.fee_rate),
+            ("half_spread_rate", self.half_spread_rate),
+            ("base_slippage_rate", self.base_slippage_rate),
+            ("impact_coefficient", self.impact_coefficient),
+            ("impact_cap", self.impact_cap),
+        ):
+            if not math.isfinite(rate) or rate < 0.0:
+                raise CostModelError(f"{label} must be a non-negative finite rate, got {rate!r}")
+        if self.half_spread_rate + self.base_slippage_rate + self.impact_cap >= 1.0:
+            raise CostModelError(
+                f"scenario {self.name!r}: spread + slippage + impact_cap must be < 1"
+            )
+        if self.liquidity_lookback <= 0 or self.liquidity_min_observations <= 0:
+            raise CostModelError("liquidity lookback and min_observations must be positive")
+        if self.max_participation is not None and self.max_participation <= 0.0:
+            raise CostModelError("max_participation must be positive or None")
+
 
 COMPATIBILITY_V1 = CostScenario(
     name="compatibility_v1",
@@ -164,6 +183,8 @@ def cost_breakdown(
     lagged_dollar_volume: float | None,
 ) -> CostBreakdown:
     """The full additive cost decomposition of a fill of ``quantity`` ETH."""
+    if quantity < 0.0:
+        raise CostModelError(f"quantity must be non-negative, got {quantity!r}")
     reference_notional = quantity * reference_price
     impact_rate, participation = _impact_rate(scenario, reference_notional, lagged_dollar_volume)
     _concession_rate(scenario, impact_rate)  # validate < 1

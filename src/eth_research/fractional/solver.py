@@ -241,9 +241,7 @@ def solve_target_weight(
         endpoint_capped = False
 
     if executed * P < tol.notional_epsilon:
-        # A binding cap that leaves no executable size is an honest partial; an
-        # interior solution below the notional floor means the target is already
-        # effectively met, so churning would be dust.
+        # A binding cap that leaves no executable size is an honest partial.
         if endpoint_capped:
             return _no_trade(
                 state,
@@ -254,8 +252,16 @@ def solve_target_weight(
                 partial=True,
                 side=side,
             )
+        # An interior solution below the USD notional floor is dropped to avoid
+        # float-noise churn. Honesty is on the WEIGHT scale, not the notional
+        # scale: it is a genuine partial iff the untraded weight gap still exceeds
+        # the weight tolerance (at small equity a real weight move can require a
+        # sub-floor notional), so the flag never disagrees with the reconciler.
+        dust_gap = abs(w0 - executable_target)
+        dust_partial = dust_gap > tol.weight_tolerance
+        reason = "partial_dust_below_notional_floor" if dust_partial else "no_trade_dust"
         return _no_trade(
-            state, P, requested, executable_target, "no_trade_dust", partial=False, side=side
+            state, P, requested, executable_target, reason, partial=dust_partial, side=side
         )
 
     price = buy_price(executed) if side == "buy" else sell_price(executed)

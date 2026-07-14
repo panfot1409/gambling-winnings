@@ -21,7 +21,7 @@ from eth_research.fractional.accounting import (
     Tolerances,
     weight_at_reference,
 )
-from eth_research.fractional.cost_model import CostScenario, cost_breakdown
+from eth_research.fractional.cost_model import CostScenario, cost_breakdown, fill_price
 from eth_research.fractional.engine import FractionalBacktestResult
 
 
@@ -58,6 +58,9 @@ def reconcile_result(
     max_equity_residual = 0.0
     max_exposure_residual = 0.0
     notional_tol = 1e-9
+    prev_cash = result.initial_cash
+    prev_quantity = 0.0
+    matched_fills = 0
 
     for i, bar in enumerate(result.bars):
         # Series entries must equal the bar records exactly.
@@ -120,6 +123,53 @@ def reconcile_result(
             ):
                 raise ReconciliationError(f"bar {i}: cost decomposition does not sum")
 
+        # Inter-bar transition: re-derive this bar's cash/ETH from the PREVIOUS
+        # bar plus this bar's fill, and cross-check the fill's ledger legs. This
+        # is the only check that treats the state series as derived (from the
+        # fills) rather than as trusted primitives.
+        if bar.side is not None and bar.fill_price is not None and bar.executed_quantity > 0.0:
+            fill_notional = bar.executed_quantity * bar.fill_price
+            if bar.side == "buy":
+                expected_quantity = prev_quantity + bar.executed_quantity
+                expected_cash = prev_cash - fill_notional - bar.fee
+            else:
+                expected_quantity = prev_quantity - bar.executed_quantity
+                expected_cash = prev_cash + fill_notional - bar.fee
+            if matched_fills >= len(result.fills):
+                raise ReconciliationError(f"bar {i}: an executed bar has no fill in the ledger")
+            fill = result.fills[matched_fills]
+            matched_fills += 1
+            legs_ok = (
+                fill.cash_before == prev_cash
+                and fill.quantity_before == prev_quantity
+                and fill.cash_after == bar.cash_after
+                and fill.quantity_after == bar.quantity_after
+                and fill.fee == bar.fee
+                and fill.fill_price == bar.fill_price
+                and fill.quantity == bar.executed_quantity
+            )
+            if not legs_ok:
+                raise ReconciliationError(f"bar {i}: fill ledger legs disagree with the bar")
+        else:
+            expected_quantity = prev_quantity
+            expected_cash = prev_cash
+        if abs(expected_cash - bar.cash_after) > tol.cash_tolerance:
+            raise ReconciliationError(
+                f"bar {i}: cash transition {expected_cash!r} != recorded {bar.cash_after!r}"
+            )
+        if abs(expected_quantity - bar.quantity_after) > tol.quantity_tolerance:
+            raise ReconciliationError(
+                f"bar {i}: ETH transition {expected_quantity!r} != recorded {bar.quantity_after!r}"
+            )
+        prev_cash = bar.cash_after
+        prev_quantity = bar.quantity_after
+
+    # Every fill record must correspond to exactly one executed bar.
+    if matched_fills != len(result.fills):
+        raise ReconciliationError(
+            f"fill ledger has {len(result.fills)} entries but {matched_fills} executed bars"
+        )
+
     # Fees: the fill records and the bar records agree with the fill total.
     fill_fees = sum(f.fee for f in result.fills)
     bar_fees = sum(bar.fee for bar in result.bars)
@@ -127,13 +177,23 @@ def reconcile_result(
         raise ReconciliationError(f"fill fees {fill_fees!r} != bar fees {bar_fees!r}")
     traded_notional = sum(f.fill_notional for f in result.fills)
 
-    # Terminal equity re-derives from the compounded per-bar returns.
-    compounded = result.initial_cash
-    for i in range(len(equity_vals)):
-        previous = result.initial_cash if i == 0 else equity_vals[i - 1]
-        compounded = previous * (equity_vals[i] / previous)
-    if abs(compounded - float(result.equity.iloc[-1])) > tol.cash_tolerance:
-        raise ReconciliationError("compounded equity path disagrees with the terminal equity")
+    # The terminal hypothetical liquidation re-derives from the final book, the
+    # last close, and the last lagged liquidity (a reported financial number no
+    # other check validates). It adds no actual fill.
+    last = result.bars[-1]
+    if last.quantity_after <= 0.0:
+        expected_liquidation = last.cash_after
+    else:
+        sell = fill_price(
+            scenario, last.close, "sell", last.quantity_after, last.lagged_dollar_volume
+        )
+        gross = last.quantity_after * sell
+        expected_liquidation = last.cash_after + gross - gross * scenario.fee_rate
+    if abs(expected_liquidation - result.terminal_liquidation_equity) > tol.cash_tolerance:
+        raise ReconciliationError(
+            f"terminal liquidation {result.terminal_liquidation_equity!r} does not re-derive "
+            f"({expected_liquidation!r})"
+        )
 
     return ReconciliationReport(
         bars_checked=len(result.bars),
@@ -150,7 +210,8 @@ def reconcile_result(
             "achieved_equals_reference_weight",
             "converged_reaches_executable",
             "cost_decomposition",
+            "fill_ledger_transition",
             "fee_totals",
-            "terminal_equity_path",
+            "terminal_liquidation",
         ),
     )

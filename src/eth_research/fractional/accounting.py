@@ -73,20 +73,26 @@ def equity_at(state: PortfolioState, price: float) -> float:
     return state.cash + state.quantity * price
 
 
-def weight_at_reference(state: PortfolioState, reference_price: float) -> float:
+def weight_at_reference(
+    state: PortfolioState, reference_price: float, *, tol: Tolerances = DEFAULT_TOLERANCES
+) -> float:
     """The ETH weight ``Q * P / (C + Q * P)`` at the reference price ``P``.
 
     Both legs are marked at the same reference price, so this is the fraction of
-    reference-marked equity held in ETH. Returns ``0.0`` for a zero-equity or
-    all-cash state.
+    reference-marked equity held in ETH. The state must be a *legal* long-only
+    state (validated here); a within-tolerance negative cash or ETH — a float
+    artifact of the bit-exact accounting — can push the raw ratio a hair outside
+    ``[0, 1]``, so the definitionally long-only exposure is clamped to the
+    boundary it represents. An out-of-tolerance state is rejected, not clamped.
     """
     if reference_price <= 0.0:
         raise AccountingError(f"reference price must be positive, got {reference_price!r}")
+    validate_state(state, tol=tol)
     eth_value = state.quantity * reference_price
     equity = state.cash + eth_value
     if equity <= 0.0:
         raise AccountingError(f"non-positive reference equity {equity!r}")
-    return eth_value / equity
+    return min(1.0, max(0.0, eth_value / equity))
 
 
 def validate_state(state: PortfolioState, *, tol: Tolerances = DEFAULT_TOLERANCES) -> None:

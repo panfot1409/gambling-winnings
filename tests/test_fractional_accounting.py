@@ -136,3 +136,19 @@ def test_no_trade_leaves_state_unchanged() -> None:
     assert isinstance(fill, Fill)
     assert fill.quantity == 0.0
     assert fill.fee == 0.0
+
+
+class TestExposureClamp:
+    def test_within_tolerance_negative_cash_clamps_exposure_to_one(self) -> None:
+        # A -2e-7 cash (within cash_tolerance) after full investment is a float
+        # artifact; the long-only exposure is exactly 1.0, never > 1.
+        state = PortfolioState(cash=-2e-7, quantity=1.0)
+        assert weight_at_reference(state, 100.0) == 1.0
+
+    def test_within_tolerance_negative_quantity_clamps_exposure_to_zero(self) -> None:
+        state = PortfolioState(cash=1.0, quantity=-1e-13)
+        assert weight_at_reference(state, 100.0) == 0.0
+
+    def test_out_of_tolerance_state_is_rejected_not_clamped(self) -> None:
+        with pytest.raises(AccountingError, match="cash"):
+            weight_at_reference(PortfolioState(cash=-1.0, quantity=1.0), 100.0)
