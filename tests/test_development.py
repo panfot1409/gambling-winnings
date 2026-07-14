@@ -68,8 +68,14 @@ class TestPartitionDerivation:
 
     def test_committed_partition_recomputes_byte_for_byte(self, real_manifest: Path) -> None:
         committed = PARTITION_PATH.read_bytes()
-        assert committed == build_development_partition(REPO_ROOT, real_manifest).to_json_bytes()
-        # And the dedicated verifier accepts it.
+        # The partition content is version-independent; recompute with the
+        # committed recorded version so a later package bump stays byte-identical.
+        recorded_version = load_development_partition(PARTITION_PATH).package_version
+        recomputed = build_development_partition(
+            REPO_ROOT, real_manifest, package_version=recorded_version
+        ).to_json_bytes()
+        assert committed == recomputed
+        # And the dedicated verifier accepts it (it binds the committed version).
         verify_development_partition(REPO_ROOT, real_manifest)
 
     def test_partition_binds_the_frozen_m2_dossier(self, real_manifest: Path) -> None:

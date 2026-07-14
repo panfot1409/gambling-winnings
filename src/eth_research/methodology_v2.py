@@ -419,12 +419,18 @@ class MethodologyProtocolV2:
         )
 
 
-def build_methodology_v2() -> MethodologyProtocolV2:
-    """The canonical v2 methodology artifact, from the pinned constants."""
+def build_methodology_v2(package_version: str = __version__) -> MethodologyProtocolV2:
+    """The canonical v2 methodology artifact, from the pinned constants.
+
+    ``package_version`` defaults to the running package version so a fresh
+    build stamps this code's own version; a reproduction of the committed
+    artifact binds the version it recorded so a later package bump leaves the
+    committed bytes byte-identical (the artifact content is version-independent).
+    """
     return MethodologyProtocolV2(
         methodology_schema_version=METHODOLOGY_SCHEMA_VERSION,
         methodology_id=METHODOLOGY_ID,
-        package_version=__version__,
+        package_version=package_version,
         experiment_family=EXPERIMENT_FAMILY_V2,
         corrects_experiment_family=EXPERIMENT_FAMILY_V1,
         permitted_data_level=PERMITTED_DATA_LEVEL,

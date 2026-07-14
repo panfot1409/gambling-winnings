@@ -24,9 +24,12 @@ REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 class TestCommittedArtifact:
     def test_committed_bytes_reproduce_and_parse(self) -> None:
         committed = REPO_ROOT / METHODOLOGY_PROTOCOL_V2_RELPATH
-        assert committed.read_bytes() == build_methodology_v2().to_json_bytes()
+        # The methodology content is version-independent: rebuild with the
+        # committed recorded version so a later package bump stays byte-identical.
         loaded = load_methodology_v2(committed)
-        assert loaded == build_methodology_v2()
+        rebuilt = build_methodology_v2(package_version=loaded.package_version)
+        assert committed.read_bytes() == rebuilt.to_json_bytes()
+        assert loaded == rebuilt
 
     def test_binds_the_frozen_v1_protocol_by_hash(self) -> None:
         m = build_methodology_v2()

@@ -594,6 +594,7 @@ def evaluate_development(
     execution_code_commit_sha: str,
     registered_code_commit_sha: str,
     experiment_family_id: str,
+    package_version: str = __version__,
 ) -> DevelopmentResults:
     """Run the full research-train walk-forward and return the strict result."""
     return evaluate_development_detailed(
@@ -602,6 +603,7 @@ def evaluate_development(
         execution_code_commit_sha=execution_code_commit_sha,
         registered_code_commit_sha=registered_code_commit_sha,
         experiment_family_id=experiment_family_id,
+        package_version=package_version,
     ).results
 
 
@@ -612,12 +614,17 @@ def evaluate_development_detailed(
     execution_code_commit_sha: str,
     registered_code_commit_sha: str,
     experiment_family_id: str,
+    package_version: str = __version__,
 ) -> DevelopmentEvaluationDetail:
     """Run the walk-forward and return the strict result plus raw fold returns.
 
     Verifies the frozen M2 dossier, the committed development partition, and
     the committed walk-forward protocol before evaluating; touches no
     forbidden partition.
+
+    ``package_version`` defaults to the running version for a fresh evaluation;
+    a reproduction of a committed experiment binds the version that experiment
+    recorded so the result bytes stay byte-identical across a later package bump.
     """
     root = Path(repo_root)
     dataset: DevelopmentDataset = load_development_dataset(root, manifest_path)
@@ -684,7 +691,7 @@ def evaluate_development_detailed(
 
     results = DevelopmentResults(
         development_results_schema_version=DEVELOPMENT_RESULTS_SCHEMA_VERSION,
-        package_version=__version__,
+        package_version=package_version,
         execution_code_commit_sha=require_str(
             "execution_code_commit_sha", execution_code_commit_sha
         ),

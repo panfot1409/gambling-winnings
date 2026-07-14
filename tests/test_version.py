@@ -16,10 +16,12 @@ def test_package_metadata_and_dunder_version_agree() -> None:
     assert eth_research.__version__ == version("eth-research")
 
 
-def test_milestone_3a_development_version() -> None:
-    """Milestone 3A development code identifies itself as 0.4.0.
+def test_milestone_3b_development_version() -> None:
+    """Milestone 3B development code identifies itself as 0.5.0.
 
-    v0.3.0 marks the merged Milestone 2B release; 3A is the next
-    development version and is not tagged.
+    v0.3.0 marks the merged Milestone 2B release; 3A was development version
+    0.4.0; 3B is the next development version 0.5.0 and is not tagged. The frozen
+    M2B dossier still pins 0.3.0 and the committed M3A run-003 artifacts still
+    record 0.4.0 — both remain byte-identical under the 0.5.0 running package.
     """
-    assert eth_research.__version__ == "0.4.0"
+    assert eth_research.__version__ == "0.5.0"

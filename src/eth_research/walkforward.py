@@ -408,14 +408,23 @@ def build_fold_boundaries(research_train: pd.DataFrame) -> tuple[FoldBoundary, .
 
 
 def build_walk_forward_protocol(
-    research_train: pd.DataFrame, *, development_partition_sha256: str
+    research_train: pd.DataFrame,
+    *,
+    development_partition_sha256: str,
+    package_version: str = __version__,
 ) -> WalkForwardProtocol:
-    """Derive the pre-registered protocol from the research-train partition."""
+    """Derive the pre-registered protocol from the research-train partition.
+
+    ``package_version`` defaults to the running version for a fresh derivation;
+    a reproduction of the committed protocol binds the version it recorded so
+    a later package bump leaves the committed bytes byte-identical (the
+    protocol content is version-independent).
+    """
     from eth_research.data.provenance import content_fingerprint
 
     return WalkForwardProtocol(
         walk_forward_schema_version=WALK_FORWARD_SCHEMA_VERSION,
-        package_version=__version__,
+        package_version=package_version,
         development_partition_sha256=development_partition_sha256,
         research_train_content_fingerprint=content_fingerprint(research_train),
         research_train_row_count=len(research_train),

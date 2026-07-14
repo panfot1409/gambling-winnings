@@ -22,6 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from eth_research import __version__
 from eth_research.data.provenance import sha256_bytes
 from eth_research.development_evaluation import (
     evaluate_development,
@@ -92,12 +93,17 @@ def generate(
     execution_code_commit_sha: str,
     registered_code_commit_sha: str,
     experiment_family_id: str = EXPERIMENT_FAMILY_ID,
+    package_version: str = __version__,
 ) -> tuple[bytes, str]:
     """Return the deterministic (results JSON bytes, report markdown).
 
     Reconstructs the dataset from the committed raw bytes into a temporary
     directory (never a tracked path), runs the research-train walk-forward,
     and renders the report purely from the validated results model.
+
+    ``package_version`` defaults to the running version for a fresh generation;
+    reproducing a committed v1 experiment binds the version that experiment
+    recorded so its bytes stay byte-identical across a later package bump.
     """
     root = Path(repo_root)
     attempt_id = _canonical_attempt_id(root)
@@ -109,6 +115,7 @@ def generate(
             execution_code_commit_sha=execution_code_commit_sha,
             registered_code_commit_sha=registered_code_commit_sha,
             experiment_family_id=experiment_family_id,
+            package_version=package_version,
         )
     return results.to_json_bytes(), render_development_report(results)
 

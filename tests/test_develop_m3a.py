@@ -85,11 +85,14 @@ class TestCommittedArtifacts:
 
     def test_committed_results_reproduce(self) -> None:
         payload = load_development_results_payload(RUN002_RESULTS)
+        # Reproducing the committed v1 experiment binds the version it recorded,
+        # so a later package bump leaves run-002's bytes byte-identical.
         results_bytes, report_md = generate(
             REPO_ROOT,
             execution_code_commit_sha=payload["execution_code_commit_sha"],
             registered_code_commit_sha=payload["registered_code_commit_sha"],
             experiment_family_id=payload["experiment_family_id"],
+            package_version=payload["package_version"],
         )
         assert results_bytes == RUN002_RESULTS.read_bytes()
         assert report_md == RUN002_REPORT.read_text("utf-8")
