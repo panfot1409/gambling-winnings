@@ -175,3 +175,39 @@ regression test; green again on the completed tree).
   + two tests); the published results are unaffected and still reproduce
   byte-for-byte (they record the code-freeze commit's fingerprint, and formatting
   changes no computation).
+
+---
+
+## Trust-boundary closure (R1–R11)
+
+A closure/hardening pass over the committed run-001, closing engineering and
+provenance weaknesses **without changing any published financial result**. Every
+change is additive or validation-only; `python -m eth_research.fractional.replay
+--repo-root . --check` reports `completed: results_reproduced, report_reproduced,
+archive_verified` after every commit, and the results/report/manifest bytes are
+untouched. Each defect below was reproduced (as a failing test or an enumerated
+fact) before it was fixed.
+
+| id | defect | fix | verified by |
+| --- | --- | --- | --- |
+| R1 | a crash after publication but before the `completed` append had no durable recovery, and the blanket `except` recorded `failed` — mislabeling a published success | durable `CompletionIntent` written before publish + calculation-free `recovery` finalizer; the failure path now distinguishes a published-but-unfinalized run (recoverable, never `failed`) from a genuine pre-publication failure | `tests/test_fractional_recovery.py` (crash-injection matrix) |
+| R2 | the "archive" was only a manifest pointing at the mutable singletons — no independent immutable body | additive `experiments/run-001/immutable-v2/` with byte-identical copies + `archive_v2.json`; `verify_archive_v2` proves byte-identity to the singletons and the manifest/registry bindings | `tests/test_fractional_archive_v2.py` |
+| R3 | the manifest parser coerced digests via `str()` | strict `require_hex64` / `require_safe_relative_path` decode at the parse site | `tests/test_m3b_closure_repro.py::TestR3ManifestParserStrictness` |
+| R4 | the results parser repaired values via `int()/float()/str()` | `FractionalAggregate.from_dict` and `FractionalResults.from_json_bytes` decode through the shared `require_*` surface; parsing never repairs | `TestR4ResultsParserStrictness` |
+| R5 | invalid accounting values (NaN via `<` comparisons) could cross the boundary | `_finite` guards (bool/non-real/non-finite) before every sign comparison in accounting; strict `__post_init__` on the domain models | `TestR5AccountingStrictness` |
+| R6 | invalid cost/risk/liquidity configs were silently accepted | finiteness/bool/int guards on `CostScenario`, `CostBreakdown`, `RiskConfig`, `FractionalStrategy`, `DrawdownBreakerConfig`, and the liquidity `as_of` | `TestR6LiquidityStrictness` + cost/risk suites |
+| R7 | the public engine applied a signal positionally (a shuffled index leaked) | `_validate_signal` requires the signal's index to equal the frame's before `.to_numpy()`; OHLCV/context canonicality + contiguity enforced | `TestR7EngineBoundaryStrictness` |
+| R8 | the archive verifier did not fully verify the tree | `verify_m3b_run_archive` — a 24-check (25 with `--deep`) aggregate over every closure verifier | `tests/test_fractional_verify_run_archive.py` |
+| R9 | the `started` and `completed` lifecycle timestamps were identical | documented as a run-001 legacy artifact; lifecycle-v2 fixtures prove the registry supports (and validates) strictly increasing, distinct timestamps | `tests/test_fractional_lifecycle_v2.py` |
+| R10 | the report overstated cost monotonicity as universal (true only of fold medians) | append-only erratum with the exact statement hash + the complete full-precision cell-wise counterexample set (donchian_55_20 fold 1: base +90.668795% < stressed +91.348557%) | `tests/test_fractional_report_erratum.py` |
+| R11 | insufficient per-run return evidence (only aggregate summaries) | size-bounded, replay-reconstructible `execution_trace_commitments.json` committing every cell's per-bar trace digest | `tests/test_fractional_execution_trace.py` |
+
+### Additive artifacts (never modify a frozen byte)
+
+- `research/m3b/experiments/run-001/immutable-v2/` — byte-identical results/report copies + `archive_v2.json` (R2)
+- `research/m3b/execution_trace_commitments.json` — per-cell trace digests (R11)
+- `research/m3b/run001_legacy_completion_audit.json` — records run-001 predates the completion-intent mechanism (R1)
+- `research/m3b/artifact_annotations.jsonl` — hash-chained index of the above
+- `research/m3b/errata/` + `research/m3b/artifact_errata.jsonl` — the append-only report erratum (R10)
+
+All are indexed and re-verified by `python -m eth_research.fractional.verify_run_archive --repo-root . --deep`.

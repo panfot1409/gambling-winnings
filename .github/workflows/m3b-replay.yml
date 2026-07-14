@@ -53,6 +53,14 @@ jobs:
           test "$(sha256sum "$HOLDOUT_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
       - name: Dual-state replay (reproduce the fractional run byte-for-byte if present)
         run: uv run --no-sync --python 3.12.3 python -m eth_research.fractional.replay --repo-root . --check
+      - name: Comprehensive run-archive verification (deep, when the run is published)
+        run: |
+          set -euo pipefail
+          if [ -f research/m3b/fractional_results.json ]; then
+            uv run --no-sync --python 3.12.3 python -m eth_research.fractional.verify_run_archive --repo-root . --deep
+          else
+            echo "pristine tree: no published run to verify"
+          fi
       - name: Both sealed ledgers are byte-empty after
         run: |
           set -euo pipefail
