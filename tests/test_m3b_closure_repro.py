@@ -30,6 +30,7 @@ from eth_research.fractional.accounting import (
     equity_at,
 )
 from eth_research.fractional.archive import ArchiveError, FractionalArtifactManifest
+from eth_research.fractional.archive_v2 import verify_archive_v2
 from eth_research.fractional.cost_model import COMPATIBILITY_V1
 from eth_research.fractional.engine import EngineError, run_fractional_backtest
 from eth_research.fractional.liquidity import LiquidityError, estimate_liquidity
@@ -211,9 +212,17 @@ class TestR7EngineBoundaryStrictness:
 # R2 / R9 / R10 / R11 — passing evidence the closure documents
 # ---------------------------------------------------------------------------
 class TestClosureEvidence:
-    def test_r2_archive_body_is_only_a_manifest(self) -> None:
+    def test_r2_archive_has_a_genuine_immutable_body(self) -> None:
+        # R2 fixed: the run now has an independent, byte-identical immutable body
+        # (immutable-v2) beside the pointer manifest, not just a manifest.
         entries = sorted(p.name for p in (REPO / "research/m3b/experiments/run-001").iterdir())
-        assert entries == ["manifest.json"], entries  # no independent immutable body yet
+        assert entries == ["immutable-v2", "manifest.json"], entries
+        assert verify_archive_v2(REPO) == (
+            "archive_v2_canonical",
+            "archive_v2_rederives",
+            "archived_copies_byte_identical_to_singletons",
+            "archived_copies_bind_manifest_and_registry",
+        )
 
     def test_r9_started_and_completed_share_one_timestamp(self) -> None:
         events = read_registry(_REGISTRY)
@@ -233,8 +242,9 @@ class TestClosureEvidence:
         assert stressed > base, (base, stressed)
 
     def test_r11_only_aggregate_evidence_exists(self) -> None:
-        # No per-cell execution trace is retained beside the aggregate results.
-        assert not (REPO / "research/m3b/experiments/run-001/immutable-v2").exists()
+        # No per-cell execution-trace commitment is retained beside the aggregate
+        # results yet (R11 is closed by execution_trace_commitments.json later).
+        assert not (REPO / "research/m3b/execution_trace_commitments.json").exists()
         assert _RESULTS.exists()
         # a reviewer has only 75 aggregate cells, not the per-bar fill/cost path
         payload = json.loads(_RESULTS.read_bytes())
