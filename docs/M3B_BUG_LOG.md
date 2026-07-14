@@ -211,3 +211,25 @@ fact) before it was fixed.
 - `research/m3b/errata/` + `research/m3b/artifact_errata.jsonl` — the append-only report erratum (R10)
 
 All are indexed and re-verified by `python -m eth_research.fractional.verify_run_archive --repo-root . --deep`.
+
+### Closure red team (3 independent adversarial audit passes)
+
+Three independent read-only auditors reviewed the closure modules (recovery/R1;
+archive-v2/trace/annotations/R2/R11; erratum/verifier/strict-validation/R10/R3/R4).
+No auditor found an exploitable defect in the financial results, the crash-recovery
+core, or the R10 counterexample-completeness invariant. Every surfaced gap was in
+what a *verifier* enforced, not a data-tampering bypass; all genuine ones are fixed
+and regression-tested (commits `5ce9bbf`, `dfd2a94`).
+
+| # | pass | severity | finding | disposition |
+| --- | --- | --- | --- | --- |
+| A1 | archive | MEDIUM | `verify_archive_v2` anchored the archived copies only to the mutable manifest; a coordinated singleton+copy+manifest+record tamper (registry untouched) passed the standalone verifier | **fixed** — it now checks each copy's digest against the immutable, hash-chained `completed` event's certified digests |
+| A2 | recovery | LOW | `verify_published_run` ran inside the publish `try`; a post-completion failure was misrouted into the failure machinery | **fixed** — verify moved outside the `try` |
+| A3 | recovery | LOW | `recovery` CLI didn't catch field-level `ValueError` on a corrupt intent | **fixed** — CLI now catches it and fails closed cleanly |
+| A4 | recovery | LOW | the intent's artifact digests weren't cross-bound to the embedded `completed` event's certified digests | **fixed** — `CompletionIntent.__post_init__` cross-binds them |
+| A5 | recovery | LOW | the `failed` append wasn't best-effort | **fixed** — best-effort; the real cause always surfaces |
+| A6 | erratum | (gap) | `verify_m3b_run_archive` did not require the erratum to exist | **fixed** — the run-001 erratum is now mandatory |
+| A7 | erratum | (gap) | the "statement present verbatim" check accepted any report substring | **fixed** — `erroneous_statement` is pinned to the one canonical overbroad claim |
+| A8 | erratum | nit | the counterexample float guard didn't reject NaN/Inf | **fixed** — now rejects non-finite |
+| B1 | archive | LOW | `require_canonical_file_bytes` enforces only a trailing newline, not full canonical formatting | **accepted** — pre-existing shared helper; where used without a re-render (manifest load) the exact bytes are still pinned via `archive_v2.json`'s `manifest_sha256`, and every re-render verifier gates on byte-equality |
+| B2 | annotations | LOW | an append-only log's last line is unanchored, and an empty registry verifies vacuously | **accepted** — inherent to append-only logs (git-anchored); every annotated artifact is *independently* required and verified by the aggregate verifier, and the erratum is now mandatory, so no closure artifact can go missing undetected via the annotation index |
