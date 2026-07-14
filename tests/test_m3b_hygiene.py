@@ -18,6 +18,7 @@ import pytest
 from eth_research.data.provenance import sha256_file
 from eth_research.fractional.archive import FRACTIONAL_MANIFEST_RELPATH, verify_published_run
 from eth_research.fractional.archive_v2 import FRACTIONAL_ARCHIVE_V2_TRACKED
+from eth_research.fractional.execution_trace import EXECUTION_TRACE_COMMITMENTS_RELPATH
 from eth_research.fractional.legacy_completion_audit import FRACTIONAL_LEGACY_AUDIT_RELPATH
 from eth_research.fractional.protocol import FRACTIONAL_PROTOCOL_RELPATH
 from eth_research.fractional.registry import M3B_REGISTRY_RELPATH, read_registry
@@ -68,6 +69,7 @@ _ALLOWED_M3B_TRACKED: frozenset[str] = frozenset(
         FRACTIONAL_MANIFEST_RELPATH,
         M3B_REGISTRY_RELPATH,
         FRACTIONAL_LEGACY_AUDIT_RELPATH,
+        EXECUTION_TRACE_COMMITMENTS_RELPATH,
         *FRACTIONAL_ARCHIVE_V2_TRACKED,
     }
 )

@@ -34,6 +34,9 @@ build-constraint-dependencies = ["hatchling==1.31.0"]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
 filterwarnings = ["error"]
+markers = [
+    "slow: re-runs the full 75-cell fractional grid (deselect with -m 'not slow')",
+]
 
 [tool.ruff]
 target-version = "py312"

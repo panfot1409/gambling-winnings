@@ -22,6 +22,7 @@ import pandas as pd
 import pytest
 
 import eth_research
+from eth_research.data.provenance import sha256_bytes as _sha256_bytes
 from eth_research.data.schema import validate_ohlcv
 from eth_research.fractional.accounting import (
     DEFAULT_TOLERANCES,
@@ -33,6 +34,7 @@ from eth_research.fractional.archive import ArchiveError, FractionalArtifactMani
 from eth_research.fractional.archive_v2 import verify_archive_v2
 from eth_research.fractional.cost_model import COMPATIBILITY_V1
 from eth_research.fractional.engine import EngineError, run_fractional_backtest
+from eth_research.fractional.execution_trace import EXECUTION_TRACE_COMMITMENTS_RELPATH
 from eth_research.fractional.liquidity import LiquidityError, estimate_liquidity
 from eth_research.fractional.registry import read_registry
 from eth_research.fractional.results import FractionalResults
@@ -241,10 +243,13 @@ class TestClosureEvidence:
         # cellwise monotonic-decline would require stressed <= base; it does NOT hold
         assert stressed > base, (base, stressed)
 
-    def test_r11_only_aggregate_evidence_exists(self) -> None:
-        # No per-cell execution-trace commitment is retained beside the aggregate
-        # results yet (R11 is closed by execution_trace_commitments.json later).
-        assert not (REPO / "research/m3b/execution_trace_commitments.json").exists()
+    def test_r11_per_cell_trace_commitments_exist(self) -> None:
+        # R11 fixed: a size-bounded, replay-reconstructible commitment to every
+        # cell's per-bar execution trace is retained and binds the published results.
+        payload = json.loads((REPO / EXECUTION_TRACE_COMMITMENTS_RELPATH).read_bytes())
+        assert payload["cell_count"] == 75
+        results_sha = _sha256_bytes((REPO / _RESULTS).read_bytes())
+        assert payload["fractional_results_sha256"] == results_sha
         assert _RESULTS.exists()
         # a reviewer has only 75 aggregate cells, not the per-bar fill/cost path
         payload = json.loads(_RESULTS.read_bytes())

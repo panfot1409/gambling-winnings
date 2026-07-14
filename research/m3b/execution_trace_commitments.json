@@ -1,0 +1,614 @@
+{
+  "cell_count": 75,
+  "cells": [
+    {
+      "bar_count": 226,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 0,
+      "fold_index": 0,
+      "strategy": "cash",
+      "trace_sha256": "5e61488872147e2c955096e8331f65909dfff6a6b719b28e477a41288d546b01"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 1,
+      "fold_index": 0,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "4895ff56bf86070a25273e2a0106a59fceb049db05a24fd6d9b1d2103f0358a5"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 2,
+      "fold_index": 0,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "d063af38de85b37f146dc9bfeac578f51ba9253a422aed40d3ad73ef087b3862"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 226,
+      "fold_index": 0,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "75dc8a684a7a8f7d136387c027a08d19af3cc6596daeccde65c217069c05140b"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 23,
+      "fold_index": 0,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "7ffd03e635afab78f04fb3ec67ac5c7ea7353ec7b8c6a3273d39e179c3a548ad"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 0,
+      "fold_index": 0,
+      "strategy": "cash",
+      "trace_sha256": "77e0f945a6c8920a17fbe473748d148a28459d67bb173f19ef52f1c5e640a41c"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 1,
+      "fold_index": 0,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "7550d3f18fb5e7b734a60c873c716412128a461331097965942e4343c9622296"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 2,
+      "fold_index": 0,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "928ac41fae162235af9ae92b22a2d79a394f7b524616e6f9301da024762b91fd"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 226,
+      "fold_index": 0,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "8eed0ef9ada080379e9e6abc0283d019f7278b3c52655c5206d61b83f8f75691"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 23,
+      "fold_index": 0,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "6258ab5a094ddef38e38090e6eebdca64677c3608e2242e94c8d1e1ee8fd0425"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 0,
+      "fold_index": 0,
+      "strategy": "cash",
+      "trace_sha256": "a7cba95d73cd1843de2c03a1e92903377e91b992e7433db8448699a66c1ed596"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 1,
+      "fold_index": 0,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "563c7e25d5067ce4936793058b90dbe2140abc3e3d980667062cf3ce4c90d174"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 2,
+      "fold_index": 0,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "564ff5a3a72a2366c6e059ca51062abebcde688bd277ccbfefe9d831af2e6462"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 226,
+      "fold_index": 0,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "40962b6a4055fb6ac6edbae4d5d7eb18e9f9a74dd6e59918cf6bea7841206581"
+    },
+    {
+      "bar_count": 226,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 23,
+      "fold_index": 0,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "60457a5b066a0f4561b83fa3eafd372cc332fe63ad3f22b0bac9127622bb5886"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 0,
+      "fold_index": 1,
+      "strategy": "cash",
+      "trace_sha256": "d2723ae89ef044473adbf6e35abb6e37f0b1b29efa6a50e4c1f580a13c70bc4a"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 1,
+      "fold_index": 1,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "7e43748764478b0a29d23536905f54596b3c04ef28c6de9f035bff0e604a269b"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 3,
+      "fold_index": 1,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "b38703490372434a5631012974a028bf7ec09f0f37a4aa57af9f02ae38d4289d"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 211,
+      "fold_index": 1,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "e372a06ab01e9043a4cb892a9a8edc0afba04c0a8824787571b1ab80955c6451"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 103,
+      "fold_index": 1,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "3a31dd510a4c4e6eed769a5f87129f776dcd7e5904ab4ab0e9cee0a07bba3671"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 0,
+      "fold_index": 1,
+      "strategy": "cash",
+      "trace_sha256": "51c6472cd237b2b2e36fc5a0e6783e0fcc52083cb1f6465d41879ab4cbc67b9b"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 2,
+      "fold_index": 1,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "7eb7c67aab0444d663a3a4984ef3f5490b142db8214ef023757b0f221a433223"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 3,
+      "fold_index": 1,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "a0de2c2b14a8c0160e0f32572bb03ec57f9a1314df6387664168219f79748b7b"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 211,
+      "fold_index": 1,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "63401818b01ca45aa6e7557f9010ab3f7db364fee69cde8cff9a46d311669e66"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 103,
+      "fold_index": 1,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "726b646f7ff58b4cf0e344fc717d0da73189dd15fa922f0376c5c1cac511b2c5"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 0,
+      "fold_index": 1,
+      "strategy": "cash",
+      "trace_sha256": "d617ef2d593fb07d00fcfb686463e6d36e4e5e7c5fdfefb5fd6852a1f42e6af2"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 4,
+      "fold_index": 1,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "71d166832fcfff35038963ad14465fbeeea8a4a34bac97db5240851044135984"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 4,
+      "fold_index": 1,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "20487601fa3be2d9c45659acee5b6565e895f4396056605042017b41c8f09552"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 211,
+      "fold_index": 1,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "da0ff405091ce7d31c8dcde58820ad0d890e71e45b8c93a47d9c3e2fb34cba36"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 103,
+      "fold_index": 1,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "a2da4a3c2c9e4a03f7f3dd26f5b7699d91e3d10f02b6320bd2715a226acea15b"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 0,
+      "fold_index": 2,
+      "strategy": "cash",
+      "trace_sha256": "7be0daee112951e395bb61d1f44a48a881d1beebd5b96fe0d050c827bf0d1734"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 1,
+      "fold_index": 2,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "2454f495ba6cb4dc9d2cac8349300a20095f2ab40c523ae7b97a97a962cd7da4"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 3,
+      "fold_index": 2,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "5c7959e31a7e01e0acedfea2b6c345388a002bdda976a678efbe9d4fb9972660"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 222,
+      "fold_index": 2,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "f9261878fdd4506671ed41a89b67a12b10abb84a20cbcc6e38422f8d0cabfbe1"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 149,
+      "fold_index": 2,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "f67d0ce8b62515ea2e57ea486aed8cf4570cf9ca9bf96495a3cd97fbaae96893"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 0,
+      "fold_index": 2,
+      "strategy": "cash",
+      "trace_sha256": "a7b1bd5bc417626107ed54508a74595374977345ced25a3ff0235c56eb0316dd"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 1,
+      "fold_index": 2,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "890dd844def223c744d85edff1a4cbc2862d55b1d541ce41cd75a2b13ca3d8cc"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 3,
+      "fold_index": 2,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "772b5c40bdc5d93a3a5413bf89860ba89ace75c747a33e61ce08ee32b0890b8a"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 222,
+      "fold_index": 2,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "624b6c09424fbd11b703d2d909426fe8a6de6350599a1f7691eb7befb04cbf0d"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 149,
+      "fold_index": 2,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "d66137d1ddcb0e10b636950d125b3221b827d96f70a2b2249648263d8d83b48c"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 0,
+      "fold_index": 2,
+      "strategy": "cash",
+      "trace_sha256": "cdef6abbb8be3600f12c6d59c6e727aa405423e6f45f2b1931523b3e195a0c4e"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 1,
+      "fold_index": 2,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "595751d41b5cb14375d2f9439e59344d450f280ddfb76bd44e078cb28ff9c6c6"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 3,
+      "fold_index": 2,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "0ebd199805b5c54a009c000d5d5da9ee3450339b637415422f47da18e8442425"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 222,
+      "fold_index": 2,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "4e88aca96d1c360f8f99c646328fae552fcce20e809cd8aea8cb2b348ce53d10"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 149,
+      "fold_index": 2,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "5aebfa66c8c734f8c26e36cdb1a59e9cb0c5fbb7936457dc866c97c0402e5f26"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 0,
+      "fold_index": 3,
+      "strategy": "cash",
+      "trace_sha256": "5477d766073d4d16069dfa962aa9dd304588133aebb21b812d87729e70d39acd"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 1,
+      "fold_index": 3,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "56f41a40b4e861f9b66959894a6f96000e3d8698c4cd4e7fe72350e31ecb0d7b"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 5,
+      "fold_index": 3,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "6216134488a01c8c2c39b532e7ca6d8001ca7a219b10cd2eae8d64cbb5cc28c0"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 225,
+      "fold_index": 3,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "8a131308c2a235d39cf564ff3aaf1744219caae26d1f4da3e0d5b18d33be6bbf"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 118,
+      "fold_index": 3,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "238e7e2f54cb7461ff839f125c4da097cbc53655ac7ff31b3c55cb2b382bb73c"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 0,
+      "fold_index": 3,
+      "strategy": "cash",
+      "trace_sha256": "b3cbce7db26699905d20bf6c1627753af7e15e88738496433187f6fb1f305370"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 1,
+      "fold_index": 3,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "4ae67c12392b77f21c7aab74aadc5052a8946b3e562e58dad4a295da51018a0c"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 5,
+      "fold_index": 3,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "5a1c990548ececadf6d61a3f268f77fbb720063ae71d35ef0b72bebbdb4dbc4f"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 225,
+      "fold_index": 3,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "031ac22f03c0c4473b2f3f694b7b83bb52cea416d6cbcdfd2fa4a68e6981aa75"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 118,
+      "fold_index": 3,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "46216a138c6e71a83ab78a9837f169163b763ab520ea96573059f517ba7bef78"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 0,
+      "fold_index": 3,
+      "strategy": "cash",
+      "trace_sha256": "ab1437fd721da89e706442ec45022a62761c2ed732491e8705900bbba16a2784"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 1,
+      "fold_index": 3,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "3cf804570a14146a19b17628223c4f9036d0778962cbf9e71ef346fba63539ad"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 5,
+      "fold_index": 3,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "96026c4c0af2234b9621a4c0e53a0d874856de241b40626b0526730e72034dec"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 225,
+      "fold_index": 3,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "16e25a6f45814b0a300f40ae369b2d5057857da544d9cddc19f7f907a90d7d92"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 118,
+      "fold_index": 3,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "064ffdefc53c9386e918a891e0b32410c7806fa23c3c71db5b401d6b6e08aa67"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 0,
+      "fold_index": 4,
+      "strategy": "cash",
+      "trace_sha256": "47a180a97cf567d500e37f02a382361d01c449c0f466885b278de47818698c61"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 1,
+      "fold_index": 4,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "6bc4aa457223b32edf1ca9cc0a4e8fa49d4c896c334541ba00df2fe83f6b70c2"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 2,
+      "fold_index": 4,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "02ee0d19510ccbacb89f49e30e5cc6ab801806a1bec5652e7afd8c934b245476"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 225,
+      "fold_index": 4,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "b8b3e4f6e11af742138b2f89ab50bffb12b7130f48539ade528145d0bb7e72da"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "compatibility_v1",
+      "fill_count": 38,
+      "fold_index": 4,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "af73f1449712e189b162303950c14e08971e6a09e49fc3b81a05cea1695fd5ec"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 0,
+      "fold_index": 4,
+      "strategy": "cash",
+      "trace_sha256": "813264bbf6f755ff120caa370b72134aca721ae1908e5db7e329e370f8c0c9f1"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 1,
+      "fold_index": 4,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "4a8f40d9dd62a7469ff9805b1e4667d817b25f4cf972af1dc57e77991625dabd"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 2,
+      "fold_index": 4,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "c66628404ad11d024b510952c309e63b32ed759a593dece879d923d4f72a6491"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 225,
+      "fold_index": 4,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "05153f682a4397b215161a672483ab4ddce70c8ba452e749ca98f037e6d3a82d"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_base",
+      "fill_count": 38,
+      "fold_index": 4,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "43ce7cf8cc070b74bb298716125420183fdb78dc3ccf4b0722b1a002c8a7c3aa"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 0,
+      "fold_index": 4,
+      "strategy": "cash",
+      "trace_sha256": "0419dc2fc9aa279a4a34560672a1bf67887ad76cd08d87e146e3f2ff9354d9c2"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 1,
+      "fold_index": 4,
+      "strategy": "buy_and_hold",
+      "trace_sha256": "b35f9c51000c623085b3e34804437749ccf4fe551997ac99687b56b5a3f4ab37"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 2,
+      "fold_index": 4,
+      "strategy": "donchian_55_20",
+      "trace_sha256": "0c48d56a3250f00bdbc3c0b897eda19ddec166ad2661aeba78e78435e7b1e146"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 225,
+      "fold_index": 4,
+      "strategy": "vol_target_buy_and_hold_30d_50pct",
+      "trace_sha256": "9061517d42c306231912cb52d8aaeb34429007b40ec6201c0d87c58d2b30ea3b"
+    },
+    {
+      "bar_count": 225,
+      "cost_scenario": "causal_proxy_stressed",
+      "fill_count": 38,
+      "fold_index": 4,
+      "strategy": "vol_target_donchian_55_20_30d_50pct",
+      "trace_sha256": "25f87e4c8f6f11cd8bcafca63d6c7801916d91f4fe53d6cf512cc794c37fff12"
+    }
+  ],
+  "combined_trace_sha256": "5a1d2fd2bee67c739f8228b9863bdb8ddfa634c6982fc1365f01cfebde8986e7",
+  "execution_trace_commitments_schema_version": 1,
+  "experiment_family": "m3b-fractional-execution-risk-v1",
+  "experiment_id": "m3b-fractional-execution-risk-v1-run-001",
+  "fractional_protocol_sha256": "9c1e00eca5e8e58ce88e05d0b4ccdb71b34f798afe72cda3e9c88dee5641d4b6",
+  "fractional_results_path": "research/m3b/fractional_results.json",
+  "fractional_results_sha256": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc",
+  "research_train_content_fingerprint": "sha256:60aa988e9db786db5723c925abc794463c23ff701791173b745196c7a8b12033",
+  "trace_digest_algorithm": "sha256(canonical-json(bar-records))"
+}
