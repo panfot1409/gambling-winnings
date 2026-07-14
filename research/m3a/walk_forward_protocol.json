@@ -1,0 +1,83 @@
+{
+  "bootstrap_algorithm": "moving-block-bootstrap-v1",
+  "bootstrap_block_length": 30,
+  "bootstrap_confidence": 0.95,
+  "bootstrap_resamples": 5000,
+  "bootstrap_seed": 20260713,
+  "cost_scenarios": [
+    {
+      "fee_rate": 0.001,
+      "name": "base",
+      "slippage_rate": 0.0005
+    },
+    {
+      "fee_rate": 0.002,
+      "name": "stressed",
+      "slippage_rate": 0.001
+    },
+    {
+      "fee_rate": 0.005,
+      "name": "severe",
+      "slippage_rate": 0.0025
+    }
+  ],
+  "development_partition_sha256": "14d61c9ad36a20b70b3f830e8470dc416319ef4accf36b90c5d2b4094ead7ac2",
+  "folds": [
+    {
+      "context_row_count": 55,
+      "fold_index": 0,
+      "oos_first_open_time": "2019-05-23T00:00:00+00:00",
+      "oos_last_open_time": "2020-01-03T00:00:00+00:00",
+      "oos_row_count": 226,
+      "training_row_count": 1095
+    },
+    {
+      "context_row_count": 55,
+      "fold_index": 1,
+      "oos_first_open_time": "2020-01-04T00:00:00+00:00",
+      "oos_last_open_time": "2020-08-15T00:00:00+00:00",
+      "oos_row_count": 225,
+      "training_row_count": 1321
+    },
+    {
+      "context_row_count": 55,
+      "fold_index": 2,
+      "oos_first_open_time": "2020-08-16T00:00:00+00:00",
+      "oos_last_open_time": "2021-03-28T00:00:00+00:00",
+      "oos_row_count": 225,
+      "training_row_count": 1546
+    },
+    {
+      "context_row_count": 55,
+      "fold_index": 3,
+      "oos_first_open_time": "2021-03-29T00:00:00+00:00",
+      "oos_last_open_time": "2021-11-08T00:00:00+00:00",
+      "oos_row_count": 225,
+      "training_row_count": 1771
+    },
+    {
+      "context_row_count": 55,
+      "fold_index": 4,
+      "oos_first_open_time": "2021-11-09T00:00:00+00:00",
+      "oos_last_open_time": "2022-06-21T00:00:00+00:00",
+      "oos_row_count": 225,
+      "training_row_count": 1996
+    }
+  ],
+  "information_gap_bars": 0,
+  "initial_cash": 10000.0,
+  "initial_training_rows": 1095,
+  "max_context_bars": 55,
+  "oos_fold_count": 5,
+  "package_version": "0.4.0",
+  "research_train_content_fingerprint": "sha256:60aa988e9db786db5723c925abc794463c23ff701791173b745196c7a8b12033",
+  "research_train_row_count": 2221,
+  "split_semantics": "expanding-window-walk-forward-v1",
+  "strategies": [
+    "cash",
+    "buy_and_hold",
+    "sma_20_50",
+    "donchian_55_20"
+  ],
+  "walk_forward_schema_version": 1
+}

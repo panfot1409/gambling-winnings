@@ -17,6 +17,7 @@ coordination and are out of scope.
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -193,3 +194,44 @@ def verify_package_source(repo_root: Path, head: str, package_root: Path) -> Non
                 f"package source {rel} differs from its bytes committed at {head[:12]} — "
                 "the running code was modified after the authorized commit"
             )
+
+
+_SOURCE_TREE_FP_HEADER: bytes = b"eth-research source-tree-fp-v1\n"
+
+
+def source_tree_fingerprint(repo_root: Path, commit: str) -> str:
+    """Deterministic digest of the committed package source at ``commit``.
+
+    A single stable identity for the exact ``src/eth_research`` ``*.py`` tree
+    committed at ``commit`` (``__pycache__`` excluded), independent of the
+    commit SHA itself: two commits with byte-identical package source share
+    the fingerprint, and any source change alters it. Computed purely from
+    the committed blobs, so a replay from git history reproduces it exactly.
+
+    The digest is the SHA-256 of the domain-separated header
+    ``b"eth-research source-tree-fp-v1\\n"`` followed, for every ``*.py`` path
+    under :data:`PACKAGE_RELPATH` in ascending path order, by one line::
+
+        <repo-relative posix path>\\x00<lowercase sha256 of the blob bytes>\\n
+
+    :func:`verify_package_source` proves the running tree equals ``commit``'s
+    blobs, so the fingerprint recorded by the orchestrator binds the exact
+    code that produced a result.
+    """
+    paths = sorted(
+        rel
+        for rel in list_tree_files(repo_root, commit, PACKAGE_RELPATH)
+        if rel.endswith(".py") and "__pycache__" not in rel.split("/")
+    )
+    if not paths:
+        raise GitError(
+            f"no committed {PACKAGE_RELPATH} source at {commit[:12]} — cannot fingerprint an "
+            "empty source tree"
+        )
+    digest = hashlib.sha256()
+    digest.update(_SOURCE_TREE_FP_HEADER)
+    for rel in paths:
+        blob = file_bytes_at_commit(repo_root, commit, rel)
+        line = rel.encode("utf-8") + b"\x00" + hashlib.sha256(blob).hexdigest().encode("ascii")
+        digest.update(line + b"\n")
+    return digest.hexdigest()

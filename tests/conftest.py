@@ -485,3 +485,56 @@ def git_pipeline(tmp_path: Path) -> GitPipeline:
 def rejected_git_pipeline(tmp_path: Path) -> GitPipeline:
     """A synthetic dossier repo whose derived decision is rejected."""
     return make_git_pipeline(tmp_path, eligible=False)
+
+
+# --- Disposable clone carrying the FULL real M2B+M3A layer (N9 rehearsal) ------
+
+_REAL_REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
+
+
+def make_m3a_checkout(tmp_path: Path) -> Path:
+    """A ``--local`` clone of the real repository with its full M2B+M3A layer intact.
+
+    Unlike :func:`make_real_checkout` (which drops ``research/`` and rebuilds a
+    tiny synthetic M2B dossier), this keeps the real committed raw Coinbase bytes,
+    the frozen dossier, the M3A development partition / v1 protocol / v2
+    methodology, the six-line v1 registry prefix, and both byte-empty ledgers — so
+    the real M3A orchestrator lifecycle (which hard-pins the real 2221-row research
+    train) can execute end-to-end inside the disposable clone via subprocess,
+    consuming run-003's id only in the clone. The clone's own ``src/eth_research``
+    is overlaid from the current working tree and committed, so it is the
+    authorized running package under ``PYTHONPATH=<clone>/src``.
+
+    Returns the clone root; its HEAD is a clean commit whose source tree equals the
+    working-tree package (this is the rehearsal's execution-source commit ``E``).
+    """
+    clone = tmp_path / "m3a_checkout"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--local", "--no-hardlinks", str(_REAL_REPO_ROOT), str(clone)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    _git(clone, "config", "user.email", "test@example.com")
+    _git(clone, "config", "user.name", "Test Researcher")
+    # Overlay the working-tree source and the CI verifier scripts so the rehearsal
+    # exercises the *current* package and CI gates (which may carry uncommitted
+    # changes); commit only if they differ from the cloned HEAD, so a clean tree
+    # needs no extra commit.
+    for rel in ("src", ".github/scripts"):
+        shutil.copytree(
+            _REAL_REPO_ROOT / rel,
+            clone / rel,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+    _git(clone, "add", "-A", "src", ".github/scripts")
+    if _git(clone, "status", "--porcelain"):
+        _git(clone, "commit", "--quiet", "-m", "sync working source into the e2e checkout")
+    return clone
+
+
+@pytest.fixture
+def m3a_checkout(tmp_path: Path) -> Path:
+    """A disposable clone carrying the full real M2B+M3A layer (see helper)."""
+    return make_m3a_checkout(tmp_path)

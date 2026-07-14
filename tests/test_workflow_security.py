@@ -108,3 +108,49 @@ class TestSurvivingWorkflowsPinned:
         assert re.search(
             r"^permissions:\n\s+contents:\s*read\b", CI.read_text(encoding="utf-8"), re.MULTILINE
         )
+
+
+class TestSupplyChainHardening:
+    """N10 (was R7): uv is installed from the hash-pinned PyPI wheel — no
+    downloaded byte is piped to a shell, and the artifact digests are verified
+    against ``ci/uv-requirements.txt`` before use."""
+
+    def test_no_secrets_are_referenced(self) -> None:
+        for path in _all_workflow_files():
+            assert "secrets." not in path.read_text(encoding="utf-8"), f"{path.name} uses a secret"
+
+    def test_no_artifact_upload(self) -> None:
+        # No workflow may upload artifacts (which could exfiltrate market data).
+        for path in _all_workflow_files():
+            assert "upload-artifact" not in path.read_text(encoding="utf-8")
+
+    def test_no_curl_or_wget_pipes_into_a_shell(self) -> None:
+        # N10: no surviving workflow may pipe a downloaded installer into a shell.
+        for path in _all_workflow_files():
+            text = path.read_text(encoding="utf-8")
+            assert "install.sh | sh" not in text
+            assert "install.sh|sh" not in text
+            for line in text.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                if ("curl" in stripped or "wget" in stripped) and "|" in stripped:
+                    raise AssertionError(f"{path.name}: a download is piped into a shell")
+
+    def test_uv_is_installed_from_the_hash_pinned_pypi_wheel(self) -> None:
+        pin = REPO_ROOT / "ci/uv-requirements.txt"
+        text = pin.read_text(encoding="utf-8")
+        assert "uv==0.8.17" in text
+        assert "--hash=sha256:" in text
+        # Every workflow that installs uv references the pinned, hash-checked file.
+        for path in _all_workflow_files():
+            wf = path.read_text(encoding="utf-8")
+            if "Install uv" in wf:
+                assert "ci/uv-requirements.txt" in wf, f"{path.name} does not use the uv pin"
+                assert "--require-hashes" in wf, f"{path.name} does not require hashes"
+
+    def test_m3a_replay_asserts_both_ledgers_byte_empty(self) -> None:
+        text = (WORKFLOWS / "m3a-replay.yml").read_text(encoding="utf-8")
+        assert "development_gate_access.jsonl" in text or "GATE_LEDGER" in text
+        assert "test_evaluations.jsonl" in text or "HOLDOUT_LEDGER" in text
+        assert text.count("byte-empty") >= 2  # before and after

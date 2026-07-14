@@ -92,9 +92,11 @@ from eth_research.protocol import (
     RESULTS_SCHEMA_VERSION,
     BenchmarkProtocol,
     BenchmarkResults,
+    ProtocolError,
     QualityWarningSummary,
     SegmentMetrics,
     SplitBoundary,
+    require_protocol_runtime_version,
 )
 from eth_research.splits import DataSplits, chronological_split
 from eth_research.strategies import BuyAndHold, MovingAverageCrossover, Strategy
@@ -369,8 +371,16 @@ def build_benchmark_results(
     protocol_registration_commit_sha: str,
     test_evaluation_id: str | None,
     authorized_evaluation_code_commit_sha: str | None = None,
+    package_version: str = __version__,
 ) -> BenchmarkResults:
-    """Assemble the validated result record from evaluated segments."""
+    """Assemble the validated result record from evaluated segments.
+
+    ``package_version`` defaults to the running version for fresh results.
+    Verification of a frozen snapshot passes the version recorded in the
+    committed results so the frozen bytes reproduce exactly under a later
+    package (the numbers themselves are version-independent — the pinned
+    numerical stack is unchanged by a package-version bump).
+    """
     _verify_dataset_matches_protocol(dataset, protocol)
     manifest = dataset.manifest
     warnings = tuple(
@@ -382,7 +392,7 @@ def build_benchmark_results(
     )
     return BenchmarkResults(
         results_schema_version=RESULTS_SCHEMA_VERSION,
-        package_version=__version__,
+        package_version=package_version,
         base_asset=manifest.base_asset,
         quote_asset=manifest.quote_asset,
         symbol=manifest.symbol,
@@ -477,17 +487,27 @@ def _require_bytes_match_head(repo_root: Path, head: str, path: Path, label: str
         )
 
 
-def _verify_runtime_environment(repo_root: Path, head: str) -> None:
+def _verify_runtime_environment(repo_root: Path, head: str, *, production: bool) -> None:
     """Prove the numerical runtime matches the frozen, committed contract.
 
     The C1 gate binds the executing *code* to the authorized commit; this
     gate binds the executing *numerical environment* (CPython patch, cache
     tag, OS/arch, exact numpy/pandas/pyarrow, and the locked dependency
     graph) to :data:`CANONICAL_RUNTIME_CONTRACT_RELPATH`. The contract, the
-    ``uv.lock``, and the ``pyproject.toml`` must equal their committed
-    ``head`` bytes, and the active runtime must match the contract exactly.
-    A single-repository reproducibility control, not a cryptographic
-    attestation.
+    ``uv.lock``, and the ``pyproject.toml`` must always equal their
+    committed ``head`` bytes (a clean tracked tree).
+
+    The frozen contract pins the numerical runtime for the **one-time
+    test**. When the running package version equals the contract's
+    recorded version (the version that froze it) the live runtime is
+    attested exactly. When it differs — a later package (e.g. Milestone
+    3A) operating over the same frozen dossier — the contract is a
+    superseded snapshot: **production refuses** (the sealed test may run
+    only on its exact frozen runtime), while a read-only caller treats it
+    as frozen and does not attest the advanced live runtime against a
+    superseded contract. Data integrity is verified independently of this
+    runtime pin. A single-repository reproducibility control, not a
+    cryptographic attestation.
     """
     contract_path = repo_root / CANONICAL_RUNTIME_CONTRACT_RELPATH
     if contract_path.is_symlink():
@@ -497,9 +517,20 @@ def _verify_runtime_environment(repo_root: Path, head: str) -> None:
     _require_bytes_match_head(repo_root, head, repo_root / "pyproject.toml", "pyproject.toml")
     try:
         contract = load_runtime_contract(contract_path)
-        verify_runtime_contract(contract, repo_root=repo_root)
     except RuntimeVerificationError as exc:
         raise EvaluationError(f"runtime verification failed: {exc}") from exc
+    frozen_version = contract.snapshot.package_version
+    if frozen_version == __version__:
+        try:
+            verify_runtime_contract(contract, repo_root=repo_root)
+        except RuntimeVerificationError as exc:
+            raise EvaluationError(f"runtime verification failed: {exc}") from exc
+    elif production:
+        raise EvaluationError(
+            f"the frozen runtime contract pins package version {frozen_version!r}, but the "
+            f"running package version is {__version__!r}; the one-time test may run only on "
+            "the exact frozen runtime that registered it"
+        )
 
 
 HOLDOUT_IDENTITY_RELPATH: str = "research/m2b/holdout_identity.json"
@@ -640,7 +671,7 @@ def prepare_authorized_evaluation(
         raise EvaluationError(f"package source binding failed: {exc}") from exc
 
     # 4. The frozen numerical runtime and committed lockfiles.
-    _verify_runtime_environment(root, head)
+    _verify_runtime_environment(root, head, production=production)
 
     # 5. A clean tracked tree.
     try:
@@ -782,7 +813,18 @@ def prepare_authorized_evaluation(
     train_validation = verification.train_validation
     registration = verification.protocol_registration_commit_sha
 
-    # 12. Defence in depth: the scan again, on the recomputed identity.
+    # 12. Production only: the frozen protocol may be executed only by the
+    # exact package version that pre-registered it. Structural verification
+    # above is version-independent (a later package can verify the frozen
+    # snapshot); actually *running* the sealed test additionally requires
+    # the running version to equal the frozen one.
+    if production:
+        try:
+            require_protocol_runtime_version(protocol)
+        except ProtocolError as exc:
+            raise EvaluationError(str(exc)) from exc
+
+    # 13. Defence in depth: the scan again, on the recomputed identity.
     conflicts = find_holdout_conflicts(events, holdout)
     _refuse_consumed(conflicts)
 

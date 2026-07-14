@@ -22,6 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from eth_research import __version__
 from eth_research.data.acquisition_plan import load_acquisition_plan, load_acquisition_receipt
 from eth_research.data.builder import load_canonical_dataset
 from eth_research.data.provenance import sha256_bytes
@@ -59,13 +60,16 @@ def build_results(
     manifest_path: str | Path,
     *,
     protocol_registration_commit_sha: str,
+    package_version: str = __version__,
 ) -> BenchmarkResults:
     """Compute the train/validation-only results from the frozen protocol.
 
     ``manifest_path`` points at the reproducible canonical manifest (under the
     git-ignored ``data/`` tree, materialized by the replay tool). The dataset
     is reloaded and re-verified internally; the test segment is never
-    evaluated (``test_evaluation_id`` is ``None``).
+    evaluated (``test_evaluation_id`` is ``None``). ``package_version``
+    defaults to the running version; pass the frozen version to reproduce
+    a committed snapshot's exact bytes under a later package.
     """
     root = Path(repo_root)
     protocol = BenchmarkProtocol.from_json_bytes((root / PROTOCOL_RELPATH).read_bytes())
@@ -77,6 +81,7 @@ def build_results(
         segments,
         protocol_registration_commit_sha=protocol_registration_commit_sha,
         test_evaluation_id=None,
+        package_version=package_version,
     )
 
 
@@ -164,11 +169,19 @@ def generate(
     manifest_path: str | Path,
     *,
     protocol_registration_commit_sha: str,
+    package_version: str = __version__,
 ) -> tuple[bytes, str]:
-    """Return the deterministic (results JSON bytes, report markdown)."""
+    """Return the deterministic (results JSON bytes, report markdown).
+
+    ``package_version`` defaults to the running version; pass the frozen
+    version to reproduce a committed snapshot's exact bytes.
+    """
     root = Path(repo_root)
     results = build_results(
-        root, manifest_path, protocol_registration_commit_sha=protocol_registration_commit_sha
+        root,
+        manifest_path,
+        protocol_registration_commit_sha=protocol_registration_commit_sha,
+        package_version=package_version,
     )
     return results.to_json_bytes(), render_report(root, results)
 
@@ -186,15 +199,24 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.repo_root)
 
     try:
-        # Verification regenerates from the recorded provenance commit;
-        # creation derives it from local git history.
-        commit = (
-            committed_protocol_registration_commit(root)
-            if args.check
-            else protocol_commit_from_history(root)
-        )
+        # Verification regenerates from the recorded provenance commit and
+        # the committed results' recorded package version (so a frozen
+        # snapshot reproduces byte-for-byte under a later package); creation
+        # derives the commit from local git history and stamps the running
+        # version.
+        if args.check:
+            commit = committed_protocol_registration_commit(root)
+            frozen_version = BenchmarkResults.from_json_bytes(
+                (root / RESULTS_RELPATH).read_bytes()
+            ).package_version
+        else:
+            commit = protocol_commit_from_history(root)
+            frozen_version = __version__
         results_bytes, report_md = generate(
-            root, args.manifest, protocol_registration_commit_sha=commit
+            root,
+            args.manifest,
+            protocol_registration_commit_sha=commit,
+            package_version=frozen_version,
         )
     except (RuntimeError, ValueError) as exc:
         print(f"train/validation report generation failed: {exc}", file=sys.stderr)

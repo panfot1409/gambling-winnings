@@ -48,14 +48,14 @@ class TestBenchmarkProtocol:
 
     def test_verify_against_its_lock_passes(self, coinbase_pipeline: CoinbasePipeline) -> None:
         lock = make_lock(coinbase_pipeline)
-        protocol = build_benchmark_protocol(lock, package_version="0.3.0")
+        protocol = build_benchmark_protocol(lock, package_version=lock.package_version)
         verify_protocol(protocol, lock)
 
     def test_verify_against_a_different_lock_fails(
         self, coinbase_pipeline: CoinbasePipeline
     ) -> None:
         lock = make_lock(coinbase_pipeline)
-        protocol = build_benchmark_protocol(lock, package_version="0.3.0")
+        protocol = build_benchmark_protocol(lock, package_version=lock.package_version)
         other = dataclasses.replace(lock, quote_asset="EUR")
         with pytest.raises(ProtocolError, match="mismatch on dataset_lock_sha256"):
             verify_protocol(protocol, other)

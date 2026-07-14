@@ -18,7 +18,9 @@ from eth_research.environment import (
     RuntimeVerificationError,
     current_runtime_snapshot,
     load_runtime_contract,
+    main,
     verify_runtime_contract,
+    verify_runtime_snapshot,
 )
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
@@ -187,6 +189,93 @@ class TestStrictJSONParsing:
         path.write_bytes(b"{ not json")
         with pytest.raises(RuntimeVerificationError, match="invalid runtime contract"):
             load_runtime_contract(path)
+
+
+class TestRuntimeSnapshotVerification:
+    """The version-independent numerical runtime identity check."""
+
+    def test_snapshot_passes_for_current_runtime(self) -> None:
+        verify_runtime_snapshot(make_contract())
+
+    def test_snapshot_ignores_package_version_drift(self) -> None:
+        # A later package over the same frozen contract: the identity still
+        # matches even though the package version differs.
+        contract = make_contract()
+        drifted = dataclasses.replace(current_runtime_snapshot(), package_version="9.9.9")
+        verify_runtime_snapshot(contract, snapshot=drifted)
+
+    def test_snapshot_also_ignores_a_drifted_contract_version(self) -> None:
+        contract = dataclasses.replace(make_contract(), package_version="9.9.9")
+        verify_runtime_snapshot(contract)
+
+    @pytest.mark.parametrize(
+        ("field", "bad"),
+        [
+            ("python_version", "3.11.9"),
+            ("python_implementation", "PyPy"),
+            ("python_cache_tag", "pypy37"),
+            ("os_family", "Darwin"),
+            ("machine", "arm64"),
+            ("numpy_version", "1.26.4"),
+            ("pandas_version", "2.2.2"),
+            ("pyarrow_version", "15.0.0"),
+        ],
+    )
+    def test_snapshot_rejects_interpreter_mismatch(self, field: str, bad: str) -> None:
+        contract = make_contract()
+        wrong = dataclasses.replace(current_runtime_snapshot(), **{field: bad})
+        with pytest.raises(RuntimeVerificationError, match=f"runtime mismatch on {field}"):
+            verify_runtime_snapshot(contract, snapshot=wrong)
+
+    def test_snapshot_rejects_non_authoritative_role(self) -> None:
+        good = make_contract()
+        rogue = object.__new__(RuntimeContract)
+        for f in dataclasses.fields(good):
+            object.__setattr__(rogue, f.name, getattr(good, f.name))
+        object.__setattr__(rogue, "runtime_role", "compatibility")
+        with pytest.raises(RuntimeVerificationError, match="not the authoritative"):
+            verify_runtime_snapshot(rogue)
+
+
+class TestEnvironmentCli:
+    """``main()`` snapshot-awareness, exercised interpreter-independently via a
+    synthetic contract built from — and matching — the current runtime."""
+
+    def _repo_with_contract(self, tmp_path: Path, *, package_version: str | None) -> Path:
+        repo = copy_lockfiles(tmp_path / "repo")
+        contract = make_contract()
+        if package_version is not None:
+            contract = dataclasses.replace(contract, package_version=package_version)
+        contract_path = repo / CANONICAL_RUNTIME_CONTRACT_RELPATH
+        contract_path.parent.mkdir(parents=True, exist_ok=True)
+        contract_path.write_bytes(contract.to_json_bytes())
+        return repo
+
+    def test_compat_parses_even_when_version_drifts(self, tmp_path: Path) -> None:
+        repo = self._repo_with_contract(tmp_path, package_version="9.9.9")
+        assert main(["--repo-root", str(repo), "--compat"]) == 0
+
+    def test_default_verifies_the_exact_frozen_runtime(self, tmp_path: Path) -> None:
+        # Contract package == live package: the full contract verifies.
+        repo = self._repo_with_contract(tmp_path, package_version=None)
+        assert main(["--repo-root", str(repo)]) == 0
+
+    def test_default_snapshot_verifies_a_superseded_contract(self, tmp_path: Path) -> None:
+        repo = self._repo_with_contract(tmp_path, package_version="9.9.9")
+        assert main(["--repo-root", str(repo)]) == 0
+
+    def test_production_refuses_a_superseded_contract(self, tmp_path: Path) -> None:
+        repo = self._repo_with_contract(tmp_path, package_version="9.9.9")
+        assert main(["--repo-root", str(repo), "--production"]) == 1
+
+    def test_production_verifies_the_exact_frozen_runtime(self, tmp_path: Path) -> None:
+        repo = self._repo_with_contract(tmp_path, package_version=None)
+        assert main(["--repo-root", str(repo), "--production"]) == 0
+
+    def test_missing_contract_reports_active_snapshot(self, tmp_path: Path) -> None:
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        assert main(["--repo-root", str(empty)]) == 0
 
 
 class TestRuntimeSnapshot:

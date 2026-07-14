@@ -15,8 +15,12 @@ This module closes that gap with a strict, immutable runtime contract:
 * :func:`current_runtime_snapshot` recomputes the live environment from
   the standard library and :mod:`importlib.metadata`;
 * :func:`verify_runtime_contract` requires the live snapshot to equal the
-  contract exactly and the working ``uv.lock``/``pyproject.toml`` to hash
-  to the contract's recorded digests.
+  contract exactly — including the package version — and the working
+  ``uv.lock``/``pyproject.toml`` to hash to the contract's recorded digests;
+  this is the strict gate for the authorized production run;
+* :func:`verify_runtime_snapshot` attests only the version-independent
+  numerical runtime identity (interpreter, OS/arch, numpy/pandas/pyarrow),
+  the honest check a later package runs against a superseded frozen contract.
 
 Scope and honesty: this is a **local, single-repository reproducibility
 control**, not a cryptographic attestation. It proves the active
@@ -328,6 +332,66 @@ def load_runtime_contract(path: str | Path) -> RuntimeContract:
         ) from exc
 
 
+_RUNTIME_IDENTITY_FIELDS: tuple[str, ...] = (
+    "python_implementation",
+    "python_version",
+    "python_cache_tag",
+    "os_family",
+    "machine",
+    "numpy_version",
+    "pandas_version",
+    "pyarrow_version",
+)
+"""The version-INDEPENDENT numerical runtime identity: the CPython patch,
+cache tag, OS/arch, and exact numpy/pandas/pyarrow. These do not change when
+the ``eth_research`` package version is bumped. ``package_version`` and the
+lockfile digests are version-coupled and checked only in the full contract."""
+
+
+def _require_authoritative_role(contract: RuntimeContract) -> None:
+    if contract.runtime_role != AUTHORITATIVE_RUNTIME_ROLE:
+        raise RuntimeVerificationError(
+            f"runtime contract role {contract.runtime_role!r} is not the authoritative "
+            "benchmark runtime; refusing to attest it"
+        )
+
+
+def _match_runtime_fields(
+    expected: RuntimeSnapshot, active: RuntimeSnapshot, fields: tuple[str, ...]
+) -> None:
+    for label in fields:
+        want = getattr(expected, label)
+        got = getattr(active, label)
+        if want != got:
+            raise RuntimeVerificationError(
+                f"runtime mismatch on {label}: contract requires {want!r}, active runtime is "
+                f"{got!r} — the authorized benchmark runs only under the frozen runtime"
+            )
+
+
+def verify_runtime_snapshot(
+    contract: RuntimeContract,
+    *,
+    snapshot: RuntimeSnapshot | None = None,
+) -> None:
+    """Require the active *numerical runtime identity* to match ``contract``.
+
+    Compares only the version-independent fields — the CPython patch, cache
+    tag, OS/arch, and exact numpy/pandas/pyarrow — that do not change when the
+    ``eth_research`` package version is bumped. It deliberately does **not**
+    check the package version or the ``uv.lock``/``pyproject.toml`` digests,
+    which are version-coupled bindings verified only for the authorized
+    production run by :func:`verify_runtime_contract`.
+
+    This is the honest check a later package (e.g. Milestone 3A at 0.4.0) runs
+    against a superseded, frozen contract (0.3.0): the interpreter and
+    numerical stack are attested; the drifted package version is not.
+    """
+    _require_authoritative_role(contract)
+    active = snapshot if snapshot is not None else current_runtime_snapshot()
+    _match_runtime_fields(contract.snapshot, active, _RUNTIME_IDENTITY_FIELDS)
+
+
 def verify_runtime_contract(
     contract: RuntimeContract,
     *,
@@ -337,40 +401,24 @@ def verify_runtime_contract(
     """Require the active runtime to match ``contract`` exactly.
 
     Recomputes the live snapshot (unless one is supplied for testing),
-    compares every interpreter-observable field, and requires the working
-    ``uv.lock`` and ``pyproject.toml`` to hash to the contract's recorded
-    digests. Raises :class:`RuntimeVerificationError` on any mismatch.
+    compares every interpreter-observable field **including the package
+    version**, and requires the working ``uv.lock`` and ``pyproject.toml`` to
+    hash to the contract's recorded digests. Raises
+    :class:`RuntimeVerificationError` on any mismatch.
+
+    This is the strict, version-coupled attestation for the authorized
+    production run — it passes only under the exact frozen runtime that
+    registered the contract. A later package operating over the same frozen
+    dossier must use :func:`verify_runtime_snapshot` instead.
 
     The git binding — that those lockfiles equal their committed ``HEAD``
     blobs — is enforced by the evaluator alongside the other tracked
     inputs; this function proves the *active* runtime and *working*
     lockfiles agree with the contract.
     """
-    if contract.runtime_role != AUTHORITATIVE_RUNTIME_ROLE:
-        raise RuntimeVerificationError(
-            f"runtime contract role {contract.runtime_role!r} is not the authoritative "
-            "benchmark runtime; refusing to attest it"
-        )
+    _require_authoritative_role(contract)
     active = snapshot if snapshot is not None else current_runtime_snapshot()
-    expected = contract.snapshot
-    for label in (
-        "python_implementation",
-        "python_version",
-        "python_cache_tag",
-        "os_family",
-        "machine",
-        "package_version",
-        "numpy_version",
-        "pandas_version",
-        "pyarrow_version",
-    ):
-        want = getattr(expected, label)
-        got = getattr(active, label)
-        if want != got:
-            raise RuntimeVerificationError(
-                f"runtime mismatch on {label}: contract requires {want!r}, active runtime is "
-                f"{got!r} — the authorized benchmark runs only under the frozen runtime"
-            )
+    _match_runtime_fields(contract.snapshot, active, (*_RUNTIME_IDENTITY_FIELDS, "package_version"))
     root = Path(repo_root)
     for relpath, expected_sha in (
         (_UV_LOCK_RELPATH, contract.uv_lock_sha256),
@@ -387,9 +435,20 @@ def verify_runtime_contract(
 def main(argv: list[str] | None = None) -> int:
     """CLI: verify (or compatibility-parse) the committed runtime contract.
 
-    ``python -m eth_research.environment --repo-root .`` is the authoritative
-    check: it requires the active runtime to match the committed contract. In
-    ``--compat`` mode it only strictly parses the contract (a non-authoritative
+    ``python -m eth_research.environment --repo-root .`` attests the active
+    *numerical runtime identity* (interpreter, OS/arch, exact numpy/pandas/
+    pyarrow) against the committed contract. When the contract's recorded
+    package version equals the running package it is the exact frozen runtime
+    and the full contract is verified; when it is a superseded snapshot (a
+    later package over the same frozen dossier) only the version-independent
+    identity is attested.
+
+    ``--production`` is the strict authorized-run gate: it requires the exact
+    frozen runtime — the recorded package version *and* the lockfile digests —
+    and refuses (non-zero) when the running package has drifted from the
+    snapshot. The one-time test may run only where this exits zero.
+
+    ``--compat`` only strictly parses the contract (a non-authoritative
     runtime may confirm the contract is well-formed without claiming to be the
     benchmark runtime). Before a contract is committed it prints the active
     snapshot and confirms the interpreter is CPython.
@@ -402,6 +461,14 @@ def main(argv: list[str] | None = None) -> int:
         "--compat",
         action="store_true",
         help="only parse the contract; do not require the active runtime to match",
+    )
+    parser.add_argument(
+        "--production",
+        action="store_true",
+        help=(
+            "require the exact frozen runtime (recorded package version and lockfile "
+            "digests); the authorized one-time test may run only where this exits zero"
+        ),
     )
     args = parser.parse_args(argv)
     root = Path(args.repo_root)
@@ -427,9 +494,26 @@ def main(argv: list[str] | None = None) -> int:
         contract = load_runtime_contract(contract_path)
         if args.compat:
             print(f"runtime contract parses (compatibility runtime {label})")
-        else:
+            return 0
+        frozen_version = contract.snapshot.package_version
+        if frozen_version == __version__:
             verify_runtime_contract(contract, repo_root=root)
             print(f"runtime contract verified against the active runtime: {label}")
+            return 0
+        if args.production:
+            print(
+                "runtime verification failed: the frozen runtime contract pins package "
+                f"version {frozen_version!r}, but the running package version is "
+                f"{__version__!r}; the authorized one-time test may run only on the exact "
+                "frozen runtime that registered it",
+                file=sys.stderr,
+            )
+            return 1
+        verify_runtime_snapshot(contract)
+        print(
+            f"runtime contract is a superseded snapshot (contract package {frozen_version}, "
+            f"active {__version__}); numerical runtime identity verified: {label}"
+        )
     except RuntimeVerificationError as exc:
         print(f"runtime verification failed: {exc}", file=sys.stderr)
         return 1

@@ -1,0 +1,621 @@
+"""The single fail-closed development-experiment orchestrator (M3A closure R1).
+
+Milestone 3A's original publisher (``develop_m3a --write``) reached the real
+research-train evaluation and wrote the tracked artifacts with **no** consult
+of the experiment registry — governance lived beside the write path, not
+inside it (closure defect R1). This module replaces that split with one public
+high-level operation, :func:`run_registered_development_experiment`, which is
+the *only* way real research-train artifacts are ever published.
+
+Before any real calculation the orchestrator runs an ordered set of fail-closed
+pre-checks (repository identity and clean tree, running-source and numerical
+runtime binding, frozen dossier / partition / protocol / methodology
+verification, both sealed ledgers byte-empty, the canonical tracked registry,
+exactly one registered-only v2 experiment whose bound fields all agree, and no
+output collision). Only then does it append a durable ``started`` event and
+build a :class:`StartedRunContext` carrier. That carrier is a convenience, **not**
+a capability: at every privileged boundary the real evaluation and the
+transactional publication re-read the canonical registry and re-prove the run is
+genuinely ``registered`` → ``started`` (:func:`_verify_started_run_context`)
+before any strategy, backtest, metric, or bootstrap runs — so possession of the
+carrier (even one copying this module's sentinel) authorizes nothing, and
+nothing can be computed or published before a corroborated ``started`` exists.
+On success it publishes the immutable run artifacts and the
+compatibility aliases as one durable batch, reads them back, strictly parses
+them, reconciles the return evidence, and appends ``completed``; on any failure
+after ``started`` it appends ``failed`` and the experiment id stays consumed.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+
+from eth_research import __version__
+from eth_research.data.provenance import sha256_bytes, sha256_file
+from eth_research.development import DEVELOPMENT_PARTITION_RELPATH, load_development_partition
+from eth_research.development_evaluation import (
+    DevelopmentEvaluationDetail,
+    evaluate_development_detailed,
+)
+from eth_research.development_ledger import DEVELOPMENT_GATE_LEDGER_RELPATH
+from eth_research.dossier import FROZEN_DOSSIER_RELPATH, load_frozen_dossier
+from eth_research.environment import RuntimeVerificationError
+from eth_research.experiment_registry import (
+    EVENT_COMPLETED,
+    EVENT_FAILED,
+    EVENT_REGISTERED,
+    EVENT_STARTED,
+    EXPERIMENT_REGISTRY_RELPATH,
+    ExperimentEventV2,
+    RegistryError,
+    append_registry_event,
+    latest_registry_line_sha256,
+    read_registry,
+)
+from eth_research.gitcheck import (
+    GitError,
+    head_commit,
+    is_commit_object,
+    resolve_repo_root,
+    source_tree_fingerprint,
+    tracked_tree_is_clean,
+    verify_package_source,
+)
+from eth_research.methodology_v2 import METHODOLOGY_PROTOCOL_V2_RELPATH, load_methodology_v2
+from eth_research.walkforward import WALK_FORWARD_PROTOCOL_RELPATH
+
+# The M2B final-holdout ledger; must also stay byte-empty in Milestone 3A.
+_HOLDOUT_LEDGER_RELPATH: str = "research/m2b/test_evaluations.jsonl"
+_EMPTY_SHA256: str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+
+class OrchestratorError(RuntimeError):
+    """A fail-closed development-experiment orchestration refused to proceed."""
+
+
+# A convenience sentinel — NOT a security boundary. Python module globals are
+# importable and object identity is copyable, so possession of a StartedRunContext
+# grants nothing: every privileged boundary re-reads the canonical registry and
+# re-proves the run is genuinely started (see _verify_started_run_context, N1).
+# This is a single-repository operational control; it does not defend against
+# hostile in-process code monkeypatching the verifier.
+_CONTEXT_SENTINEL: object = object()
+
+
+@dataclass(frozen=True)
+class StartedRunContext:
+    """A carrier for the just-appended ``started`` event's identity.
+
+    It is a convenience passed between the orchestrator's phases, **not** an
+    unforgeable capability: the real evaluation and the publication both
+    re-read the canonical registry via :func:`_verify_started_run_context` and
+    prove the experiment is registered→started with the exact started-line hash
+    and all bindings intact, so a fabricated context (even one copying this
+    module's sentinel) is rejected because the registry does not corroborate it.
+    """
+
+    experiment_id: str
+    run_head_commit_sha: str
+    source_tree_fingerprint: str
+    started_event_sha256: str
+    _token: object
+
+    def __post_init__(self) -> None:
+        # The sentinel only catches accidental construction; it is not the
+        # security boundary. The registry re-verification is.
+        if self._token is not _CONTEXT_SENTINEL:
+            raise OrchestratorError(
+                "StartedRunContext is an internal carrier; construct it only via the orchestrator"
+            )
+
+
+@dataclass(frozen=True)
+class PreparedRun:
+    """The validated, read-only pre-start context of a registered experiment."""
+
+    repo_root: Path
+    head: str
+    source_tree_fingerprint: str
+    registered_event: ExperimentEventV2
+    registry_relpath: str
+    previous_line_sha256: str
+
+
+def _verify_ledgers_byte_empty(root: Path) -> None:
+    for relpath in (DEVELOPMENT_GATE_LEDGER_RELPATH, _HOLDOUT_LEDGER_RELPATH):
+        path = root / relpath
+        if not path.exists():
+            raise OrchestratorError(f"sealed ledger {relpath} is missing")
+        if path.is_symlink():
+            raise OrchestratorError(f"sealed ledger {relpath} must be a real file, not a symlink")
+        if sha256_file(path) != _EMPTY_SHA256:
+            raise OrchestratorError(f"sealed ledger {relpath} is not byte-empty — refusing to run")
+
+
+def _running_package_root() -> Path:
+    import eth_research
+
+    location = eth_research.__file__
+    if location is None:  # pragma: no cover - namespace package, not our layout
+        raise OrchestratorError("the running eth_research package has no filesystem location")
+    return Path(location).resolve().parent
+
+
+@dataclass(frozen=True)
+class RepositoryPreconditions:
+    """The run-agnostic, validated repository context.
+
+    Everything the fail-closed orchestrator checks that does *not* depend on a
+    specific experiment id: canonical repository identity, a clean tracked tree,
+    the running-source binding and its fingerprint, the frozen numerical runtime,
+    the committed development partition, the frozen M2B dossier, the v1 protocol
+    and v2 methodology (mutually consistent), both sealed ledgers byte-empty, and
+    a real (non-symlink) registry file. Shared by :func:`_preflight` (before a
+    run) and :mod:`eth_research.m3a_register` (before registration) so both prove
+    exactly the same preconditions and cannot drift.
+    """
+
+    repo_root: Path
+    head: str
+    source_tree_fingerprint: str
+    partition_sha256: str
+    methodology_id: str
+    methodology_artifact_sha256: str
+
+
+def verify_repository_preconditions(repo_root: str | Path) -> RepositoryPreconditions:
+    """Run every run-agnostic fail-closed pre-check; return the derived context.
+
+    Read-only. Raises :class:`OrchestratorError` on the first violation. It does
+    not read the registry's events or look for any experiment — only that the
+    registry is a real tracked file.
+    """
+    # 1-2. Canonical repository root; refuse a symlinked/foreign package tree.
+    try:
+        root = resolve_repo_root(repo_root)
+    except GitError as exc:
+        raise OrchestratorError(f"cannot resolve a git repository root: {exc}") from exc
+    package_root = _running_package_root()
+    if package_root != (root / "src/eth_research").resolve():
+        raise OrchestratorError(
+            f"the running package {package_root} is not this repository's src/eth_research"
+        )
+    # 3. Working tree clean (untracked market data is ignored by tracked_tree_is_clean).
+    if not tracked_tree_is_clean(root):
+        raise OrchestratorError("the tracked working tree is dirty; refusing to run")
+    # 4. Real HEAD commit.
+    head = head_commit(root)
+    if not is_commit_object(root, head):
+        raise OrchestratorError(f"HEAD {head!r} is not a real commit object")
+    # 5. Running source == committed source at HEAD; take its fingerprint.
+    try:
+        verify_package_source(root, head, package_root)
+    except GitError as exc:
+        raise OrchestratorError(f"running source does not match HEAD: {exc}") from exc
+    fingerprint = source_tree_fingerprint(root, head)
+    # 6. Frozen numerical runtime (snapshot-aware: the frozen M2B contract is a
+    #    superseded snapshot under the advanced 0.4.0 package, verified read-only).
+    _verify_runtime(root)
+    # 7-8. Committed development partition; the frozen M2B dossier's committed
+    #    bytes must match the partition's binding, and it must strictly parse.
+    partition = load_development_partition(root / DEVELOPMENT_PARTITION_RELPATH)
+    partition_sha = sha256_file(root / DEVELOPMENT_PARTITION_RELPATH)
+    dossier_sha = sha256_file(root / FROZEN_DOSSIER_RELPATH)
+    if dossier_sha != partition.frozen_m2_dossier_sha256:
+        raise OrchestratorError(
+            "frozen M2B dossier committed bytes disagree with the development partition binding"
+        )
+    load_frozen_dossier(root / FROZEN_DOSSIER_RELPATH)
+    protocol_sha = sha256_file(root / WALK_FORWARD_PROTOCOL_RELPATH)
+    # Immutable v2 methodology artifact (binds the v1 protocol + bootstrap v2).
+    methodology = load_methodology_v2(root / METHODOLOGY_PROTOCOL_V2_RELPATH)
+    methodology_sha = sha256_file(root / METHODOLOGY_PROTOCOL_V2_RELPATH)
+    if methodology.base_walk_forward_protocol_sha256 != protocol_sha:
+        raise OrchestratorError("methodology does not bind the committed v1 protocol")
+    if methodology.development_partition_sha256 != partition_sha:
+        raise OrchestratorError("methodology does not bind the committed development partition")
+    # 10. Both sealed ledgers byte-empty.
+    _verify_ledgers_byte_empty(root)
+    # 11-12. Canonical tracked registry only (no alternate/symlinked path).
+    registry_path = root / EXPERIMENT_REGISTRY_RELPATH
+    if registry_path.is_symlink():
+        raise OrchestratorError(
+            "the experiment registry must be a real tracked file, not a symlink"
+        )
+    return RepositoryPreconditions(
+        repo_root=root,
+        head=head,
+        source_tree_fingerprint=fingerprint,
+        partition_sha256=partition_sha,
+        methodology_id=methodology.methodology_id,
+        methodology_artifact_sha256=methodology_sha,
+    )
+
+
+def _preflight(repo_root: str | Path, experiment_id: str) -> PreparedRun:
+    """Run every fail-closed pre-check and return the validated context.
+
+    Read-only: it verifies the run-agnostic repository preconditions, then
+    locates exactly one registered-only v2 experiment matching ``experiment_id``
+    whose bound fields all agree and whose output paths do not yet exist. It
+    appends nothing.
+    """
+    pre = verify_repository_preconditions(repo_root)
+    root = pre.repo_root
+    registry_path = root / EXPERIMENT_REGISTRY_RELPATH
+    events = read_registry(registry_path)
+    # 13. Exactly one registered v2 experiment with no started/terminal event.
+    registered = _resolve_registered_only(events, experiment_id)
+    # 14. Bound fields agree with the committed inputs.
+    if registered.execution_source_tree_fingerprint != pre.source_tree_fingerprint:
+        raise OrchestratorError(
+            "registered execution source-tree fingerprint disagrees with the running source"
+        )
+    # The registered execution commit must be a real commit whose committed
+    # package source matches the running source. It need not equal HEAD: the
+    # pre-registration commit that appends the 'registered' event does not touch
+    # src/eth_research, so the source tree at the registration commit is the one
+    # that runs, and the fingerprint binds it robustly across the append.
+    if not is_commit_object(root, registered.execution_code_commit_sha):
+        raise OrchestratorError("registered execution commit is not a real commit object")
+    if (
+        source_tree_fingerprint(root, registered.execution_code_commit_sha)
+        != pre.source_tree_fingerprint
+    ):
+        raise OrchestratorError(
+            "registered execution commit's source tree does not match the running source"
+        )
+    if registered.development_partition_sha256 != pre.partition_sha256:
+        raise OrchestratorError("registered partition SHA disagrees with the committed partition")
+    if registered.walk_forward_protocol_path != WALK_FORWARD_PROTOCOL_RELPATH:
+        raise OrchestratorError("registered walk-forward protocol path is not the canonical path")
+    if registered.walk_forward_protocol_sha256 != pre.methodology_artifact_sha256:
+        raise OrchestratorError(
+            "registered walk_forward_protocol_sha256 must bind the v2 methodology artifact"
+        )
+    if registered.methodology_id != pre.methodology_id:
+        raise OrchestratorError("registered methodology id disagrees with the methodology artifact")
+    # 15. Refuse output collisions before consuming the experiment.
+    for relpath in (
+        registered.immutable_results_path,
+        registered.immutable_report_path,
+        registered.return_evidence_path,
+        registered.artifact_manifest_path,
+    ):
+        if (root / relpath).exists():
+            raise OrchestratorError(f"output collision: {relpath} already exists")
+    previous = latest_registry_line_sha256(registry_path)
+    if previous is None:  # pragma: no cover - registry always has the v1 prefix
+        raise OrchestratorError("registry is empty; cannot chain a v2 event")
+    return PreparedRun(
+        repo_root=root,
+        head=pre.head,
+        source_tree_fingerprint=pre.source_tree_fingerprint,
+        registered_event=registered,
+        registry_relpath=EXPERIMENT_REGISTRY_RELPATH,
+        previous_line_sha256=previous,
+    )
+
+
+def _verify_runtime(root: Path) -> None:
+    """Verify the numerical runtime against the frozen contract (snapshot-aware).
+
+    The runtime contract, ``uv.lock``, and ``pyproject.toml`` are already
+    proven to equal their HEAD bytes by the clean-tree pre-check. When the
+    running package version equals the contract's the live runtime is attested
+    exactly; when it differs (M3A 0.4.0 over the frozen 0.3.0 contract) only
+    the version-independent numerical identity is attested.
+    """
+    from eth_research.environment import (
+        CANONICAL_RUNTIME_CONTRACT_RELPATH,
+        load_runtime_contract,
+        verify_runtime_contract,
+        verify_runtime_snapshot,
+    )
+
+    contract_path = root / CANONICAL_RUNTIME_CONTRACT_RELPATH
+    if contract_path.is_symlink():
+        raise OrchestratorError("the runtime contract must be a real tracked file, not a symlink")
+    try:
+        contract = load_runtime_contract(contract_path)
+        if contract.snapshot.package_version == __version__:
+            verify_runtime_contract(contract, repo_root=root)
+        else:
+            verify_runtime_snapshot(contract)
+    except RuntimeVerificationError as exc:
+        raise OrchestratorError(f"frozen numerical runtime failed verification: {exc}") from exc
+
+
+def _resolve_registered_only(events: tuple[Any, ...], experiment_id: str) -> ExperimentEventV2:
+    """Find the single v2 experiment that is registered with no later event."""
+    by_id: dict[str, list[Any]] = {}
+    for event in events:
+        by_id.setdefault(event.experiment_id, []).append(event)
+    if experiment_id not in by_id:
+        raise OrchestratorError(
+            f"no registered experiment {experiment_id!r} in the canonical registry"
+        )
+    history = by_id[experiment_id]
+    stages = [e.event for e in history]
+    if stages != [EVENT_REGISTERED]:
+        raise OrchestratorError(
+            f"experiment {experiment_id!r} is not awaiting execution (stages={stages}); an "
+            "experiment id is single-use and cannot be re-run"
+        )
+    registered = history[0]
+    if not isinstance(registered, ExperimentEventV2):
+        raise OrchestratorError(
+            f"experiment {experiment_id!r} is not a v2 registration; the orchestrator runs only "
+            "v2 experiments"
+        )
+    return registered
+
+
+def _verify_started_run_context(root: Path, context: StartedRunContext) -> ExperimentEventV2:
+    """Re-prove from the canonical registry that ``context`` names a started run (N1).
+
+    Every privileged boundary (real evaluation, publication) calls this *before*
+    any strategy, backtest, metric, or bootstrap work. It re-reads the canonical
+    tracked registry — re-validating the entire append-chain — and proves that:
+
+    * the named experiment's history is exactly ``registered`` → ``started``;
+    * that ``started`` event is the registry's last line, and its exact stored
+      bytes hash to the value the carrier claims (tying the carrier to the
+      genuinely appended event, so a stale or fabricated hash is rejected);
+    * the run's HEAD is a real commit whose source-tree fingerprint matches the
+      registered execution binding — and the carrier's copy of it agrees;
+    * both sealed access ledgers are still byte-empty.
+
+    Possession of a :class:`StartedRunContext` (even one copying this module's
+    sentinel) therefore grants nothing: a carrier the registry does not
+    corroborate is refused here, before any real calculation. This is a
+    single-repository operational control, not a cryptographic capability — it
+    does not defend against hostile in-process code that monkeypatches this
+    verifier or the registry reader.
+    """
+    registry_path = root / EXPERIMENT_REGISTRY_RELPATH
+    if registry_path.is_symlink():
+        raise OrchestratorError(
+            "the experiment registry must be a real tracked file, not a symlink"
+        )
+    events = read_registry(registry_path)
+    history = [e for e in events if e.experiment_id == context.experiment_id]
+    stages = [e.event for e in history]
+    if stages != [EVENT_REGISTERED, EVENT_STARTED]:
+        raise OrchestratorError(
+            f"experiment {context.experiment_id!r} is not registered→started (stages={stages}); "
+            "the started-run context is not corroborated by the canonical registry"
+        )
+    registered, started = history[0], history[1]
+    if not isinstance(registered, ExperimentEventV2) or not isinstance(started, ExperimentEventV2):
+        raise OrchestratorError(
+            f"experiment {context.experiment_id!r} is not a v2 registered→started run"
+        )
+    # The started event must be the registry's last line, and its exact stored
+    # bytes must hash to the value the carrier claims.
+    if events[-1] is not started:
+        raise OrchestratorError(
+            f"the started event for {context.experiment_id!r} is not the registry's last line; "
+            "refusing to proceed on an uncorroborated started-run context"
+        )
+    last_sha = latest_registry_line_sha256(registry_path)
+    if last_sha != context.started_event_sha256:
+        raise OrchestratorError(
+            "the carried started-event hash does not match the registry's last line"
+        )
+    # The run's HEAD source tree must match the registered execution binding.
+    if not is_commit_object(root, context.run_head_commit_sha):
+        raise OrchestratorError("the run HEAD is not a real commit object")
+    head_fingerprint = source_tree_fingerprint(root, context.run_head_commit_sha)
+    if head_fingerprint != registered.execution_source_tree_fingerprint:
+        raise OrchestratorError(
+            "the run HEAD source-tree fingerprint disagrees with the registered execution binding"
+        )
+    if context.source_tree_fingerprint != registered.execution_source_tree_fingerprint:
+        raise OrchestratorError(
+            "the carried source-tree fingerprint disagrees with the registered execution binding"
+        )
+    # No gate/holdout access may have appeared since 'started'.
+    _verify_ledgers_byte_empty(root)
+    return started
+
+
+def run_registered_development_experiment(
+    repo_root: str | Path,
+    experiment_id: str,
+    *,
+    clock: Callable[[], pd.Timestamp] | None = None,
+) -> ExperimentEventV2:
+    """Fail-closed: verify, append ``started``, run, publish, append ``completed``.
+
+    Returns the ``completed`` event. Raises :class:`OrchestratorError` on any
+    pre-start refusal (nothing is appended) or, after ``started``, appends a
+    ``failed`` event and re-raises. The experiment id is single-use: a consumed
+    id is never re-run.
+    """
+    now = clock if clock is not None else (lambda: pd.Timestamp.now(tz="UTC"))
+    prep = _preflight(repo_root, experiment_id)
+    registered = prep.registered_event
+
+    # 16. Append and fsync 'started' before any real calculation.
+    started = _event_with(registered, EVENT_STARTED, now(), prep.previous_line_sha256)
+    append_registry_event(prep.repo_root / prep.registry_relpath, started)
+    started_sha = sha256_bytes(started.to_json_line()[:-1])
+    context = StartedRunContext(
+        experiment_id=experiment_id,
+        run_head_commit_sha=prep.head,
+        source_tree_fingerprint=prep.source_tree_fingerprint,
+        started_event_sha256=started_sha,
+        _token=_CONTEXT_SENTINEL,
+    )
+    try:
+        detail = _evaluate_authorized(prep, context)
+        completed = _publish_and_complete(prep, detail, context, now)
+    except Exception as exc:
+        _append_failed(prep, now, exc)
+        raise OrchestratorError(
+            f"experiment {experiment_id!r} failed after 'started': {exc}"
+        ) from exc
+    return completed
+
+
+def _evaluate_authorized(
+    prep: PreparedRun, context: StartedRunContext
+) -> DevelopmentEvaluationDetail:
+    """Reconstruct the dataset and run the walk-forward — re-verifies the run first.
+
+    Re-proves from the canonical registry that the run is genuinely
+    ``registered`` → ``started`` (N1) *before* any dataset reconstruction,
+    strategy, backtest, metric, or bootstrap work runs; possession of the
+    ``StartedRunContext`` carrier alone authorizes nothing.
+    """
+    _verify_started_run_context(prep.repo_root, context)
+    import tempfile
+
+    from eth_research.develop_m3a import _canonical_attempt_id
+    from eth_research.replay_m2b import reconstruct_dataset
+
+    root = prep.repo_root
+    attempt_id = _canonical_attempt_id(root)
+    with tempfile.TemporaryDirectory() as tmp:
+        manifest = reconstruct_dataset(root, attempt_id, tmp).build.manifest_path
+        return evaluate_development_detailed(
+            root,
+            manifest,
+            execution_code_commit_sha=prep.head,
+            registered_code_commit_sha=prep.registered_event.registered_code_commit_sha,
+            experiment_family_id=prep.registered_event.experiment_family,
+        )
+
+
+def _event_with(
+    base: ExperimentEventV2,
+    event: str,
+    when: pd.Timestamp,
+    previous_sha: str,
+    *,
+    results_json_sha256: str | None = None,
+    report_markdown_sha256: str | None = None,
+    return_evidence_sha256: str | None = None,
+    result_bundle_sha256: str | None = None,
+    failure_description: str | None = None,
+) -> ExperimentEventV2:
+    """A lifecycle event copying the registration's bound fields."""
+    return ExperimentEventV2(
+        registry_schema_version=base.registry_schema_version,
+        event=event,
+        experiment_id=base.experiment_id,
+        experiment_family=base.experiment_family,
+        corrects_experiment_id=base.corrects_experiment_id,
+        correction_kind=base.correction_kind,
+        hypothesis=base.hypothesis,
+        strategies=base.strategies,
+        cost_scenarios=base.cost_scenarios,
+        methodology_id=base.methodology_id,
+        development_partition_sha256=base.development_partition_sha256,
+        walk_forward_protocol_path=base.walk_forward_protocol_path,
+        walk_forward_protocol_sha256=base.walk_forward_protocol_sha256,
+        package_version=base.package_version,
+        registered_code_commit_sha=base.registered_code_commit_sha,
+        execution_code_commit_sha=base.execution_code_commit_sha,
+        execution_source_tree_fingerprint=base.execution_source_tree_fingerprint,
+        event_time_utc=when,
+        immutable_results_path=base.immutable_results_path,
+        immutable_report_path=base.immutable_report_path,
+        return_evidence_path=base.return_evidence_path,
+        artifact_manifest_path=base.artifact_manifest_path,
+        results_json_sha256=results_json_sha256,
+        report_markdown_sha256=report_markdown_sha256,
+        return_evidence_sha256=return_evidence_sha256,
+        result_bundle_sha256=result_bundle_sha256,
+        failure_description=failure_description,
+        previous_event_sha256=previous_sha,
+    )
+
+
+def _append_failed(prep: PreparedRun, now: Callable[[], pd.Timestamp], exc: Exception) -> None:
+    """Append a concise deterministic 'failed' event; the id stays consumed."""
+    try:
+        registry_path = prep.repo_root / prep.registry_relpath
+        previous = latest_registry_line_sha256(registry_path)
+        if previous is None:  # pragma: no cover
+            return
+        description = f"{type(exc).__name__}: {exc}"[:500]
+        failed = _event_with(
+            prep.registered_event, EVENT_FAILED, now(), previous, failure_description=description
+        )
+        append_registry_event(registry_path, failed)
+    except (RegistryError, OrchestratorError, OSError):  # pragma: no cover - best effort
+        # If the terminal append itself fails, 'started' remains and the id is
+        # still consumed; a recovery verifier may finalize byte-identical output.
+        return
+
+
+def _publish_and_complete(
+    prep: PreparedRun,
+    detail: DevelopmentEvaluationDetail,
+    context: StartedRunContext,
+    now: Callable[[], pd.Timestamp],
+) -> ExperimentEventV2:
+    """Build, record a recovery intent, publish transactionally, and complete.
+
+    The completed event is built (from the artifact hashes) *before* the
+    manifest, so the manifest can bind the exact completed-event bytes. That same
+    event, plus every published file's hash, is then recorded in a durable
+    completion intent (N6) *before* publication, so a crash after publication but
+    before the ``completed`` append can be finalized calculation-free by
+    :mod:`eth_research.m3a_recovery`. The event is appended after publication
+    succeeds and verifies, and the intent is cleared once the append lands. Like
+    the evaluation boundary, this re-proves from the canonical registry that the
+    run is genuinely ``registered`` → ``started`` (N1) before publishing anything.
+    """
+    _verify_started_run_context(prep.repo_root, context)
+    from eth_research.development_completion import (
+        CompletionArtifact,
+        CompletionIntent,
+        clear_completion_intent,
+        write_completion_intent,
+    )
+    from eth_research.development_publication import (
+        build_publication_batch,
+        publish_prepared_batch,
+        render_run_artifacts,
+    )
+
+    artifacts = render_run_artifacts(prep, detail)
+    registry_path = prep.repo_root / prep.registry_relpath
+    position = len(read_registry(registry_path)) + 1  # the completed event's 1-based line number
+    previous = latest_registry_line_sha256(registry_path)
+    if previous is None:  # pragma: no cover
+        raise OrchestratorError("registry vanished before the completed append")
+    completed = _event_with(
+        prep.registered_event,
+        EVENT_COMPLETED,
+        now(),
+        previous,
+        results_json_sha256=artifacts.results_sha256,
+        report_markdown_sha256=artifacts.report_sha256,
+        return_evidence_sha256=artifacts.return_evidence_sha256,
+        result_bundle_sha256=artifacts.bundle_sha256,
+    )
+    prepared = build_publication_batch(prep, artifacts, completed, position)
+    # N6: record the crash-recovery intent durably before any bytes are committed.
+    intent = CompletionIntent(
+        experiment_id=completed.experiment_id,
+        completed_event_line=completed.to_json_line()[:-1],
+        previous_event_sha256=previous,
+        artifacts=tuple(
+            CompletionArtifact(relpath=a.relpath, sha256=sha256_bytes(a.data))
+            for a in prepared.batch
+        ),
+    )
+    write_completion_intent(prep.repo_root, intent)
+    publish_prepared_batch(prep, prepared)
+    append_registry_event(registry_path, completed)
+    clear_completion_intent(prep.repo_root)
+    return completed

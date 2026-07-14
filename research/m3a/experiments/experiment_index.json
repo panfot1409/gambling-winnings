@@ -1,0 +1,32 @@
+{
+  "archive_schema_version": 1,
+  "entries": [
+    {
+      "experiment_family": "m3a-fixed-baseline-comparison-v1",
+      "experiment_id": "m3a-fixed-baseline-comparison-v1-run-001",
+      "manifest_relpath": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-001/artifact_manifest.json",
+      "manifest_sha256": "58ab32f704214272cc17f80376cb0889aa51c1178ca1afb4f2916254644f10bf",
+      "registry_event_position": 3,
+      "report_sha256": "9362c631ccd37a5ea2dcd8d7bc2c54a8212311363153287fc1a3e3be77b116bf",
+      "results_sha256": "b8616248c72e863210de131f91a7ea90e6810ff20c13440375ed385b3c8ed67a"
+    },
+    {
+      "experiment_family": "m3a-fixed-baseline-comparison-v1",
+      "experiment_id": "m3a-fixed-baseline-comparison-v1-run-002",
+      "manifest_relpath": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-002/artifact_manifest.json",
+      "manifest_sha256": "257a67eb3e0aa9e734e52f7109a7c67678e7afb7172a2f9b8d30d1b4994f5196",
+      "registry_event_position": 6,
+      "report_sha256": "34baa74cbdeabf66b713f6d802291a176a92027e330dd4eea781590e9b1d8d58",
+      "results_sha256": "dc4564fe84205ff1e3e60fc359182683e8fde12be879bd5834f72319dcfa1128"
+    },
+    {
+      "experiment_family": "m3a-fixed-baseline-comparison-v2",
+      "experiment_id": "m3a-fixed-baseline-comparison-v2-run-003",
+      "manifest_relpath": "research/m3a/experiments/m3a-fixed-baseline-comparison-v2-run-003/artifact_manifest.json",
+      "manifest_sha256": "1ea0ade8ed291762a6571c352550b24697137235305163579dda6a76739f4e24",
+      "registry_event_position": 9,
+      "report_sha256": "d6e920760fd4217cbac00cf6126b0da2afc1f0a9e673aacfc9aee5fc6baa3bfd",
+      "results_sha256": "5f6377b6eb0eb8c2a5ba126c37b29de5095670f7ed27c064f44e18c9c91ea8ae"
+    }
+  ]
+}
