@@ -1,0 +1,16 @@
+{
+  "bootstrap_confidence": 0.95,
+  "budget_schema_version": 1,
+  "development_gate_accesses_permitted": 0,
+  "final_holdout_accesses_permitted": 0,
+  "max_new_candidate_families": 1,
+  "milestone": "M3C",
+  "parameter_searches_permitted": 0,
+  "permitted_candidate_fingerprint": "d45d3bdf7a3dca7003e8382995e5a350d0c9e61edf47e87e294d151070f4cae6",
+  "permitted_candidate_id": "dual_horizon_trend_63_252_vol_target_30d_50pct",
+  "permitted_primary_comparisons": 1,
+  "post_result_parameter_changes_permitted": false,
+  "primary_alpha_level": 0.05,
+  "sensitivity_candidates_permitted": 0,
+  "strategy_fitting_permitted": false
+}
