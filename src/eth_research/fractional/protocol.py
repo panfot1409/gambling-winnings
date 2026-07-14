@@ -20,7 +20,7 @@ from typing import Any
 
 from eth_research import __version__
 from eth_research._json import require_canonical_file_bytes, strict_json_loads
-from eth_research.data.provenance import require_hex64, require_nonempty_str, sha256_file
+from eth_research.data.provenance import sha256_file
 from eth_research.development import (
     DEVELOPMENT_PARTITION_RELPATH,
     FROZEN_M2_DOSSIER_RELPATH,
@@ -37,6 +37,16 @@ from eth_research.fractional.risk import (
     VOLATILITY_MIN_OBSERVATIONS,
 )
 from eth_research.fractional.strategies import STRATEGY_NAMES
+from eth_research.fractional.validation import (
+    require_bool,
+    require_hex64,
+    require_int,
+    require_nonempty_str,
+    require_nonnegative_real,
+    require_positive_int,
+    require_positive_real,
+    require_tuple,
+)
 from eth_research.walkforward import (
     INITIAL_CASH,
     OOS_FOLD_COUNT,
@@ -91,14 +101,26 @@ def _scenario_from_dict(payload: dict[str, Any]) -> CostScenario:
     max_participation = payload["max_participation"]
     return CostScenario(
         name=require_nonempty_str("name", payload["name"]),
-        fee_rate=float(payload["fee_rate"]),
-        half_spread_rate=float(payload["half_spread_rate"]),
-        base_slippage_rate=float(payload["base_slippage_rate"]),
-        impact_coefficient=float(payload["impact_coefficient"]),
-        impact_cap=float(payload["impact_cap"]),
-        liquidity_lookback=int(payload["liquidity_lookback"]),
-        liquidity_min_observations=int(payload["liquidity_min_observations"]),
-        max_participation=None if max_participation is None else float(max_participation),
+        fee_rate=require_nonnegative_real("fee_rate", payload["fee_rate"]),
+        half_spread_rate=require_nonnegative_real("half_spread_rate", payload["half_spread_rate"]),
+        base_slippage_rate=require_nonnegative_real(
+            "base_slippage_rate", payload["base_slippage_rate"]
+        ),
+        impact_coefficient=require_nonnegative_real(
+            "impact_coefficient", payload["impact_coefficient"]
+        ),
+        impact_cap=require_nonnegative_real("impact_cap", payload["impact_cap"]),
+        liquidity_lookback=require_positive_int(
+            "liquidity_lookback", payload["liquidity_lookback"]
+        ),
+        liquidity_min_observations=require_positive_int(
+            "liquidity_min_observations", payload["liquidity_min_observations"]
+        ),
+        max_participation=(
+            None
+            if max_participation is None
+            else require_positive_real("max_participation", max_participation)
+        ),
     )
 
 
@@ -217,7 +239,10 @@ class FractionalProtocol:
         if not isinstance(scenarios, list):
             raise ProtocolError("cost_scenarios must be a list")
         parsed = cls(
-            fractional_protocol_schema_version=int(payload["fractional_protocol_schema_version"]),
+            fractional_protocol_schema_version=require_int(
+                "fractional_protocol_schema_version",
+                payload["fractional_protocol_schema_version"],
+            ),
             package_version=require_nonempty_str("package_version", payload["package_version"]),
             experiment_family=require_nonempty_str(
                 "experiment_family", payload["experiment_family"]
@@ -225,36 +250,72 @@ class FractionalProtocol:
             permitted_data_level=require_nonempty_str(
                 "permitted_data_level", payload["permitted_data_level"]
             ),
-            frozen_m2_dossier_sha256=str(payload["frozen_m2_dossier_sha256"]),
-            development_partition_sha256=str(payload["development_partition_sha256"]),
+            frozen_m2_dossier_sha256=require_hex64(
+                "frozen_m2_dossier_sha256", payload["frozen_m2_dossier_sha256"]
+            ),
+            development_partition_sha256=require_hex64(
+                "development_partition_sha256", payload["development_partition_sha256"]
+            ),
             research_train_content_fingerprint=require_nonempty_str(
                 "research_train_content_fingerprint", payload["research_train_content_fingerprint"]
             ),
-            research_train_row_count=int(payload["research_train_row_count"]),
+            research_train_row_count=require_positive_int(
+                "research_train_row_count", payload["research_train_row_count"]
+            ),
             walk_forward_protocol_path=require_nonempty_str(
                 "walk_forward_protocol_path", payload["walk_forward_protocol_path"]
             ),
-            walk_forward_protocol_sha256=str(payload["walk_forward_protocol_sha256"]),
-            oos_fold_count=int(payload["oos_fold_count"]),
-            initial_cash=float(payload["initial_cash"]),
-            strategies=tuple(str(s) for s in payload["strategies"]),
+            walk_forward_protocol_sha256=require_hex64(
+                "walk_forward_protocol_sha256", payload["walk_forward_protocol_sha256"]
+            ),
+            oos_fold_count=require_positive_int("oos_fold_count", payload["oos_fold_count"]),
+            initial_cash=require_positive_real("initial_cash", payload["initial_cash"]),
+            strategies=require_tuple("strategies", payload["strategies"], require_nonempty_str),
             cost_scenarios=tuple(_scenario_from_dict(s) for s in scenarios),
-            liquidity_lookback=int(payload["liquidity_lookback"]),
-            liquidity_min_observations=int(payload["liquidity_min_observations"]),
-            volatility_lookback=int(payload["volatility_lookback"]),
-            volatility_min_observations=int(payload["volatility_min_observations"]),
-            annual_volatility_target=float(payload["annual_volatility_target"]),
-            volatility_denominator_floor=float(payload["volatility_denominator_floor"]),
-            turnover_max_abs_weight_change=float(payload["turnover_max_abs_weight_change"]),
-            drawdown_breaker_enabled=bool(payload["drawdown_breaker_enabled"]),
-            cash_tolerance=float(payload["cash_tolerance"]),
-            quantity_tolerance=float(payload["quantity_tolerance"]),
-            weight_tolerance=float(payload["weight_tolerance"]),
-            solver_tolerance=float(payload["solver_tolerance"]),
-            no_trade_epsilon=float(payload["no_trade_epsilon"]),
-            notional_epsilon=float(payload["notional_epsilon"]),
-            solver_max_iterations=int(payload["solver_max_iterations"]),
-            experiment_cells=int(payload["experiment_cells"]),
+            liquidity_lookback=require_positive_int(
+                "liquidity_lookback", payload["liquidity_lookback"]
+            ),
+            liquidity_min_observations=require_positive_int(
+                "liquidity_min_observations", payload["liquidity_min_observations"]
+            ),
+            volatility_lookback=require_positive_int(
+                "volatility_lookback", payload["volatility_lookback"]
+            ),
+            volatility_min_observations=require_positive_int(
+                "volatility_min_observations", payload["volatility_min_observations"]
+            ),
+            annual_volatility_target=require_positive_real(
+                "annual_volatility_target", payload["annual_volatility_target"]
+            ),
+            volatility_denominator_floor=require_positive_real(
+                "volatility_denominator_floor", payload["volatility_denominator_floor"]
+            ),
+            turnover_max_abs_weight_change=require_nonnegative_real(
+                "turnover_max_abs_weight_change", payload["turnover_max_abs_weight_change"]
+            ),
+            drawdown_breaker_enabled=require_bool(
+                "drawdown_breaker_enabled", payload["drawdown_breaker_enabled"]
+            ),
+            cash_tolerance=require_nonnegative_real("cash_tolerance", payload["cash_tolerance"]),
+            quantity_tolerance=require_nonnegative_real(
+                "quantity_tolerance", payload["quantity_tolerance"]
+            ),
+            weight_tolerance=require_nonnegative_real(
+                "weight_tolerance", payload["weight_tolerance"]
+            ),
+            solver_tolerance=require_nonnegative_real(
+                "solver_tolerance", payload["solver_tolerance"]
+            ),
+            no_trade_epsilon=require_nonnegative_real(
+                "no_trade_epsilon", payload["no_trade_epsilon"]
+            ),
+            notional_epsilon=require_nonnegative_real(
+                "notional_epsilon", payload["notional_epsilon"]
+            ),
+            solver_max_iterations=require_positive_int(
+                "solver_max_iterations", payload["solver_max_iterations"]
+            ),
+            experiment_cells=require_positive_int("experiment_cells", payload["experiment_cells"]),
             bootstrap=require_nonempty_str("bootstrap", payload["bootstrap"]),
             cost_calibration=require_nonempty_str("cost_calibration", payload["cost_calibration"]),
         )

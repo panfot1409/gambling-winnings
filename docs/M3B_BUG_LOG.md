@@ -233,3 +233,35 @@ and regression-tested (commits `5ce9bbf`, `dfd2a94`).
 | A8 | erratum | nit | the counterexample float guard didn't reject NaN/Inf | **fixed** — now rejects non-finite |
 | B1 | archive | LOW | `require_canonical_file_bytes` enforces only a trailing newline, not full canonical formatting | **accepted** — pre-existing shared helper; where used without a re-render (manifest load) the exact bytes are still pinned via `archive_v2.json`'s `manifest_sha256`, and every re-render verifier gates on byte-equality |
 | B2 | annotations | LOW | an append-only log's last line is unanchored, and an empty registry verifies vacuously | **accepted** — inherent to append-only logs (git-anchored); every annotated artifact is *independently* required and verified by the aggregate verifier, and the erratum is now mandatory, so no closure artifact can go missing undetected via the annotation index |
+
+---
+
+## Independent acceptance audit (post-closure)
+
+### A1 — Class B — the protocol parser repaired parsed values (R4 gap)
+
+The R4 closure made the *results* parser decode-not-repair, but
+`FractionalProtocol.from_json_bytes` and `_scenario_from_dict`
+(`src/eth_research/fractional/protocol.py`) were never converted: they coerced
+parsed JSON with `int()/float()/str()/bool()`, so a numeric-string `initial_cash`
+or tolerance, a numeric-string cost-scenario rate, a `bool` schema version, and a
+`float` `research_train_row_count` were **repaired into the target type and
+accepted** (empirically confirmed). `bool("false")` also silently flipped the
+drawdown flag to `True`. This is the same strict-parse defect class as R3/R4,
+missed on the protocol model.
+
+**Impact:** strictness/reproducibility only — the committed run-001 protocol has
+correct types, still parses, and re-serializes byte-identically; no financial byte
+changes and `replay --check` stays green.
+
+**Reproduction:** `tests/test_fractional_protocol_strictness.py` (six cases; five
+failed against the pre-fix parser, plus a byte-identity control).
+
+**Fix:** route both parsers through the shared strict `require_*` surface
+(`require_int` / `require_positive_int` / `require_positive_real` /
+`require_nonnegative_real` / `require_bool` / `require_hex64` / `require_tuple`),
+exactly as the results parser does. No `__post_init__` invariant changed.
+
+**Verified:** the six strictness tests pass, the committed protocol round-trips
+byte-identically, `replay --check` reports `results_reproduced, report_reproduced,
+archive_verified`, and ruff + mypy are clean.
