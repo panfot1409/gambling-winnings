@@ -40,6 +40,7 @@ def test_committed_annotations_cover_the_closure_artifacts() -> None:
         "immutable_archive_v2",
         "execution_trace_commitments",
         "legacy_completion_audit",
+        "report_erratum",
     ]
     assert all(a.experiment_id.endswith("run-001") for a in annotations)
 
