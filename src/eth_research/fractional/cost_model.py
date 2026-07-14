@@ -29,6 +29,26 @@ class CostModelError(Exception):
     """A cost scenario or state violated a construction invariant."""
 
 
+def _finite(label: str, value: float) -> float:
+    """Reject a ``bool``, non-real, or non-finite (NaN/inf) value up front.
+
+    ``NaN < 0.0`` and ``NaN <= 0.0`` are both ``False``, so a NaN would silently
+    pass every ordinary rate/participation guard; finiteness is checked first.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise CostModelError(f"{label} must be a finite number, got {value!r}")
+    return float(value)
+
+
+def _positive_int(label: str, value: int) -> int:
+    """Reject a ``bool``, non-int, or non-positive count (no float coercion)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise CostModelError(f"{label} must be an int, got {value!r}")
+    if value < 1:
+        raise CostModelError(f"{label} must be >= 1, got {value!r}")
+    return value
+
+
 @dataclass(frozen=True)
 class CostScenario:
     """A frozen, predeclared execution-cost scenario.
@@ -49,6 +69,8 @@ class CostScenario:
     max_participation: float | None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise CostModelError(f"name must be a non-empty string, got {self.name!r}")
         for label, rate in (
             ("fee_rate", self.fee_rate),
             ("half_spread_rate", self.half_spread_rate),
@@ -56,16 +78,23 @@ class CostScenario:
             ("impact_coefficient", self.impact_coefficient),
             ("impact_cap", self.impact_cap),
         ):
-            if not math.isfinite(rate) or rate < 0.0:
+            if _finite(label, rate) < 0.0:
                 raise CostModelError(f"{label} must be a non-negative finite rate, got {rate!r}")
         if self.half_spread_rate + self.base_slippage_rate + self.impact_cap >= 1.0:
             raise CostModelError(
                 f"scenario {self.name!r}: spread + slippage + impact_cap must be < 1"
             )
-        if self.liquidity_lookback <= 0 or self.liquidity_min_observations <= 0:
-            raise CostModelError("liquidity lookback and min_observations must be positive")
-        if self.max_participation is not None and self.max_participation <= 0.0:
-            raise CostModelError("max_participation must be positive or None")
+        _positive_int("liquidity_lookback", self.liquidity_lookback)
+        _positive_int("liquidity_min_observations", self.liquidity_min_observations)
+        if self.liquidity_min_observations > self.liquidity_lookback:
+            raise CostModelError("liquidity_min_observations must be <= liquidity_lookback")
+        if (
+            self.max_participation is not None
+            and _finite("max_participation", self.max_participation) <= 0.0
+        ):
+            raise CostModelError(
+                f"max_participation must be positive or None, got {self.max_participation!r}"
+            )
 
 
 COMPATIBILITY_V1 = CostScenario(
@@ -127,6 +156,30 @@ class CostBreakdown:
     impact_cost: float
     price_shortfall: float
     total_cost: float
+
+    def __post_init__(self) -> None:
+        if self.side not in ("buy", "sell"):
+            raise CostModelError(f"side must be 'buy' or 'sell', got {self.side!r}")
+        for label in (
+            "quantity",
+            "reference_notional",
+            "impact_rate",
+            "fill_notional",
+            "fee_cost",
+            "half_spread_cost",
+            "base_slippage_cost",
+            "impact_cost",
+            "price_shortfall",
+            "total_cost",
+        ):
+            if _finite(label, getattr(self, label)) < 0.0:
+                raise CostModelError(f"{label} must be >= 0, got {getattr(self, label)!r}")
+        if _finite("reference_price", self.reference_price) <= 0.0:
+            raise CostModelError(f"reference_price must be > 0, got {self.reference_price!r}")
+        if _finite("fill_price", self.fill_price) <= 0.0:
+            raise CostModelError(f"fill_price must be > 0, got {self.fill_price!r}")
+        if self.participation is not None and _finite("participation", self.participation) < 0.0:
+            raise CostModelError(f"participation must be >= 0 or None, got {self.participation!r}")
 
 
 def _impact_rate(

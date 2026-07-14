@@ -34,6 +34,22 @@ class RiskError(Exception):
     """A risk overlay received an out-of-domain input (e.g. a target outside [0, 1])."""
 
 
+def _finite(label: str, value: float) -> float:
+    """Reject a ``bool``, non-real, or non-finite (NaN/inf) config value."""
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise RiskError(f"{label} must be a finite number, got {value!r}")
+    return float(value)
+
+
+def _nonnegative_int(label: str, value: int) -> int:
+    """Reject a ``bool``, non-int, or negative count (no float coercion)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RiskError(f"{label} must be an int, got {value!r}")
+    if value < 0:
+        raise RiskError(f"{label} must be >= 0, got {value!r}")
+    return value
+
+
 def _require_unit_interval(name: str, value: float) -> None:
     if not (MIN_TARGET_WEIGHT <= value <= MAX_TARGET_WEIGHT):
         raise RiskError(f"{name} must be in [0, 1], got {value!r}")
@@ -171,6 +187,17 @@ class DrawdownBreakerConfig:
     drawdown_threshold: float = DEFAULT_DRAWDOWN_THRESHOLD
     cooldown_bars: int = DEFAULT_DRAWDOWN_COOLDOWN_BARS
     recovery_threshold: float = DEFAULT_DRAWDOWN_RECOVERY_THRESHOLD
+
+    def __post_init__(self) -> None:
+        if not 0.0 < _finite("drawdown_threshold", self.drawdown_threshold) <= 1.0:
+            raise RiskError(
+                f"drawdown_threshold must be in (0, 1], got {self.drawdown_threshold!r}"
+            )
+        if not 0.0 <= _finite("recovery_threshold", self.recovery_threshold) <= 1.0:
+            raise RiskError(
+                f"recovery_threshold must be in [0, 1], got {self.recovery_threshold!r}"
+            )
+        _nonnegative_int("cooldown_bars", self.cooldown_bars)
 
 
 DEFAULT_DRAWDOWN_CONFIG = DrawdownBreakerConfig()

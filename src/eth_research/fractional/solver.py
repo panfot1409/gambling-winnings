@@ -20,6 +20,7 @@ participation cap yields no fill at all, for a typed reason.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -40,6 +41,18 @@ PriceFn = Callable[[float], float]
 
 class SolverError(Exception):
     """The solver was asked for an impossible target or a non-monotone bracket."""
+
+
+def _finite(label: str, value: float) -> float:
+    """Reject a ``bool``, non-real, or non-finite (NaN/inf) solver input.
+
+    A NaN ``reference_price`` / ``fee_rate`` / ``target`` would pass every ``<``
+    comparison silently and then either poison the arithmetic or degrade to a
+    spurious no-trade, so finiteness is asserted before any bracketing.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise SolverError(f"{label} must be a finite number, got {value!r}")
+    return float(value)
 
 
 @dataclass(frozen=True)
@@ -167,17 +180,31 @@ def solve_target_weight(
     participation constraint). ``requested_target`` (default: ``executable_target``)
     is the pre-risk target recorded for reconciliation.
     """
-    P = reference_price
+    P = _finite("reference_price", reference_price)
     if P <= 0.0:
         raise SolverError(f"reference price must be positive, got {P!r}")
-    if fee_rate < 0.0:
+    if _finite("fee_rate", fee_rate) < 0.0:
         raise SolverError(f"fee rate must be non-negative, got {fee_rate!r}")
+    # The participation cap is the one input that is legally ``+inf`` (constraint
+    # disabled), so it is NaN-checked but not finiteness-checked; ``-inf`` and any
+    # negative are rejected by the sign guard below.
+    if (
+        isinstance(participation_quantity_cap, bool)
+        or not isinstance(participation_quantity_cap, int | float)
+        or math.isnan(participation_quantity_cap)
+    ):
+        raise SolverError(
+            f"participation cap must be a real number, got {participation_quantity_cap!r}"
+        )
     if participation_quantity_cap < 0.0:
         raise SolverError(
             f"participation cap must be non-negative, got {participation_quantity_cap!r}"
         )
+    _finite("executable_target", executable_target)
     if not (-tol.weight_tolerance <= executable_target <= 1.0 + tol.weight_tolerance):
         raise SolverError(f"executable target weight {executable_target!r} is outside [0, 1]")
+    if requested_target is not None:
+        _finite("requested_target", requested_target)
 
     requested = executable_target if requested_target is None else requested_target
     w0 = weight_at_reference(state, P)

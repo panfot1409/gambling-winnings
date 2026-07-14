@@ -23,12 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from eth_research._json import require_canonical_file_bytes, strict_json_loads
-from eth_research.data.provenance import (
-    require_hex64,
-    require_int,
-    require_nonempty_str,
-    sha256_bytes,
-)
+from eth_research.data.provenance import sha256_bytes
 from eth_research.fractional.protocol import EXPERIMENT_FAMILY, RUN_001_EXPERIMENT_ID
 from eth_research.fractional.registry import (
     EVENT_COMPLETED,
@@ -42,6 +37,12 @@ from eth_research.fractional.results import (
     FRACTIONAL_RESULTS_RELPATH,
     FractionalResults,
     render_fractional_report,
+)
+from eth_research.fractional.validation import (
+    require_hex64,
+    require_int,
+    require_nonempty_str,
+    require_safe_relative_path,
 )
 
 FRACTIONAL_MANIFEST_SCHEMA_VERSION: int = 1
@@ -143,13 +144,17 @@ class FractionalArtifactManifest:
                 "experiment_family", payload["experiment_family"]
             ),
             package_version=require_nonempty_str("package_version", payload["package_version"]),
-            results_path=require_nonempty_str("results_path", payload["results_path"]),
-            results_sha256=str(payload["results_sha256"]),
-            report_path=require_nonempty_str("report_path", payload["report_path"]),
-            report_sha256=str(payload["report_sha256"]),
-            bundle_sha256=str(payload["bundle_sha256"]),
-            registered_event_sha256=str(payload["registered_event_sha256"]),
-            started_event_sha256=str(payload["started_event_sha256"]),
+            results_path=require_safe_relative_path("results_path", payload["results_path"]),
+            results_sha256=require_hex64("results_sha256", payload["results_sha256"]),
+            report_path=require_safe_relative_path("report_path", payload["report_path"]),
+            report_sha256=require_hex64("report_sha256", payload["report_sha256"]),
+            bundle_sha256=require_hex64("bundle_sha256", payload["bundle_sha256"]),
+            registered_event_sha256=require_hex64(
+                "registered_event_sha256", payload["registered_event_sha256"]
+            ),
+            started_event_sha256=require_hex64(
+                "started_event_sha256", payload["started_event_sha256"]
+            ),
         )
 
 

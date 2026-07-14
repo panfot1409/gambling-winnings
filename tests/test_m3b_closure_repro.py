@@ -29,6 +29,7 @@ from eth_research.fractional.accounting import (
     PortfolioState,
     equity_at,
 )
+from eth_research.fractional.archive import ArchiveError, FractionalArtifactManifest
 from eth_research.fractional.cost_model import COMPATIBILITY_V1
 from eth_research.fractional.engine import EngineError, run_fractional_backtest
 from eth_research.fractional.liquidity import LiquidityError, estimate_liquidity
@@ -40,10 +41,11 @@ from eth_research.strategies.base import Strategy
 REPO = Path(eth_research.__file__).resolve().parents[2]
 _RESULTS = REPO / "research/m3b/fractional_results.json"
 _REGISTRY = REPO / "research/m3b/experiment_registry.jsonl"
+_MANIFEST = REPO / "research/m3b/experiments/run-001/manifest.json"
 
 # The strict rejections raise one of these domain / value errors (never a blind
 # Exception, and never a silent coercion).
-_REJECT = (ValueError, TypeError, AccountingError, EngineError, LiquidityError)
+_REJECT = (ValueError, TypeError, AccountingError, EngineError, LiquidityError, ArchiveError)
 
 
 def _tiny_frame(n: int = 8) -> pd.DataFrame:
@@ -88,20 +90,44 @@ def _mutated_results(**overrides: object) -> bytes:
 
 
 # ---------------------------------------------------------------------------
+# R3 — the manifest parser must decode digests, never ``str()``-coerce them
+# ---------------------------------------------------------------------------
+class TestR3ManifestParserStrictness:
+    """Defense-in-depth: ``__post_init__`` already re-validated every digest with
+    ``require_hex64``, so a coerced value was caught downstream rather than
+    silently trusted. The parser now rejects a malformed digest at the decode
+    site itself, so parsing only decodes and never repairs a value.
+    """
+
+    def test_non_string_digest_is_rejected(self) -> None:
+        payload = json.loads(_MANIFEST.read_bytes())
+        payload["results_sha256"] = 123  # a JSON number, not a hex string
+        raw = json.dumps(payload, sort_keys=True, indent=2).encode("utf-8")
+        with pytest.raises(_REJECT):
+            FractionalArtifactManifest.from_json_bytes(raw)
+
+    def test_truncated_digest_is_rejected(self) -> None:
+        payload = json.loads(_MANIFEST.read_bytes())
+        payload["bundle_sha256"] = payload["bundle_sha256"][:63]  # 63 hex chars
+        raw = json.dumps(payload, sort_keys=True, indent=2).encode("utf-8")
+        with pytest.raises(_REJECT):
+            FractionalArtifactManifest.from_json_bytes(raw)
+
+
+# ---------------------------------------------------------------------------
 # R4 — results parser must not repair malformed input
 # ---------------------------------------------------------------------------
 class TestR4ResultsParserStrictness:
-    @pytest.mark.xfail(reason="R4: int(True) coerces bool to schema version", strict=True)
     def test_bool_schema_version_is_rejected(self) -> None:
         with pytest.raises(_REJECT):
-            FractionalResults.from_json_bytes(_mutated_results(fractional_results_schema_version=True))
+            FractionalResults.from_json_bytes(
+                _mutated_results(fractional_results_schema_version=True)
+            )
 
-    @pytest.mark.xfail(reason="R4: int(False) coerces bool to a zero event count", strict=True)
     def test_bool_event_count_is_rejected(self) -> None:
         with pytest.raises(_REJECT):
             FractionalResults.from_json_bytes(_mutated_results(development_gate_event_count=False))
 
-    @pytest.mark.xfail(reason="R4: float(str) repairs a numeric string", strict=True)
     def test_numeric_string_real_is_rejected(self) -> None:
         # initial_cash is per-cell and not cross-checked by aggregate re-derivation,
         # so this isolates the float(str) coercion rather than a grid mismatch.
@@ -227,4 +253,3 @@ def test_repro_module_does_not_touch_sealed_ledgers() -> None:
     for rel in ledgers:
         assert sha256_file(REPO / rel) == empty
         assert (REPO / rel).stat().st_size == 0
-

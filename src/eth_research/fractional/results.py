@@ -20,15 +20,19 @@ from typing import Any
 import pandas as pd
 
 from eth_research._json import strict_json_loads
-from eth_research.data.provenance import (
-    require_hex64,
-    require_int,
-    require_nonempty_str,
-    require_str,
-)
 from eth_research.fractional.cost_model import SCENARIOS
 from eth_research.fractional.protocol import EXPERIMENT_FAMILY
 from eth_research.fractional.strategies import STRATEGY_NAMES
+from eth_research.fractional.validation import (
+    require_hex64,
+    require_int,
+    require_nonempty_str,
+    require_nonnegative_int,
+    require_positive_int,
+    require_real,
+    require_str,
+    require_tuple,
+)
 from eth_research.walkforward import OOS_FOLD_COUNT
 
 FRACTIONAL_RESULTS_SCHEMA_VERSION: int = 1
@@ -49,6 +53,13 @@ def _ts(value: pd.Timestamp) -> str:
 
 def _opt(value: float | None) -> float | None:
     return None if value is None else float(value)
+
+
+def _require_list(value: object) -> list[Any]:
+    """Decode a JSON array (never coerce a scalar or object into a sequence)."""
+    if not isinstance(value, list):
+        raise ResultsError(f"expected a JSON array, got {type(value).__name__}")
+    return value
 
 
 @dataclass(frozen=True)
@@ -118,29 +129,43 @@ class FractionalFoldCell:
         first_open = require_str("oos_first_open_time", payload["oos_first_open_time"])
         last_open = require_str("oos_last_open_time", payload["oos_last_open_time"])
         return cls(
-            fold_index=require_int("fold_index", payload["fold_index"]),
+            fold_index=require_nonnegative_int("fold_index", payload["fold_index"]),
             strategy=require_nonempty_str("strategy", payload["strategy"]),
             cost_scenario=require_nonempty_str("cost_scenario", payload["cost_scenario"]),
-            oos_row_count=require_int("oos_row_count", payload["oos_row_count"]),
+            oos_row_count=require_positive_int("oos_row_count", payload["oos_row_count"]),
             oos_first_open_time=pd.Timestamp(first_open),
             oos_last_open_time=pd.Timestamp(last_open),
-            initial_cash=float(payload["initial_cash"]),
-            marked_terminal_equity=float(payload["marked_terminal_equity"]),
-            terminal_liquidation_equity=float(payload["terminal_liquidation_equity"]),
-            marked_total_return=float(payload["marked_total_return"]),
-            liquidation_total_return=float(payload["liquidation_total_return"]),
-            annualized_return=float(payload["annualized_return"]),
-            annualized_volatility=float(payload["annualized_volatility"]),
-            sharpe_ratio=None if sharpe is None else float(sharpe),
-            sortino_ratio=None if sortino is None else float(sortino),
-            max_drawdown=float(payload["max_drawdown"]),
-            num_fills=require_int("num_fills", payload["num_fills"]),
-            num_partial_fills=require_int("num_partial_fills", payload["num_partial_fills"]),
-            total_traded_notional=float(payload["total_traded_notional"]),
-            turnover=float(payload["turnover"]),
-            total_fees=float(payload["total_fees"]),
-            average_achieved_exposure=float(payload["average_achieved_exposure"]),
-            time_in_market=float(payload["time_in_market"]),
+            initial_cash=require_real("initial_cash", payload["initial_cash"]),
+            marked_terminal_equity=require_real(
+                "marked_terminal_equity", payload["marked_terminal_equity"]
+            ),
+            terminal_liquidation_equity=require_real(
+                "terminal_liquidation_equity", payload["terminal_liquidation_equity"]
+            ),
+            marked_total_return=require_real("marked_total_return", payload["marked_total_return"]),
+            liquidation_total_return=require_real(
+                "liquidation_total_return", payload["liquidation_total_return"]
+            ),
+            annualized_return=require_real("annualized_return", payload["annualized_return"]),
+            annualized_volatility=require_real(
+                "annualized_volatility", payload["annualized_volatility"]
+            ),
+            sharpe_ratio=None if sharpe is None else require_real("sharpe_ratio", sharpe),
+            sortino_ratio=None if sortino is None else require_real("sortino_ratio", sortino),
+            max_drawdown=require_real("max_drawdown", payload["max_drawdown"]),
+            num_fills=require_nonnegative_int("num_fills", payload["num_fills"]),
+            num_partial_fills=require_nonnegative_int(
+                "num_partial_fills", payload["num_partial_fills"]
+            ),
+            total_traded_notional=require_real(
+                "total_traded_notional", payload["total_traded_notional"]
+            ),
+            turnover=require_real("turnover", payload["turnover"]),
+            total_fees=require_real("total_fees", payload["total_fees"]),
+            average_achieved_exposure=require_real(
+                "average_achieved_exposure", payload["average_achieved_exposure"]
+            ),
+            time_in_market=require_real("time_in_market", payload["time_in_market"]),
         )
 
 
@@ -216,17 +241,33 @@ class FractionalAggregate:
         return cls(
             strategy=require_nonempty_str("strategy", payload["strategy"]),
             cost_scenario=require_nonempty_str("cost_scenario", payload["cost_scenario"]),
-            fold_count=require_int("fold_count", payload["fold_count"]),
-            median_marked_return=float(payload["median_marked_return"]),
-            median_liquidation_return=float(payload["median_liquidation_return"]),
-            worst_max_drawdown=float(payload["worst_max_drawdown"]),
-            median_sharpe_ratio=None if median_sharpe is None else float(median_sharpe),
-            median_turnover=float(payload["median_turnover"]),
-            total_fills=require_int("total_fills", payload["total_fills"]),
-            median_average_exposure=float(payload["median_average_exposure"]),
-            fraction_positive_marked_folds=float(payload["fraction_positive_marked_folds"]),
-            fraction_beating_buy_and_hold=float(payload["fraction_beating_buy_and_hold"]),
-            fraction_beating_cash=float(payload["fraction_beating_cash"]),
+            fold_count=require_positive_int("fold_count", payload["fold_count"]),
+            median_marked_return=require_real(
+                "median_marked_return", payload["median_marked_return"]
+            ),
+            median_liquidation_return=require_real(
+                "median_liquidation_return", payload["median_liquidation_return"]
+            ),
+            worst_max_drawdown=require_real("worst_max_drawdown", payload["worst_max_drawdown"]),
+            median_sharpe_ratio=(
+                None
+                if median_sharpe is None
+                else require_real("median_sharpe_ratio", median_sharpe)
+            ),
+            median_turnover=require_real("median_turnover", payload["median_turnover"]),
+            total_fills=require_nonnegative_int("total_fills", payload["total_fills"]),
+            median_average_exposure=require_real(
+                "median_average_exposure", payload["median_average_exposure"]
+            ),
+            fraction_positive_marked_folds=require_real(
+                "fraction_positive_marked_folds", payload["fraction_positive_marked_folds"]
+            ),
+            fraction_beating_buy_and_hold=require_real(
+                "fraction_beating_buy_and_hold", payload["fraction_beating_buy_and_hold"]
+            ),
+            fraction_beating_cash=require_real(
+                "fraction_beating_cash", payload["fraction_beating_cash"]
+            ),
         )
 
 
@@ -394,10 +435,14 @@ class FractionalResults:
         payload = strict_json_loads(raw)
         if not isinstance(payload, dict) or set(payload) != _RESULTS_KEYS:
             raise ResultsError("results keys do not match the schema")
-        cells = tuple(FractionalFoldCell.from_dict(c) for c in payload["fold_cells"])
-        aggregates = tuple(FractionalAggregate.from_dict(a) for a in payload["aggregates"])
+        cells = tuple(FractionalFoldCell.from_dict(c) for c in _require_list(payload["fold_cells"]))
+        aggregates = tuple(
+            FractionalAggregate.from_dict(a) for a in _require_list(payload["aggregates"])
+        )
         return cls(
-            fractional_results_schema_version=int(payload["fractional_results_schema_version"]),
+            fractional_results_schema_version=require_int(
+                "fractional_results_schema_version", payload["fractional_results_schema_version"]
+            ),
             experiment_id=require_nonempty_str("experiment_id", payload["experiment_id"]),
             experiment_family=require_nonempty_str(
                 "experiment_family", payload["experiment_family"]
@@ -415,18 +460,30 @@ class FractionalResults:
             fractional_protocol_path=require_nonempty_str(
                 "fractional_protocol_path", payload["fractional_protocol_path"]
             ),
-            fractional_protocol_sha256=str(payload["fractional_protocol_sha256"]),
-            frozen_m2_dossier_sha256=str(payload["frozen_m2_dossier_sha256"]),
-            development_partition_sha256=str(payload["development_partition_sha256"]),
+            fractional_protocol_sha256=require_hex64(
+                "fractional_protocol_sha256", payload["fractional_protocol_sha256"]
+            ),
+            frozen_m2_dossier_sha256=require_hex64(
+                "frozen_m2_dossier_sha256", payload["frozen_m2_dossier_sha256"]
+            ),
+            development_partition_sha256=require_hex64(
+                "development_partition_sha256", payload["development_partition_sha256"]
+            ),
             research_train_content_fingerprint=require_nonempty_str(
                 "research_train_content_fingerprint", payload["research_train_content_fingerprint"]
             ),
-            strategies=tuple(str(s) for s in payload["strategies"]),
-            cost_scenarios=tuple(str(s) for s in payload["cost_scenarios"]),
+            strategies=require_tuple("strategies", payload["strategies"], require_nonempty_str),
+            cost_scenarios=require_tuple(
+                "cost_scenarios", payload["cost_scenarios"], require_nonempty_str
+            ),
             fold_cells=cells,
             aggregates=aggregates,
-            development_gate_event_count=int(payload["development_gate_event_count"]),
-            final_holdout_event_count=int(payload["final_holdout_event_count"]),
+            development_gate_event_count=require_nonnegative_int(
+                "development_gate_event_count", payload["development_gate_event_count"]
+            ),
+            final_holdout_event_count=require_nonnegative_int(
+                "final_holdout_event_count", payload["final_holdout_event_count"]
+            ),
         )
 
 
