@@ -224,7 +224,15 @@ def solve_target_weight(
         )
 
     g_max = residual(x_max)
-    reached_endpoint = g_max <= 0.0 if side == "buy" else g_max >= 0.0
+    # Execute the feasible endpoint when it cannot overshoot the target by more
+    # than the weight tolerance. This keeps a full-investment buy on the exact
+    # cash-exhausting quantity (binary-engine parity) even when float noise makes
+    # the endpoint's achieved weight round a hair past the target; a genuinely
+    # interior target still bisects.
+    if side == "buy":
+        reached_endpoint = g_max <= tol.weight_tolerance
+    else:
+        reached_endpoint = g_max >= -tol.weight_tolerance
     if reached_endpoint:
         executed = x_max
         endpoint_capped = True

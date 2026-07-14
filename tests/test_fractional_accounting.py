@@ -53,11 +53,14 @@ class TestBuy:
         with pytest.raises(AccountingError, match="cash"):
             apply_fill(state, "buy", 2.0, 100.0, 0.0)  # needs 200
 
-    def test_tiny_cash_shortfall_is_clamped_to_zero(self) -> None:
-        # C1 = 100 - 100.0000000001 = -1e-10, within cash_tolerance (1e-6) -> 0.
+    def test_tiny_cash_shortfall_is_kept_within_tolerance(self) -> None:
+        # C1 = 100 - 100.0000000001 = -1e-10: within cash_tolerance it is kept
+        # as-is (not overwritten to 0), so a full-investment buy stays
+        # bit-identical to the binary engine, which does not clamp either.
         state = PortfolioState(cash=100.0, quantity=0.0)
         new_state, _ = apply_fill(state, "buy", 1.0, 100.0000000001, 0.0)
-        assert new_state.cash == 0.0
+        assert -DEFAULT_TOLERANCES.cash_tolerance <= new_state.cash < 0.0
+        validate_state(new_state)  # accepted within tolerance
 
 
 class TestSell:

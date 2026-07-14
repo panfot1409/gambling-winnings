@@ -97,13 +97,6 @@ def validate_state(state: PortfolioState, *, tol: Tolerances = DEFAULT_TOLERANCE
         raise AccountingError(f"negative ETH quantity {state.quantity!r} beyond tolerance")
 
 
-def _clamp_zero(value: float, tolerance: float) -> float:
-    """Collapse a tiny negative (within ``tolerance``) to exactly ``0.0``."""
-    if -tolerance <= value < 0.0:
-        return 0.0
-    return value
-
-
 def apply_fill(
     state: PortfolioState,
     side: Side,
@@ -137,7 +130,6 @@ def apply_fill(
             raise AccountingError(
                 f"buy would drive cash to {cash_after!r} (below -{tol.cash_tolerance})"
             )
-        cash_after = _clamp_zero(cash_after, tol.cash_tolerance)
     elif side == "sell":
         quantity_after = state.quantity - quantity
         if quantity_after < -tol.quantity_tolerance:
@@ -145,7 +137,6 @@ def apply_fill(
                 f"sell would drive ETH quantity to {quantity_after!r} "
                 f"(below -{tol.quantity_tolerance})"
             )
-        quantity_after = _clamp_zero(quantity_after, tol.quantity_tolerance)
         cash_after = state.cash + fill_notional - fee
     else:  # pragma: no cover - Side is a closed Literal
         raise AccountingError(f"unknown side {side!r}")
