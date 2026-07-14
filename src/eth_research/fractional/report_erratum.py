@@ -28,6 +28,7 @@ byte-empty. It mutates nothing and evaluates no sealed partition.
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass
 from itertools import pairwise
@@ -113,6 +114,8 @@ def statement_domain_sha256(statement: str) -> str:
 def _require_float(label: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, float):
         raise FractionalReportErrataError(f"{label} must be a float, got {type(value).__name__}")
+    if not math.isfinite(value):
+        raise FractionalReportErrataError(f"{label} must be finite, got {value!r}")
     return value
 
 
@@ -286,6 +289,13 @@ class FractionalReportErratum:
         require_hex64("erroneous_statement_sha256", self.erroneous_statement_sha256)
         if self.erroneous_statement_sha256 != statement_domain_sha256(self.erroneous_statement):
             raise FractionalReportErrataError("erroneous_statement_sha256 does not match the bytes")
+        # Pin the exact claim being corrected: for this error class it is the one
+        # canonical overbroad sentence, so a forged erratum cannot quote some other
+        # (benign, true) report substring and still verify.
+        if self.erroneous_statement != RUN001_OVERBROAD_STATEMENT:
+            raise FractionalReportErrataError(
+                "erroneous_statement must be the pinned overbroad cost-monotonicity claim"
+            )
         require_nonempty_str("corrected_statement", self.corrected_statement)
         if not self.counterexamples:
             raise FractionalReportErrataError("counterexamples must be non-empty")

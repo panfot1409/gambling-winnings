@@ -36,7 +36,10 @@ from eth_research.fractional.execution_trace import (
 from eth_research.fractional.legacy_completion_audit import verify_legacy_completion_audit
 from eth_research.fractional.protocol import RUN_001_EXPERIMENT_ID
 from eth_research.fractional.registry import M3B_REGISTRY_RELPATH
-from eth_research.fractional.report_erratum import verify_fractional_report_errata
+from eth_research.fractional.report_erratum import (
+    RUN001_MONOTONICITY_ERRATUM_ID,
+    verify_fractional_report_errata,
+)
 from eth_research.fractional.results import FRACTIONAL_RESULTS_RELPATH
 
 _GATE_LEDGER_RELPATH: str = "research/m3a/development_gate_access.jsonl"
@@ -122,8 +125,14 @@ def verify_m3b_run_archive(
     # Hash-chained artifact annotations: 2 checks.
     checks.extend(verify_artifact_annotations(root))
 
-    # Append-only report errata (may be empty; verifying returns the ids).
-    verify_fractional_report_errata(root)
+    # Append-only report errata. The run-001 cost-monotonicity erratum is
+    # MANDATORY: the overbroad claim lives verbatim in the immutable report, so its
+    # correction must exist and verify — it cannot be silently deleted.
+    verified_errata = verify_fractional_report_errata(root)
+    if RUN001_MONOTONICITY_ERRATUM_ID not in verified_errata:
+        raise M3BRunArchiveError(
+            "the required run-001 cost-monotonicity erratum is missing or unverified"
+        )
     checks.append("report_errata_verified")
 
     # Execution-trace commitments: structural (fast) + optional deep replay.

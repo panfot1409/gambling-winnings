@@ -70,6 +70,21 @@ def test_tampered_archive_copy_fails_verification(tmp_path: Path) -> None:
         verify_m3b_run_archive(root)
 
 
+def test_deleting_the_mandatory_erratum_fails_verification(tmp_path: Path) -> None:
+    # The overbroad claim lives in the immutable report, so its correction is
+    # mandatory. Remove the errata files AND the (now-dangling) report_erratum
+    # annotation line — leaving a still-valid 3-line annotation chain — and the
+    # aggregate verifier must still reject the run.
+    root = _copy_repo_subset(tmp_path)
+    (root / "research/m3b/artifact_errata.jsonl").unlink()
+    shutil.rmtree(root / "research/m3b/errata")
+    annotations = root / "research/m3b/artifact_annotations.jsonl"
+    kept = annotations.read_bytes().rstrip(b"\n").split(b"\n")[:-1]
+    annotations.write_bytes(b"\n".join(kept) + b"\n")
+    with pytest.raises(M3BRunArchiveError, match="erratum"):
+        verify_m3b_run_archive(root)
+
+
 @pytest.mark.slow
 def test_deep_verification_adds_the_replay_check() -> None:
     checks = verify_m3b_run_archive(REPO, deep=True)

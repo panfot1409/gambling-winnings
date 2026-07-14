@@ -69,6 +69,7 @@ from eth_research.fractional.registry import (
     M3B_REGISTRY_RELPATH,
     M3B_REGISTRY_SCHEMA_VERSION,
     FractionalRegistryEvent,
+    RegistryError,
     append_registry_event,
     latest_registry_line_sha256,
     read_registry,
@@ -316,7 +317,7 @@ def execute_and_publish_fractional_run(
     append_registry_event(registry_path, started)
 
     try:
-        checks = _run_and_publish(root, pre, registered, started, event_time_utc)
+        _run_and_publish(root, pre, registered, started, event_time_utc)
     except Exception as exc:
         # R1: never mislabel a published success as 'failed'. If publication
         # durably landed — the completion intent is present and every recorded
@@ -331,7 +332,9 @@ def execute_and_publish_fractional_run(
                 "`python -m eth_research.fractional.recovery --repo-root <root> --finalize`"
             ) from exc
         # A genuine pre-publication failure: discard any unfulfilled intent and
-        # record an honest 'failed' event, consuming the single-use id.
+        # record an honest 'failed' event, consuming the single-use id. The append
+        # is best-effort — if even the failure record cannot be written, the real
+        # cause still surfaces rather than being masked by the append's error.
         clear_completion_intent(root)
         failed = dataclasses.replace(
             registered,
@@ -340,11 +343,21 @@ def execute_and_publish_fractional_run(
             failure_description=f"execution/publication failed: {type(exc).__name__}: {exc}"[:2000],
             previous_event_sha256=latest_registry_line_sha256(registry_path),
         )
-        append_registry_event(registry_path, failed)
+        try:
+            append_registry_event(registry_path, failed)
+        except (RegistryError, OSError) as append_exc:
+            raise OrchestratorError(
+                f"fractional run failed after 'started' and the failure record could not be "
+                f"appended ({append_exc}): {exc}"
+            ) from exc
         raise OrchestratorError(
             f"fractional run failed after 'started' and was recorded: {exc}"
         ) from exc
-    return checks
+
+    # Verify OUTSIDE the try: a post-completion consistency failure must surface
+    # its own diagnostic, not be misrouted into the failure machinery (which would
+    # try to append 'failed' onto an already-completed registry).
+    return verify_published_run(root)
 
 
 def _run_and_publish(
@@ -353,7 +366,7 @@ def _run_and_publish(
     registered: FractionalRegistryEvent,
     started: FractionalRegistryEvent,
     event_time_utc: pd.Timestamp,
-) -> tuple[str, ...]:
+) -> None:
     protocol = load_fractional_protocol(root / FRACTIONAL_PROTOCOL_RELPATH)
     wf_protocol = load_walk_forward_protocol(root / WALK_FORWARD_PROTOCOL_RELPATH)
 
@@ -448,5 +461,3 @@ def _run_and_publish(
 
     append_registry_event(root / M3B_REGISTRY_RELPATH, completed)
     clear_completion_intent(root)
-
-    return verify_published_run(root)

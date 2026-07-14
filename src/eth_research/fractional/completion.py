@@ -38,6 +38,7 @@ from typing import Any
 from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.data.provenance import sha256_bytes
 from eth_research.fractional.registry import EVENT_COMPLETED, FractionalRegistryEvent
+from eth_research.fractional.results import FRACTIONAL_REPORT_RELPATH, FRACTIONAL_RESULTS_RELPATH
 from eth_research.fractional.validation import require_hex64, require_int, require_nonempty_str
 from eth_research.publication import durable_remove, durable_write_bytes
 
@@ -105,6 +106,16 @@ class CompletionIntent:
             )
         if not self.artifacts:
             raise CompletionIntentError("a completion intent must record at least one artifact")
+        # Cross-bind the recorded artifact digests to the ones the 'completed' event
+        # itself certifies, so a hand-crafted intent cannot pair on-disk artifacts
+        # with an event carrying different result digests and be finalized.
+        by_relpath = {a.relpath: a.sha256 for a in self.artifacts}
+        if by_relpath.get(FRACTIONAL_RESULTS_RELPATH) != event.results_json_sha256:
+            raise CompletionIntentError(
+                "recorded results digest disagrees with the completed event"
+            )
+        if by_relpath.get(FRACTIONAL_REPORT_RELPATH) != event.report_markdown_sha256:
+            raise CompletionIntentError("recorded report digest disagrees with the completed event")
 
     @property
     def completed_event(self) -> FractionalRegistryEvent:

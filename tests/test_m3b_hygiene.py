@@ -22,8 +22,8 @@ from eth_research.fractional.artifact_annotations import ARTIFACT_ANNOTATIONS_RE
 from eth_research.fractional.execution_trace import EXECUTION_TRACE_COMMITMENTS_RELPATH
 from eth_research.fractional.legacy_completion_audit import FRACTIONAL_LEGACY_AUDIT_RELPATH
 from eth_research.fractional.protocol import FRACTIONAL_PROTOCOL_RELPATH
-from eth_research.fractional.report_erratum import FRACTIONAL_ERRATA_TRACKED
 from eth_research.fractional.registry import M3B_REGISTRY_RELPATH, read_registry
+from eth_research.fractional.report_erratum import FRACTIONAL_ERRATA_TRACKED
 from eth_research.fractional.results import (
     FRACTIONAL_REPORT_RELPATH,
     FRACTIONAL_RESULTS_RELPATH,

@@ -172,7 +172,10 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.repo_root)
     try:
         status = assess(root) if args.status else finalize(root)
-    except (CompletionIntentError, RegistryError) as exc:
+    except (CompletionIntentError, RegistryError, ValueError) as exc:
+        # ValueError covers field-level strict-validation failures on a corrupt
+        # intent (FractionalValidationError), so the CLI fails closed with a clean
+        # message instead of an uncaught traceback.
         print(f"recovery refused: {exc}", file=sys.stderr)
         return 1
     print(f"{status.state}: {status.detail}")

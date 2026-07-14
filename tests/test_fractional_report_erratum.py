@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import shutil
 from pathlib import Path
 
@@ -13,8 +14,10 @@ from eth_research.fractional.report_erratum import (
     RUN001_MONOTONICITY_ERRATUM_ID,
     FractionalReportErrataError,
     FractionalReportErratum,
+    MonotonicityCounterexample,
     build_run001_monotonicity_erratum,
     derive_monotonicity_counterexamples,
+    statement_domain_sha256,
     verify_fractional_report_errata,
 )
 from eth_research.fractional.results import FRACTIONAL_REPORT_RELPATH
@@ -78,3 +81,29 @@ def test_orphan_errata_file_is_rejected(tmp_path: Path) -> None:
     (root / FRACTIONAL_ERRATA_DIR_RELPATH / "stray.txt").write_bytes(b"unreferenced\n")
     with pytest.raises(FractionalReportErrataError, match="orphan"):
         verify_fractional_report_errata(root)
+
+
+def test_a_different_benign_statement_is_rejected() -> None:
+    # A forged erratum cannot quote some other true report sentence — the
+    # corrected claim is pinned to the one canonical overbroad statement, even
+    # when its self-hash is internally consistent.
+    erratum = build_run001_monotonicity_erratum(REPO)
+    benign = "No alpha is claimed"
+    with pytest.raises(FractionalReportErrataError, match="pinned overbroad"):
+        dataclasses.replace(
+            erratum,
+            erroneous_statement=benign,
+            erroneous_statement_sha256=statement_domain_sha256(benign),
+        )
+
+
+def test_non_finite_counterexample_return_is_rejected() -> None:
+    with pytest.raises(FractionalReportErrataError, match="finite"):
+        MonotonicityCounterexample(
+            strategy="donchian_55_20",
+            fold_index=1,
+            lower_friction_scenario="causal_proxy_base",
+            higher_friction_scenario="causal_proxy_stressed",
+            lower_friction_marked_return=float("nan"),
+            higher_friction_marked_return=0.9,
+        )
