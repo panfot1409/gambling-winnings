@@ -141,7 +141,15 @@ def _validate_context(context: pd.DataFrame, frame: pd.DataFrame) -> None:
             "context must be strictly before the frame "
             "(context.index.max() must be < frame.index.min())"
         )
-    interval = frame_interval(frame)
+    try:
+        interval = frame_interval(frame)
+    except (ValueError, TypeError) as exc:
+        # A single-row evaluation frame cannot pin the interval that the seam /
+        # same-interval checks below require; refuse it as a typed engine error
+        # rather than leaking the schema's bare ValueError past the boundary.
+        raise EngineError(
+            f"cannot determine the evaluation interval to validate the context: {exc}"
+        ) from exc
     if len(context) >= 2 and frame_interval(context) != interval:
         raise EngineError("context interval must match the evaluation interval")
     if frame.index[0] - context.index[-1] != interval:

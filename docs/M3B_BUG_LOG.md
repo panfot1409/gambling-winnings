@@ -265,3 +265,33 @@ exactly as the results parser does. No `__post_init__` invariant changed.
 **Verified:** the six strictness tests pass, the committed protocol round-trips
 byte-identically, `replay --check` reports `results_reproduced, report_reproduced,
 archive_verified`, and ruff + mypy are clean.
+
+### A2 — Class C — the engine context boundary leaked a bare `ValueError`
+
+`run_fractional_backtest` validates a warm-up `context` against the evaluation
+`frame` in `_validate_context` (`src/eth_research/fractional/engine.py`), which
+derives the bar interval with `frame_interval(frame)`. When the evaluation frame
+has a single row the interval is under-determined, and `frame_interval` raises a
+*bare* `ValueError("need at least 2 candles to determine the interval")` from
+`schema.py` that **leaks out of the public engine** instead of the engine's typed
+`EngineError`. Every other refusal in `_validate_context` (and `_require_canonical`)
+raises `EngineError`, so this one path broke the "every malformed segment the
+engine refuses raises `EngineError`" contract. The same 1-row frame runs cleanly
+with `context=None`, so only the context-attach path is affected.
+
+**Impact:** error-typing only — no accept/reject decision changes for any
+multi-row segment (run-001 folds are 225-226 rows, so `frame_interval(frame)`
+always succeeds); no financial byte changes and `replay --check` stays green.
+
+**Reproduction:** `tests/test_fractional_engine_context_typing.py` — a control
+(1-row frame, no context, runs clean) plus the failing case (1-row frame + a
+5-bar contiguous context) that raised a bare `ValueError` against the pre-fix
+engine and now raises `EngineError`.
+
+**Fix:** wrap the `frame_interval(frame)` determination in `_validate_context` in
+`try/except (ValueError, TypeError)` and re-raise as `EngineError`, mirroring the
+existing `_require_canonical` re-typing pattern. No other logic changed.
+
+**Verified:** both boundary tests pass, `replay --check` reports
+`results_reproduced, report_reproduced, archive_verified`, and ruff + mypy are
+clean.
