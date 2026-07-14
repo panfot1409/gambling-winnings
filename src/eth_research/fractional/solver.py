@@ -120,8 +120,11 @@ def _max_buy_within_cash(
 ) -> float:
     """Largest buy quantity in ``[0, upper]`` keeping post-trade cash >= 0.
 
-    Post-trade cash is strictly decreasing in the quantity, so bisect the cash
-    root when the upper endpoint is infeasible; otherwise the whole bracket fits.
+    Post-trade cash is strictly decreasing in the quantity. If the whole bracket
+    fits, return it. If the fill price is constant in the quantity (no impact —
+    the compatibility scenario), the cash-exhausting quantity has the exact
+    closed form ``cash / (price * (1 + fee_rate))`` the binary engine uses, which
+    preserves bit-for-bit parity. Only impact scenarios fall through to bisection.
     """
 
     def cash_after(x: float) -> float:
@@ -130,6 +133,9 @@ def _max_buy_within_cash(
 
     if cash_after(upper) >= 0.0:
         return upper
+    price0 = buy_price(0.0)
+    if buy_price(upper) == price0:
+        return state.cash / (price0 * (1.0 + fee_rate))
     lo, hi = 0.0, upper
     for _ in range(tol.max_iterations):
         mid = 0.5 * (lo + hi)
