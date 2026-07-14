@@ -62,20 +62,15 @@ def _tiny_frame(n: int = 8) -> pd.DataFrame:
 
 
 class _ConstSignal(Strategy):
-    """A fixed target; optionally returns a shuffled / mis-valued index."""
+    """A fixed target; optionally returns a shuffled / mis-valued signal index."""
 
-    def __init__(self, target: float, *, shuffle: bool = False, value: float | None = None) -> None:
-        self._target = target
+    def __init__(self, *, shuffle: bool = False, value: float = 1.0) -> None:
         self._shuffle = shuffle
-        self._value = target if value is None else value
+        self._value = value
 
     @property
     def name(self) -> str:
         return "const"
-
-    @property
-    def initial_target(self) -> float:
-        return self._target
 
     def target_positions(self, data: pd.DataFrame) -> pd.Series:
         index = data.index[::-1] if self._shuffle else data.index
@@ -169,21 +164,21 @@ class TestR7EngineBoundaryStrictness:
     @pytest.mark.xfail(reason="R7: a shuffled-index signal is applied positionally", strict=True)
     def test_shuffled_signal_index_is_rejected(self) -> None:
         frame = _tiny_frame()
-        strat = _strategy(_ConstSignal(1.0, shuffle=True))
+        strat = _strategy(_ConstSignal(shuffle=True))
         with pytest.raises(_REJECT):
             run_fractional_backtest(frame, strat, COMPATIBILITY_V1, initial_cash=10_000.0)
 
     @pytest.mark.xfail(reason="R7: a signal value outside [0,1] is not refused", strict=True)
     def test_out_of_range_signal_is_rejected(self) -> None:
         frame = _tiny_frame()
-        strat = _strategy(_ConstSignal(1.0, value=1.5))
+        strat = _strategy(_ConstSignal(value=1.5))
         with pytest.raises(_REJECT):
             run_fractional_backtest(frame, strat, COMPATIBILITY_V1, initial_cash=10_000.0)
 
     @pytest.mark.xfail(reason="R7: a non-finite signal value is not refused", strict=True)
     def test_non_finite_signal_is_rejected(self) -> None:
         frame = _tiny_frame()
-        strat = _strategy(_ConstSignal(1.0, value=float("nan")))
+        strat = _strategy(_ConstSignal(value=float("nan")))
         with pytest.raises(_REJECT):
             run_fractional_backtest(frame, strat, COMPATIBILITY_V1, initial_cash=10_000.0)
 
@@ -191,7 +186,7 @@ class TestR7EngineBoundaryStrictness:
     def test_duplicate_timestamp_frame_is_rejected(self) -> None:
         frame = _tiny_frame()
         dup = pd.concat([frame.iloc[:1], frame])  # duplicate first timestamp
-        strat = _strategy(_ConstSignal(1.0))
+        strat = _strategy(_ConstSignal())
         with pytest.raises(_REJECT):
             run_fractional_backtest(dup, strat, COMPATIBILITY_V1, initial_cash=10_000.0)
 
