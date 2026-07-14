@@ -38,10 +38,12 @@ bytes (`e3b0c442…855`), registry lifecycle exactly registered→started→comp
 the single run-001 id (no run-002), the five M3B immutable digests at their frozen
 values, no M2B/M3A immutable artifact touched vs. the PR#5 base, base `b3c261b5` an
 ancestor of HEAD, and no tag containing the M3B freeze/registration/execution
-commits. **GitHub-side live re-check (PR/CI run conclusions) was blocked** by
-GitHub MCP token expiry in this non-interactive session; CI is instead re-verified
-exhaustively and locally (§6), and the git preflight proves local == remote at the
-audited head.
+commits. The GitHub-side live re-check was briefly blocked mid-audit by a GitHub
+token expiry, then **restored**: PR #5 is confirmed open + draft + not merged with
+base `claude/m3a-development-research-lab` (`b3c261b5`) not retargeted, and all 26
+CI check runs on the acceptance head `050d4b0` concluded **success** (§6). CI is
+also re-verified exhaustively and locally, and the git preflight proves local ==
+remote.
 
 ## 3. Baseline (B) — one reviewed fixture
 
@@ -128,6 +130,7 @@ appears in the PR body, terminal audit, bug log, or tests.
 | `fractional.verify_run_archive --deep` | 25/25 checks, exit 0 |
 | `fractional.recovery --status` | `no-intent; nothing to finalize` |
 | `develop_m3a --check` (merged-main M3A gate) | reproducible, exit 0 |
+| GitHub CI on head `050d4b0` | **26/26 check runs success** (checks 3.12/3.13, authoritative-runtime, authoritative-replay, compat-replay 3.12/3.13, readiness) |
 
 ## 7. Test discipline (O)
 
@@ -203,8 +206,9 @@ linear: `main` (`ed53eb2`) ⊂ `m3a` (`b3c261b`) ⊂ `m3b` (`e6442bc`).
 23. PR #5 left **open + draft**; base not retargeted; no tag created.
 24. No M3C / run-002 / gate / holdout / promotion / tuning performed.
 25. Findings + reproductions logged in `docs/M3B_BUG_LOG.md` (A1–A3).
-26. **Limitation:** GitHub PR/CI live conclusions not re-queried (MCP token expired);
-    CI reproduced locally; local == remote at the audited head.
+26. **GitHub live state confirmed:** access was restored; PR #5 is open + draft +
+    not merged, base `claude/m3a-development-research-lab` not retargeted; all 26 CI
+    check runs on head `050d4b0` concluded **success**.
 27. Recommended next human step: review the five acceptance commits, run branch CI,
     then execute the §8 merge/tag sequence.
 
