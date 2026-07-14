@@ -107,7 +107,8 @@ def check_replay(repo_root: str | Path) -> tuple[str, ...]:
     _require_ledgers_byte_empty(root)
 
     run_events = [
-        e for e in read_registry(root / M3B_REGISTRY_RELPATH)
+        e
+        for e in read_registry(root / M3B_REGISTRY_RELPATH)
         if e.experiment_id == RUN_001_EXPERIMENT_ID
     ]
     lifecycle = [e.event for e in run_events]

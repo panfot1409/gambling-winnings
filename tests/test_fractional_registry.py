@@ -65,8 +65,12 @@ def _event(
 
 def _completed(previous: str) -> FractionalRegistryEvent:
     return _event(
-        EVENT_COMPLETED, previous, time="2026-07-14T01:00:00+00:00",
-        results="1" * 64, report="2" * 64, bundle="3" * 64,
+        EVENT_COMPLETED,
+        previous,
+        time="2026-07-14T01:00:00+00:00",
+        results="1" * 64,
+        report="2" * 64,
+        bundle="3" * 64,
     )
 
 

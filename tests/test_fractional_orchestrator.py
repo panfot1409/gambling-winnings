@@ -106,9 +106,7 @@ class TestSuccessfulLifecycle:
         assert results.development_gate_event_count == 0
         assert results.final_holdout_event_count == 0
 
-    def test_sealed_ledgers_stay_byte_empty(
-        self, published: tuple[Path, tuple[str, ...]]
-    ) -> None:
+    def test_sealed_ledgers_stay_byte_empty(self, published: tuple[Path, tuple[str, ...]]) -> None:
         from eth_research.data.provenance import sha256_file
 
         clone, _ = published
@@ -125,9 +123,7 @@ class TestSuccessfulLifecycle:
         assert "report_reproduced" in checks
         assert "archive_verified" in checks
 
-    def test_second_execution_is_refused(
-        self, published: tuple[Path, tuple[str, ...]]
-    ) -> None:
+    def test_second_execution_is_refused(self, published: tuple[Path, tuple[str, ...]]) -> None:
         clone, _ = published
         with pytest.MonkeyPatch.context() as mp:
             _patch_package_root(mp, clone)

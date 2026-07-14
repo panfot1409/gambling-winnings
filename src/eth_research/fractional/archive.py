@@ -126,9 +126,7 @@ class FractionalArtifactManifest:
             "registered_event_sha256": self.registered_event_sha256,
             "started_event_sha256": self.started_event_sha256,
         }
-        text = json.dumps(
-            payload, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False
-        )
+        text = json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False)
         return (text + "\n").encode("utf-8")
 
     @classmethod
