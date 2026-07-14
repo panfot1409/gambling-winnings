@@ -307,7 +307,11 @@ def _partition_summary(name: str, frame: pd.DataFrame) -> PartitionSummary:
 
 
 def derive_development_partition(
-    dataset: LoadedDataset, protocol: BenchmarkProtocol, *, frozen_m2_dossier_sha256: str
+    dataset: LoadedDataset,
+    protocol: BenchmarkProtocol,
+    *,
+    frozen_m2_dossier_sha256: str,
+    package_version: str = __version__,
 ) -> DevelopmentPartition:
     """Mechanically derive the three-level partition from verified M2 data.
 
@@ -315,6 +319,13 @@ def derive_development_partition(
     train segment is the research-train partition, the M2 validation
     segment is the development gate, and the M2 test segment is the final
     holdout — no new split scheme, no new fractions.
+
+    ``package_version`` defaults to the running package version (fresh creation
+    stamps this code's version). Verification of an already-committed partition
+    passes the committed version so the recompute is byte-identical across a
+    later package bump — the partition content (dates, counts, fingerprints,
+    dossier hash) is version-independent, exactly like the frozen M2 dossier's
+    version-independent numerical reproduction.
     """
     frame = dataset.frame
     splits = chronological_split(
@@ -329,7 +340,7 @@ def derive_development_partition(
     )
     return DevelopmentPartition(
         partition_schema_version=PARTITION_SCHEMA_VERSION,
-        package_version=__version__,
+        package_version=package_version,
         frozen_m2_dossier_sha256=frozen_m2_dossier_sha256,
         split_semantics=SPLIT_SEMANTICS,
         dataset_content_fingerprint=content_fingerprint(frame),
@@ -341,13 +352,17 @@ def derive_development_partition(
 
 
 def build_development_partition(
-    repo_root: str | Path, manifest_path: str | Path
+    repo_root: str | Path,
+    manifest_path: str | Path,
+    *,
+    package_version: str = __version__,
 ) -> DevelopmentPartition:
     """Verify the frozen M2 dossier (snapshot) then derive the partition.
 
     The dataset must be a reconstructed canonical dataset (materialized by
     the replay tool under the git-ignored ``data/`` tree); the frozen M2
-    dossier is verified before any partition is derived.
+    dossier is verified before any partition is derived. ``package_version``
+    is forwarded to the derivation (see :func:`derive_development_partition`).
     """
     from eth_research.dossier import verify_frozen_dossier
 
@@ -363,7 +378,10 @@ def build_development_partition(
     if verification.protocol is None or verification.dataset is None:  # pragma: no cover
         raise DevelopmentAccessError("frozen M2 dossier verification returned no dataset/protocol")
     return derive_development_partition(
-        verification.dataset, verification.protocol, frozen_m2_dossier_sha256=dossier_sha
+        verification.dataset,
+        verification.protocol,
+        frozen_m2_dossier_sha256=dossier_sha,
+        package_version=package_version,
     )
 
 
@@ -388,7 +406,14 @@ def load_development_dataset(
     root = Path(repo_root)
     committed_path = root / DEVELOPMENT_PARTITION_RELPATH
     committed = load_development_partition(committed_path)
-    recomputed = build_development_partition(root, manifest_path)
+    # Recompute with the committed partition's recorded version: the partition
+    # content is version-independent, so binding the committed version keeps the
+    # byte-for-byte recompute stable across a later package bump (e.g. the M3B
+    # 0.5.0 package verifying the committed 0.4.0 M3A partition). Every other
+    # field is still recomputed from the verified M2 dataset and must match.
+    recomputed = build_development_partition(
+        root, manifest_path, package_version=committed.package_version
+    )
     if recomputed.to_json_bytes() != committed.to_json_bytes():
         raise DevelopmentAccessError(
             "the committed development partition does not recompute from the verified M2 dataset"
@@ -434,10 +459,17 @@ def guard_context(context: pd.DataFrame | None, research_train_last_open: pd.Tim
 
 
 def verify_development_partition(repo_root: str | Path, manifest_path: str | Path) -> None:
-    """Require the committed partition to recompute byte-for-byte."""
+    """Require the committed partition to recompute byte-for-byte.
+
+    Binds the committed partition's recorded ``package_version`` (the content is
+    version-independent) so the recompute stays byte-identical across a later
+    package bump; every other field is recomputed from the verified M2 dataset.
+    """
     root = Path(repo_root)
     committed = load_development_partition(root / DEVELOPMENT_PARTITION_RELPATH)
-    recomputed = build_development_partition(root, manifest_path)
+    recomputed = build_development_partition(
+        root, manifest_path, package_version=committed.package_version
+    )
     if recomputed.to_json_bytes() != committed.to_json_bytes():
         raise DevelopmentAccessError(
             "the committed development partition does not recompute from the verified M2 dataset"

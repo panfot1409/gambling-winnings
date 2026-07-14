@@ -48,8 +48,12 @@ def _tamper(**changes: Any) -> bytes:
 class TestProtocolStructure:
     def test_committed_recomputes_byte_for_byte(self, research_train: pd.DataFrame) -> None:
         committed = load_walk_forward_protocol(PROTOCOL_PATH)
+        # The protocol content is version-independent: rebuild with the
+        # committed recorded version so a later package bump stays byte-identical.
         rebuilt = build_walk_forward_protocol(
-            research_train, development_partition_sha256=committed.development_partition_sha256
+            research_train,
+            development_partition_sha256=committed.development_partition_sha256,
+            package_version=committed.package_version,
         )
         assert rebuilt.to_json_bytes() == PROTOCOL_PATH.read_bytes()
 

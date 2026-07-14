@@ -1,0 +1,30 @@
+{
+  "corrected_statement": "Monotonic decline in the modeled frictions (compatibility_v1 >= causal_proxy_base >= causal_proxy_stressed) holds for the per-(strategy, cost-scenario) fold-median marked returns shown in Section 4, but NOT for every one of the 75 individual cells. Exactly one cell violates it: donchian_55_20 fold 1, whose causal_proxy_base marked return is below its causal_proxy_stressed marked return (a higher-friction scenario returned more in that single fold). The unqualified 'shrink net return monotonically' phrasing is therefore overbroad; it is correct only of the fold medians. No financial value changes and the immutable report bytes are preserved verbatim.",
+  "counterexamples": [
+    {
+      "fold_index": 1,
+      "higher_friction_marked_return": 0.9134855729480535,
+      "higher_friction_scenario": "causal_proxy_stressed",
+      "lower_friction_marked_return": 0.9066879504114878,
+      "lower_friction_scenario": "causal_proxy_base",
+      "strategy": "donchian_55_20"
+    }
+  ],
+  "development_gate_accessed": false,
+  "errata_schema_version": 1,
+  "erratum_id": "m3b-run001-report-cost-monotonicity-v1",
+  "erroneous_statement": "The cost scenarios shrink net return monotonically in the modeled frictions",
+  "erroneous_statement_sha256": "449b17724cce015ccf4814360b3c0a08355c2d4ba476e868faf674805d4783de",
+  "error_class": "overbroad_cost_monotonicity_claim",
+  "final_holdout_accessed": false,
+  "financial_values_changed": false,
+  "methodology_changed": false,
+  "new_experiment_run": false,
+  "previous_erratum_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "strategy_parameters_changed": false,
+  "target_experiment_id": "m3b-fractional-execution-risk-v1-run-001",
+  "target_report_relpath": "research/m3b/fractional_report.md",
+  "target_report_sha256": "68501639e7ba0660c7114c5b502861996b25bc0dff7e136500f4aca28260ae96",
+  "target_results_relpath": "research/m3b/fractional_results.json",
+  "target_results_sha256": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc"
+}

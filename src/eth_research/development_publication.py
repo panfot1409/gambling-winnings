@@ -16,7 +16,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from eth_research import __version__
 from eth_research.bootstrap_v2 import (
     FoldAwareBootstrapConfig,
     fold_stratified_moving_block_bootstrap,
@@ -123,7 +122,11 @@ def render_run_artifacts(prep: PreparedRun, detail: DevelopmentEvaluationDetail)
         experiment_id=registered.experiment_id,
         experiment_family_id=registered.experiment_family,
         methodology_id=registered.methodology_id,
-        package_version=__version__,
+        # The results record the version at which the experiment was *registered*
+        # (equal to the running version at fresh-run time), so a later package
+        # bump reproduces the committed run-003 bytes byte-for-byte instead of
+        # stamping the newer running version.
+        package_version=registered.package_version,
         # N8: distinct, unambiguous git-identity fields. The registered event's
         # execution commit (E) is the source whose tree runs; the run HEAD (R)
         # is the clean checkout the run started from (also the registration

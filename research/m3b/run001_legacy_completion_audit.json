@@ -1,0 +1,22 @@
+{
+  "completion_intent_present": false,
+  "experiment_id": "m3b-fractional-execution-risk-v1-run-001",
+  "legacy_completion_audit_schema_version": 1,
+  "note": "run-001 was registered, executed, and published before the durable completion-intent mechanism (closure R1) existed; it therefore has no completion_intent.json and never used the calculation-free finalizer. Its publication completeness is established by the hash-chained registry 'completed' event and by verify_published_run, both re-checked here.",
+  "registry_lifecycle": [
+    "registered",
+    "started",
+    "completed"
+  ],
+  "report_markdown_sha256": "68501639e7ba0660c7114c5b502861996b25bc0dff7e136500f4aca28260ae96",
+  "result_bundle_sha256": "c4ed0b6d06f97d7a215a0ea28f6e2a0b978c2e14268ffa4b8cf67bb1532f4a16",
+  "results_json_sha256": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc",
+  "verified_checks": [
+    "registry_lifecycle_complete",
+    "committed_artifact_digests_match_registry",
+    "bundle_matches_registry",
+    "results_revalidate",
+    "report_rerenders",
+    "manifest_binds_artifacts_and_registry"
+  ]
+}

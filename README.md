@@ -353,6 +353,60 @@ claim is made; this is not investment advice. See
 [docs/M3A_PLAN.md](docs/M3A_PLAN.md), and
 [docs/M3A_CLOSURE_REMEDIATION.md](docs/M3A_CLOSURE_REMEDIATION.md).
 
+## Fractional execution-risk laboratory (Milestone 3B)
+
+Milestone 3B is a trustworthy next-generation research engine built **on top of**
+the M3A research-train partition, adding exact **fractional long-only** cash/ETH
+allocation, causal next-open execution, a transparent execution-cost
+decomposition, and strict risk overlays — all under the same sealed-partition
+discipline. It runs exactly one preregistered experiment and records an honest,
+byte-reproducible result. The goal is **not** to find a profitable strategy; it
+is a measurement instrument. Nothing here can move money — the package
+(`eth_research.fractional`) has no network client, no exchange authentication, no
+wallet or signing, no order routing, and no leverage or short path.
+
+- **Exact fractional accounting + bounded solver** (`fractional.accounting`,
+  `fractional.solver`): a pinned-tolerance, bounded-bisection solver hits an
+  executable target weight `Q·P / (C + Q·P)` with exact cash/ETH bookkeeping; a
+  closed-form buy path makes the frictionless scenario reproduce the binary M3A
+  engine bit-for-bit.
+- **Causal liquidity + execution-cost decomposition** (`fractional.liquidity`,
+  `fractional.cost_model`): liquidity is estimated only from rows strictly before
+  the fill bar (no same-bar volume), and each fill's cost decomposes into
+  explicit fee, half-spread, base-slippage, and lagged-liquidity market-impact
+  terms. The spread/impact proxies are transparent and deterministic — **not**
+  venue-calibrated.
+- **Fractional engine + risk overlays** (`fractional.engine`, `fractional.risk`,
+  `fractional.strategies`): the causal loop executes at the next open with
+  deterministic partial fills under a participation cap, then reconciles every
+  bar against its primitives. Five fixed strategies (cash, buy-and-hold,
+  Donchian 55/20, and two 30-day/50%-annual volatility-target overlays with a
+  0.25 turnover limiter) run under three cost scenarios (`compatibility_v1`,
+  `causal_proxy_base`, `causal_proxy_stressed`). The drawdown breaker is off.
+- **Strict, reconciled results + immutable publication** (`fractional.results`,
+  `fractional.registry`, `fractional.archive`, `fractional.orchestrator`): a
+  strict, symmetric results model (75 reconciled fold cells + 15 re-derivable
+  aggregates, both sealed-ledger event counts pinned at 0), a hash-chained
+  `registered → started → completed` registry, and a fail-closed orchestrator
+  that publishes results / report / manifest as one durable byte-readback
+  transaction. `python -m eth_research.fractional.replay --repo-root . --check`
+  reconstructs the research train offline and reproduces the results and report
+  byte-for-byte; the `M3B Replay` CI runs it dual-state on 3.12.3 + 3.12/3.13.
+
+Status: **the one preregistered fractional run (run-001) is executed and
+recorded; both sealed ledgers stay byte-empty and the development gate and final
+holdout are untouched.** Over the research-train window buy-and-hold dominates
+fold-median return (~+185%) but carries the deepest drawdown (~-79%); the active
+strategies are shallower and mixed, the volatility-target overlays trade and pay
+the most, and net return shrinks monotonically as the modeled frictions grow.
+No alpha is claimed and nothing was tuned; losing folds are retained verbatim.
+This is in-sample research, not live or test performance, and not investment
+advice. See [docs/M3B_PLAN.md](docs/M3B_PLAN.md),
+[docs/M3B_FINDINGS.md](docs/M3B_FINDINGS.md), and the specs
+[docs/M3B_FRACTIONAL_ACCOUNTING_SPEC.md](docs/M3B_FRACTIONAL_ACCOUNTING_SPEC.md),
+[docs/M3B_EXECUTION_COST_SPEC.md](docs/M3B_EXECUTION_COST_SPEC.md),
+[docs/M3B_RISK_POLICY_SPEC.md](docs/M3B_RISK_POLICY_SPEC.md).
+
 ## Conventions
 
 - **Timestamps are candle open times**, UTC (`datetime64[ns, UTC]`); a
@@ -366,9 +420,11 @@ claim is made; this is not investment advice. See
   quantity per bar, an immutable fill ledger, and
   `equity = cash + quantity * close`. Cash can never go materially
   negative, quantity never negative — no borrowing, no hidden leverage.
-- **Targets are binary {0, 1}** (cash / fully long) in Milestone 1;
-  fractional weights are not offered because fractional rebalancing is not
-  implemented.
+- **Targets are binary {0, 1}** (cash / fully long) through Milestone 3A.
+  Milestone 3B adds exact **fractional long-only** weights in `[0, 1]`
+  (`eth_research.fractional`) with a bounded-bisection solver and causal
+  next-open partial fills; leverage (> 1) and shorting (< 0) remain
+  unimplemented and are actively gated out.
 - **Buy-and-hold enters ex ante** at the first available open, using no
   observed data (tested behaviour, not an accident of implementation).
 - **Warm-up context.** Validation may use trailing train rows and test may
@@ -428,15 +484,36 @@ src/eth_research/
     bootstrap.py     # M3A deterministic moving-block bootstrap
     experiment_registry.py # M3A append-only experiment registry (registered->started->terminal)
     develop_m3a.py   # M3A research-train experiment publisher + reproduce (--check)
+    fractional/      # M3B fractional long-only execution-risk laboratory:
+        dataset.py       # integrity-only research-train loader (never a gate/holdout row)
+        accounting.py    # exact fractional cash/ETH bookkeeping + pinned tolerances
+        solver.py        # bounded-bisection target-weight solver (binary-parity closed form)
+        liquidity.py     # causal lagged-liquidity estimator (strict < as-of slice)
+        cost_model.py    # fee/spread/slippage/impact decomposition + 3 cost scenarios
+        risk.py          # causal max-exposure / vol-target / turnover / drawdown overlays
+        strategies.py    # the five fixed fractional strategy configurations
+        engine.py        # causal next-open fractional backtest loop
+        metrics.py       # reconciled fractional performance metrics
+        reconciliation.py# re-derives every reported number from the primitives
+        compatibility.py # bit-for-bit parity oracle vs the binary M3A engine
+        protocol.py      # frozen fractional pre-registration protocol
+        results.py       # strict results model + deterministic report renderer
+        registry.py      # hash-chained M3B experiment registry (chained from line 1)
+        archive.py       # immutable artifact manifest + replay verifier
+        experiment.py    # the 75-cell runner (fold x scenario x strategy)
+        orchestrator.py  # fail-closed register + execute + publish lifecycle
+        replay.py        # dual-state offline replay (--check)
 .github/workflows/
     ci.yml          # lint/type/test on 3.12/3.13 + authoritative-runtime job
     m2b-replay.yml  # fresh-clone reproducibility on authoritative + compat runtimes
     m3a-replay.yml  # M3A results reproduce byte-for-byte; both access ledgers byte-empty
+    m3b-replay.yml  # M3B dual-state reproduce byte-for-byte; both ledgers byte-empty
     # (the write-capable m2b-acquire.yml is retired: data is frozen)
 .github/scripts/
     verify_m3a_registry.py # CI gate: the registry terminal event binds the published bytes
 research/m2b/       # committable provenance records, frozen contracts, raw bytes, ledger
 research/m3a/       # M3A partition, walk-forward protocol, registry, results, report, gate ledger
+research/m3b/       # M3B fractional protocol, registry, results, report, run-001 manifest
 tests/              # unit, hand-calculated ledger, and look-ahead regression tests
 examples/           # runnable end-to-end example
 docs/PLAN.md        # milestone plan
@@ -445,6 +522,8 @@ docs/M2B_PLAN.md    # Milestone 2B implementation plan
 docs/M2B_REAL_DATA_PLAN.md # Milestone 2B Part B plan (acquisition + freeze)
 docs/M2B_ACQUISITION.md # real-data acquisition procedure (GitHub Actions clean room)
 docs/M3A_PLAN.md    # Milestone 3A development research laboratory plan
+docs/M3B_PLAN.md    # Milestone 3B fractional execution-risk laboratory plan
+docs/M3B_FINDINGS.md # Milestone 3B run-001 honest findings
 docs/REMEDIATION.md # Milestone 1 correctness remediation record
 ```
 
@@ -467,6 +546,7 @@ CI installs with `uv sync --locked` and fails if the lock and
 ## Roadmap
 
 See [docs/PLAN.md](docs/PLAN.md) for the milestone plan,
-[docs/M3A_PLAN.md](docs/M3A_PLAN.md) for the current development research
+[docs/M3A_PLAN.md](docs/M3A_PLAN.md) for the development research laboratory,
+[docs/M3B_PLAN.md](docs/M3B_PLAN.md) for the fractional execution-risk
 laboratory, and [docs/REMEDIATION.md](docs/REMEDIATION.md) for the
 Milestone 1 correctness remediation record.

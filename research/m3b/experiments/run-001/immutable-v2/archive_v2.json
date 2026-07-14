@@ -1,0 +1,23 @@
+{
+  "archive_v2_schema_version": 1,
+  "artifacts": [
+    {
+      "archive_path": "research/m3b/experiments/run-001/immutable-v2/fractional_results.json",
+      "role": "results",
+      "sha256": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc",
+      "source_path": "research/m3b/fractional_results.json"
+    },
+    {
+      "archive_path": "research/m3b/experiments/run-001/immutable-v2/fractional_report.md",
+      "role": "report",
+      "sha256": "68501639e7ba0660c7114c5b502861996b25bc0dff7e136500f4aca28260ae96",
+      "source_path": "research/m3b/fractional_report.md"
+    }
+  ],
+  "bundle_sha256": "c4ed0b6d06f97d7a215a0ea28f6e2a0b978c2e14268ffa4b8cf67bb1532f4a16",
+  "completed_event_sha256": "e6bf2900f670ab94c3a8367324e314de49225ba9f2d0619d3e12e808481db0eb",
+  "experiment_family": "m3b-fractional-execution-risk-v1",
+  "experiment_id": "m3b-fractional-execution-risk-v1-run-001",
+  "manifest_path": "research/m3b/experiments/run-001/manifest.json",
+  "manifest_sha256": "d91ac46e58b8650da8e15fad19ec83520de0ada1989f0c5b16268e91fe82ca36"
+}
