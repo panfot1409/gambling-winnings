@@ -520,13 +520,20 @@ def _ratio(value: float | None) -> str:
 
 
 def render_fractional_report(results: FractionalResults) -> str:
-    """Render the Markdown report purely from the validated results model.
+    """Render the Markdown report from the validated results model.
 
     Deterministic: a fresh clone renders identical bytes from the committed
-    results, so replay byte-compares it. Every reported number is a field of a
-    reconciled fold cell or a re-derivable aggregate — the renderer computes
-    nothing new. Losing folds and severe-cost failures are shown exactly as
-    computed; no cell is omitted for being inconvenient.
+    results, so replay byte-compares it. Every *result* figure — each fold cell,
+    aggregate, terminal, and ledger event count — is a field of the reconciled
+    results model or a re-derivable aggregate; the renderer computes no new
+    financial number and omits no cell for being inconvenient. The one set of
+    non-result numbers is the Section 2 data-access table, which restates the
+    fixed pre-registered partition boundaries: the research-train row count is
+    the ``RESEARCH_TRAIN_ROWS`` constant (enforced by a standing test against
+    this rendered report), and the development-gate and final-holdout dates and
+    counts are stated from the sealed partition definition — M3B is forbidden
+    from evaluating those partitions, so it can only restate, never recompute,
+    them.
     """
     lines: list[str] = []
     add = lines.append

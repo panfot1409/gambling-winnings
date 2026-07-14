@@ -295,3 +295,35 @@ existing `_require_canonical` re-typing pattern. No other logic changed.
 **Verified:** both boundary tests pass, `replay --check` reports
 `results_reproduced, report_reproduced, archive_verified`, and ruff + mypy are
 clean.
+
+### A3 — Class C — the report renderer overclaimed "computes nothing new"
+
+`render_fractional_report` (`src/eth_research/fractional/results.py`) documented
+that "every reported number is a field of a reconciled fold cell or a re-derivable
+aggregate — the renderer computes nothing new", but the Section 2 data-access
+table's row counts (2221 / 740 / 741) and date ranges are fixed literals, not
+fields of any `FractionalFoldCell` or aggregate. The literals are **correct today**
+(they match the pre-registered partition), so this is an overclaim + latent
+decoupling, not a live data error — no financial byte is affected and the
+committed report re-renders byte-identically.
+
+Note the development-gate (740) and final-holdout (741) counts are properties of
+the **sealed** partitions M3B is forbidden to evaluate: the report can only
+*restate* their pre-registered boundaries, never recompute them. Only the
+research-train count has an importable authoritative constant
+(`RESEARCH_TRAIN_ROWS`).
+
+**Classification & remedy.** No failing test is possible (the output is correct),
+so per the audit fix policy the rendering *logic* is left byte-identical. The
+overclaim is remedied in the docstring (now honest about the Section 2 boundary
+table), and the decoupling is closed by a standing guard.
+
+**Guard:** `tests/test_fractional_report_boundary_provenance.py` — the rendered
+report must (a) be byte-identical to the committed report, (b) print the
+research-train count as `RESEARCH_TRAIN_ROWS` (so report and walk-forward
+partition can never silently diverge), and (c) show both sealed partitions as
+`**not evaluated (forbidden)**`.
+
+**Verified:** the three guards pass, `replay --check` reports
+`results_reproduced, report_reproduced, archive_verified`, and ruff + mypy are
+clean.
