@@ -66,10 +66,19 @@ def test_acquire_workflow_is_hardened_when_present() -> None:
     if not _ACQUIRE.exists():
         pytest.skip("acquisition workflow retired at this HEAD")
     text = _ACQUIRE.read_text()
-    # Trigger surface: manual dispatch only, no push / pull_request.
+    # Trigger surface: manual dispatch plus a branch+path-scoped committed
+    # trigger, and never a pull_request. Because the workflow file lives only on
+    # the stacked feature branch (never on the default branch), workflow_dispatch
+    # is not dispatchable here; the operative trigger is a push that touches the
+    # single committed sentinel. That push must be scoped to this branch and to
+    # the sentinel path only, so no unrelated push can fire an acquisition.
     assert "workflow_dispatch:" in text
     assert "pull_request:" not in text
-    assert re.search(r"^\s*push:", text, re.MULTILINE) is None
+    assert re.search(r"^\s*push:", text, re.MULTILINE) is not None
+    assert "research/m3d/acquire.trigger" in text
+    push_block = text.split("push:", 1)[1].split("jobs:", 1)[0]
+    assert _BRANCH in push_block, "push trigger is not scoped to the stacked branch"
+    assert "research/m3d/acquire.trigger" in push_block, "push trigger is not path-scoped"
     # Write permission is scoped to the acquire job, not the workflow default.
     assert "permissions:\n  contents: read" in text
     assert "contents: write" in text

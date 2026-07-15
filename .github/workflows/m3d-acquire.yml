@@ -7,6 +7,13 @@
 # parameters and then validates the downloaded bodies strictly offline. The
 # workflow is retired (deleted) once the primary and independent acquisitions are
 # committed and verified (Milestone 3D section 25).
+#
+# Trigger surface: because this workflow file lives only on the stacked feature
+# branch (never on the default branch), `workflow_dispatch` is not dispatchable
+# here; the operative trigger is a `push` that modifies the single committed
+# sentinel `research/m3d/acquire.trigger`, exactly as the reviewed M2B
+# acquisition bootstrap worked. Both triggers resolve the same strictly
+# whitelisted attempt id.
 name: M3D Acquire
 
 on:
@@ -19,9 +26,17 @@ on:
         options:
           - coinbase-eth-usd-prospective-genesis-001
           - coinbase-eth-usd-prospective-audit-002
+  push:
+    branches: ["claude/m3d-prospective-evidence-governance"]
+    paths:
+      - "research/m3d/acquire.trigger"
 
 permissions:
   contents: read
+
+concurrency:
+  group: m3d-acquire
+  cancel-in-progress: false
 
 jobs:
   acquire:
@@ -35,6 +50,22 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: claude/m3d-prospective-evidence-governance
+      - name: Resolve the attempt id (dispatch input or committed trigger)
+        id: params
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ATTEMPT_ID='${{ github.event.inputs.attempt_id }}'
+          else
+            test -f research/m3d/acquire.trigger
+            ATTEMPT_ID="$(jq -r '.attempt_id' research/m3d/acquire.trigger)"
+          fi
+          case "$ATTEMPT_ID" in
+            coinbase-eth-usd-prospective-genesis-001) ;;
+            coinbase-eth-usd-prospective-audit-002) ;;
+            *) echo "refusing: unexpected attempt id '$ATTEMPT_ID'"; exit 1 ;;
+          esac
+          echo "attempt_id=$ATTEMPT_ID" >> "$GITHUB_OUTPUT"
       - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
         run: |
           python3 -m venv "$RUNNER_TEMP/uvenv"
@@ -48,7 +79,7 @@ jobs:
         run: echo "REMOTE_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Emit the offline-computed curl request plan
         env:
-          ATTEMPT_ID: ${{ github.event.inputs.attempt_id }}
+          ATTEMPT_ID: ${{ steps.params.outputs.attempt_id }}
         run: |
           set -euo pipefail
           RAW_DIR="research/m3d/raw/coinbase/${ATTEMPT_ID}"
@@ -58,7 +89,7 @@ jobs:
             --out "${RAW_DIR}/_curl_plan.json"
       - name: Fetch each window with hardened curl (TLS, no redirect, size cap)
         env:
-          ATTEMPT_ID: ${{ github.event.inputs.attempt_id }}
+          ATTEMPT_ID: ${{ steps.params.outputs.attempt_id }}
         run: |
           set -euo pipefail
           RAW_DIR="research/m3d/raw/coinbase/${ATTEMPT_ID}"
@@ -86,7 +117,7 @@ jobs:
           done
       - name: Validate every response offline and write the receipt
         env:
-          ATTEMPT_ID: ${{ github.event.inputs.attempt_id }}
+          ATTEMPT_ID: ${{ steps.params.outputs.attempt_id }}
         run: |
           set -euo pipefail
           RAW_DIR="research/m3d/raw/coinbase/${ATTEMPT_ID}"
@@ -106,7 +137,7 @@ jobs:
           rm -f "${RAW_DIR}/_curl_plan.json" "${RAW_DIR}/_responses.jsonl"
       - name: Verify bot-commit scope, remote head, and fast-forward push
         env:
-          ATTEMPT_ID: ${{ github.event.inputs.attempt_id }}
+          ATTEMPT_ID: ${{ steps.params.outputs.attempt_id }}
         run: |
           set -euo pipefail
           RAW_DIR="research/m3d/raw/coinbase/${ATTEMPT_ID}"
