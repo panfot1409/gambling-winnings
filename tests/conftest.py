@@ -621,7 +621,7 @@ def _build_m3d_staged_cohort(
     )
     (raw_dir / RESPONSES_SIDECAR).unlink()
     m2b = tmp_path / "research/m2b"
-    m2b.mkdir(parents=True)
+    m2b.mkdir(parents=True, exist_ok=True)  # allow staging multiple attempts in one repo
     (m2b / "dataset_lock.json").write_bytes(canonical_json_bytes({"last_open_time": m2b_last_open}))
     return tmp_path
 

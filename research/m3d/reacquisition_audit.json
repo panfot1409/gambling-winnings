@@ -1,0 +1,27 @@
+{
+  "audit": {
+    "attempt_id": "coinbase-eth-usd-prospective-audit-002",
+    "canonical_content_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+    "plan_sha256": "ed978a6bc432e386c8e7990e48907a2bb987f9da36f5d1e82898ae16d3cb5eeb",
+    "receipt_sha256": "22ac66312a74a8ccb3cfd5312bf821d7c1dc2351135caf1df18479f2cbdf8cc0",
+    "row_count": 3,
+    "source_commit": "c4aa95e944892721c0d07155ed499167febb852c",
+    "workflow_run_id": "29424930094"
+  },
+  "canonical_content_match": true,
+  "differing_fields": 0,
+  "genesis": {
+    "attempt_id": "coinbase-eth-usd-prospective-genesis-001",
+    "canonical_content_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+    "plan_sha256": "4b2be21812f207f28db3e3bafbc8624bbf4cc0d23072bd28c04b53355c88c8d9",
+    "receipt_sha256": "966808bb14f9b1059773fa4cc2f6b2389cce498e5bb0ce2fb7c7967511679536",
+    "row_count": 3,
+    "source_commit": "02a92e8094c4884fb4f12eedd76af06f29ae3c5f",
+    "workflow_run_id": "29424691776"
+  },
+  "independent_plans": true,
+  "kind": "prospective_reacquisition_audit",
+  "package_version": "0.7.0",
+  "row_count_match": true,
+  "schema_version": 1
+}
