@@ -1,15 +1,17 @@
 name: M3C Replay
 
 # Fresh-clone reproducibility for the Milestone 3C adaptive-research-governance
-# experiment. Dual-state: green both before the one preregistered run (pristine
-# — no run-001 event, no published candidate artifacts) and after it (completed —
-# the research-train partition is reconstructed offline from the committed raw
-# Coinbase bytes, the 5x3x5 grid is re-run, and the candidate results JSON, the
-# report Markdown, and the decision JSON reproduce byte-for-byte — except a named
-# set of secondary statistical scalars, e.g. the fold-seam-aware bootstrap
-# interval, that IEEE-754 does not make cross-machine reproducible past a
-# transcendental last ULP, and which cannot move the mechanical verdict; see
-# eth_research.m3c.replay). No networking. Both sealed access ledgers — the
+# experiment. Dual-state: green both before the one preregistered run (pristine)
+# and after it (completed — the research-train partition is reconstructed offline
+# from the committed raw Coinbase bytes and the 5x3x5 grid is re-run). Under the
+# corrected contract (eth_research.m3c.numerics): every financial/structural field
+# reproduces byte-for-byte; a structurally-exact allowlist of secondary statistical
+# scalars (the fold-seam-aware bootstrap interval, the per-fold paired log-excess,
+# the PSR) may differ only by a bounded number of representable binary64 steps
+# (MAX_REPLAY_ULPS=8) that IEEE-754 does not make cross-machine identical for the
+# log1p/erf transcendentals, and which cannot move the mechanical verdict; the
+# report reproduces byte-for-byte except its results-digest provenance line, which
+# avalanches with the results SHA. No networking. Both sealed access ledgers — the
 # development gate and the final holdout — must stay byte-empty in every state.
 
 on:
@@ -51,6 +53,10 @@ jobs:
         run: uv lock --check
       - name: Sync locked environment
         run: uv sync --locked --all-extras --python 3.12.3
+      - name: Numerical-contract acceptance tests must run (cannot silently skip)
+        # pytest exits 5 when zero tests are collected, so a deleted/renamed/all-skipped
+        # acceptance suite fails this step instead of passing silently.
+        run: uv run --no-sync --python 3.12.3 python -m pytest tests/test_m3c_numerics.py -q -p no:cacheprovider
       - name: Both sealed ledgers are byte-empty before
         run: |
           set -euo pipefail
@@ -75,9 +81,10 @@ jobs:
           test "$(sha256sum "$HOLDOUT_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
 
   compat-replay:
-    # The reduction is interpreter-independent: the report and decision reproduce
-    # byte-for-byte and the results to the replay's cross-machine transcendental
-    # tolerance on every supported interpreter (the numerical stack is locked).
+    # The reduction is interpreter-independent: the decision reproduces byte-for-byte,
+    # the report reproduces modulo its results-digest line, and the results reproduce
+    # financially byte-for-byte / statistically within the bounded-ULP contract on every
+    # supported interpreter (the numerical stack is locked).
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -94,6 +101,8 @@ jobs:
         run: uv lock --check
       - name: Sync locked environment
         run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
+      - name: Numerical-contract acceptance tests must run (cannot silently skip)
+        run: uv run --no-sync python -m pytest tests/test_m3c_numerics.py -q -p no:cacheprovider
       - name: Both sealed ledgers are byte-empty before
         run: |
           set -euo pipefail
