@@ -151,19 +151,24 @@ splitting the update pipeline along the trust boundary and mirroring M3D's prove
 ### 4.1 Standing workflows at the final HEAD (all `contents: read`, none contacts a Coinbase host in YAML text)
 
 - **`m3e-prospective-update.yml`** — `schedule` (Mondays `17 2 * * 1`, 02:17 UTC)
-  + `workflow_dispatch`. `permissions: contents: read`. It (a) verifies the
-  accepted base, (b) mechanically computes the completed-day cutoff, (c) if a new
-  completed day is due, fetches the new window on **two isolated runner jobs**
-  via a hardened `curl` step whose endpoint is read from the committed protocol
-  JSON (so the workflow YAML contains **no literal Coinbase host**, exactly as
-  M3D's acquire workflow did), (d) validates each runner offline, (e) requires
-  canonical content equality, (f) assembles the append-only proposal bundle
-  offline, (g) runs the whole-proposal verifier, and (h) **uploads the verified
-  proposal bundle and a human-review instruction as a workflow artifact**. It
-  performs **no `git push`, creates no branch, and opens no PR** — hence "NO push
-  at final HEAD." On the stacked feature branch a `schedule:` trigger is inert
-  (only default-branch schedules fire), so the facility is literally *ready, not
-  active*.
+  + `workflow_dispatch`. `permissions: contents: read`. It is a strictly
+  **read-only "update-due probe"**: it (a) verifies the accepted base and (b)
+  mechanically computes the completed-day cutoff offline, then (c) reports whether
+  a new completed day is **DUE** or the run is a **NO-OP**, writing the plan only
+  to a runner-temp path (never the repo, never an artifact) when due. It performs
+  **no fetch, no assemble, no artifact upload, no `git push`, creates no branch,
+  and opens no PR** — consistent with this repository's accepted
+  no-artifact-upload / no-write security invariant
+  (`test_workflow_security.py::test_no_artifact_upload`). The full acquisition →
+  two-runner attestation → assemble → whole-proposal verify → draft-PR automation
+  is the **offline** `eth_research.m3e` machinery (`acquire_runner`, `comparison`,
+  `transition`, `assembly`, `publisher`), proven end-to-end by the disposable-repo
+  rehearsal (`tests/test_m3e_publisher_e2e.py`) and activated only by a separate,
+  human-reviewed step — never wired to run unattended. This is deviation **D3** in
+  `docs/M3E_BUG_LOG.md` (the plan's original bullet (h) uploaded the bundle as an
+  artifact, which the accepted invariant forbids). On the stacked feature branch a
+  `schedule:` trigger is inert (only default-branch schedules fire), so the
+  facility is literally *ready, not active*.
 - **`m3e-update-pr-check.yml`** — the read-only verifier for a proposal PR.
   `permissions: contents: read`, `pull-requests: read`. On a PR touching proposal
   artifacts it checks out the proposal, **replays the complete proposed cohort**,
@@ -175,9 +180,14 @@ splitting the update pipeline along the trust boundary and mirroring M3D's prove
   artifact on CPython 3.12.3 (authoritative) + 3.12 + 3.13, with the three ledgers
   byte-empty before and after and no tracked-file mutation.
 
-None of these grants `contents: write`; none contains a literal Coinbase host in
-its YAML. So `verify_m3d_program` check 25 stays green, and M3E's own
-`verify_m3e_program` re-asserts the same and more.
+None of these grants a write permission (each declares an explicit
+`contents: read` block — no `contents: write`, no `write-all`, no omitted block),
+none contacts a Coinbase host, uploads an artifact, references a secret,
+force-pushes, uses `pull_request_target`, or enables auto-merge. So
+`verify_m3d_program` check 25 stays green, and M3E's own hardened
+`verify_m3e_program._no_unsafe_workflow` re-asserts the same and more (it parses
+permission values and matches the scheme-less, quoted, and index-form evasions —
+see commit 23 and `docs/M3E_FINDINGS.md`).
 
 ### 4.2 The single privileged action, proven then retired
 
@@ -230,8 +240,10 @@ publish action is proven and preserved but intentionally dormant.
   `.acquisition_plan`, `.receipt`, `.raw_bundle`, `.segment`, `.cohort`,
   `.protocol`, `.quality`, `.publication`, `.maturity`). It imports **no** engine,
   strategy, backtest, accounting, metric, promotion-decision, or
-  experiment-executor module (there are none to import), and **no** network or
-  wallet module.
+  experiment-executor module — such modules exist elsewhere in `eth_research`,
+  which is exactly why the tight import allow-list is required — and **no** network
+  or wallet module (relative imports resolved; enforced by both the architecture
+  test and `verify_m3e_program._scan_m3e_imports`).
 
 ---
 

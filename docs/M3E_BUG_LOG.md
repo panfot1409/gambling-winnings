@@ -48,6 +48,29 @@ The repository runs mypy `strict = true` over `tests`. The M3E test suite was br
 to that bar with full parameter/return type annotations (no logic change); CI's strict
 type-check step is green.
 
+## D6 — Screening-guard robustness (three independent red teams, commit 23)
+
+Three independent read-only red teams confirmed HEAD is clean (no live prohibition
+violated) and found the *screening* guards were substring/marker heuristics weaker
+than the absolute guarantees the docs asserted. Fixed in code with tests, all
+documented in `docs/M3E_FINDINGS.md`: the workflow-safety scan now parses permission
+values (rejects `write-all` / omitted block / quoted-or-spaced `contents: write`),
+matches secrets in index/`inherit` forms, refuses artifact uploads, catches
+`-f`/`+refspec` force-push and every auto-merge spelling, and matches a scheme-less
+Coinbase host; the proposal directory is restricted to an exact expected file set;
+the import firewall resolves relative imports and rejects network/wallet modules; and
+`assert_draft_only` pins the PR base to the accepted cohort branch. Two residuals are
+accepted and documented (the completed-day cutoff is not re-asserted against a trusted
+clock offline; two-runner isolation is a reproducibility control, not external
+authenticity) — both mitigated by the mandatory draft-PR human-review gate.
+
+## D7 — Version freeze at milestone completion (commit 23)
+
+`M3E_PACKAGE_VERSION` tracked the live package version, so a later milestone bumping
+`eth_research.__version__` would have broken byte-exact replay of the committed M3E
+artifacts. Fix: pin the literal `"0.8.0"` (byte-identical to what is already stamped,
+so replay stays byte-exact), exactly as M3D pins `"0.7.0"`. Replay-neutral.
+
 ## Inherent limitation (by design, not a defect)
 
 Like M3D, the prospective cohort is self-anchoring: future-only candle bytes are bound to
