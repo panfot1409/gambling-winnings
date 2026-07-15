@@ -90,7 +90,7 @@ def test_annualized_return_is_fractional_pow_derived_scoping_the_exact_envelope(
 
     def _ulp(a: float, b: float) -> int:
         def key(x: float) -> int:
-            s = struct.unpack("<q", struct.pack("<d", x))[0]
+            s = int(struct.unpack("<q", struct.pack("<d", x))[0])
             return s if s >= 0 else -0x8000000000000000 - s
 
         return abs(key(a) - key(b))
