@@ -26,13 +26,6 @@ REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 CI = WORKFLOWS / "ci.yml"
 
-# The temporary M3D one-shot acquisition workflow legitimately holds job-scoped
-# ``contents: write`` for its single authorized acquisition (M3D section 12). It is
-# retired (deleted) at M3D section 25, after which this allowance becomes moot;
-# while present, tests/test_m3d_workflow_security.py enforces its full hardening
-# (dispatch-only, repo/branch guard, hash-pinned uv, no secrets, no force push).
-_TEMPORARY_WRITE_CAPABLE = frozenset({"m3d-acquire.yml"})
-
 # Only the uv installer host may appear, and only in read-only workflows.
 ALLOWED_HOSTS = {"astral.sh"}
 _URL_RE = re.compile(r"https://([A-Za-z0-9.\-]+)")
@@ -59,10 +52,16 @@ class TestAcquisitionWorkflowsRetired:
     def test_audit_push_bootstrap_trigger_is_removed(self) -> None:
         assert not (REPO_ROOT / "research/m2b/audit_acquire.trigger").exists()
 
+    def test_m3d_acquisition_workflow_is_removed(self) -> None:
+        assert not (WORKFLOWS / "m3d-acquire.yml").exists()
+
+    def test_m3d_acquire_trigger_is_removed(self) -> None:
+        assert not (REPO_ROOT / "research/m3d/acquire.trigger").exists()
+
     def test_no_workflow_can_write_contents(self) -> None:
+        # At the final HEAD no workflow may write repository contents — the
+        # temporary M3D acquisition workflow is retired.
         for path in _all_workflow_files():
-            if path.name in _TEMPORARY_WRITE_CAPABLE:
-                continue
             text = path.read_text(encoding="utf-8")
             assert "contents: write" not in text, f"{path.name} still grants contents: write"
             assert "contents:write" not in text

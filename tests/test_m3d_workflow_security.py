@@ -98,3 +98,10 @@ def test_acquire_workflow_is_hardened_when_present() -> None:
 def test_no_workflow_references_repository_secrets() -> None:
     for workflow in _workflows():
         assert "${{ secrets." not in workflow.read_text(), f"{workflow.name} uses a secret"
+
+
+def test_acquire_workflow_and_trigger_are_retired() -> None:
+    # Section 25: the one-shot acquisition workflow and its committed push sentinel
+    # are deleted at the final HEAD; no dormant data-overwrite machine remains.
+    assert not _ACQUIRE.exists()
+    assert not (_REPO / "research/m3d/acquire.trigger").exists()
