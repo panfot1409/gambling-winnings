@@ -46,9 +46,9 @@ from eth_research.data.provenance import (
 )
 from eth_research.data.validation import (
     parse_timestamp_field,
-    require_aware_timestamp,
     require_commit_sha,
     require_evaluation_id,
+    require_utc_timestamp,
 )
 
 M3C_REGISTRY_SCHEMA_VERSION: int = 1
@@ -257,7 +257,7 @@ class M3CRegistryEvent:
         require_commit_sha("registered_code_commit_sha", self.registered_code_commit_sha)
         require_commit_sha("execution_code_commit_sha", self.execution_code_commit_sha)
         require_hex64("execution_source_tree_fingerprint", self.execution_source_tree_fingerprint)
-        require_aware_timestamp("event_time_utc", self.event_time_utc)
+        require_utc_timestamp("event_time_utc", self.event_time_utc)
         if self.event == EVENT_COMPLETED:
             for label in _RESULT_FIELDS:
                 require_hex64(label, getattr(self, label))

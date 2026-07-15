@@ -193,8 +193,12 @@ def _emit_tolerated_drift(tolerated: list[tuple[tuple[Any, ...], float, float, i
 def _require_ledgers_byte_empty(root: Path) -> None:
     for relpath in (_GATE_LEDGER_RELPATH, _HOLDOUT_LEDGER_RELPATH):
         path = root / relpath
-        if not path.exists() or sha256_file(path) != _EMPTY_SHA256:
-            raise M3CReplayError(f"sealed ledger {relpath} is not byte-empty")
+        # Reject a symlink or non-regular file (mirroring the orchestrator's guard), so a
+        # sealed ledger cannot be swapped for a link to some other empty file.
+        if path.is_symlink() or not path.is_file() or sha256_file(path) != _EMPTY_SHA256:
+            raise M3CReplayError(
+                f"sealed ledger {relpath} is missing, a symlink, or not byte-empty"
+            )
 
 
 def _require_registration_binds_inputs(root: Path, registered: M3CRegistryEvent) -> None:

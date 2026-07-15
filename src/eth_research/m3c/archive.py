@@ -26,11 +26,13 @@ from typing import Any
 from eth_research._json import require_canonical_file_bytes, strict_json_loads
 from eth_research.data.provenance import sha256_bytes, sha256_file
 from eth_research.development import DEVELOPMENT_PARTITION_RELPATH, FROZEN_M2_DOSSIER_RELPATH
+from eth_research.m3c.candidate import ResearchBudget, build_research_budget
 from eth_research.m3c.decision import (
     M3C_DECISION_RELPATH,
     CandidateDecision,
     evaluate_candidate_decision,
 )
+from eth_research.m3c.lineage import ResearchLineage, build_m3c_lineage
 from eth_research.m3c.registry import (
     EVENT_COMPLETED,
     EVENT_REGISTERED,
@@ -261,6 +263,24 @@ def verify_published_run(repo_root: str | Path) -> tuple[str, ...]:
             raise M3CArchiveError(f"committed {label} digest disagrees with the registered event")
     checks.append("committed_inputs_match_registration")
 
+    # The governance documents must be VALID, canonical descriptions of THIS one candidate
+    # — not merely byte-consistent with their registered digest. Parse them strictly (which
+    # revalidates the candidate fingerprint) and require byte-equality with the single
+    # canonical budget/lineage. Independent-acceptance auditors flagged that the budget and
+    # lineage were bound by SHA only, so a lying but hash-consistent governance file (e.g. a
+    # budget declaring nonzero gate accesses or many candidate families) would have passed.
+    budget_bytes = require_canonical_file_bytes((root / _BUDGET_RELPATH).read_bytes(), "m3c budget")
+    ResearchBudget.from_dict(strict_json_loads(budget_bytes))
+    if canonical_json_bytes(build_research_budget().to_dict()) != budget_bytes:
+        raise M3CArchiveError("committed research budget is not the one canonical M3C budget")
+    lineage_bytes = require_canonical_file_bytes(
+        (root / M3C_LINEAGE_RELPATH).read_bytes(), "m3c lineage"
+    )
+    ResearchLineage.from_dict(strict_json_loads(lineage_bytes))
+    if canonical_json_bytes(build_m3c_lineage().to_dict()) != lineage_bytes:
+        raise M3CArchiveError("committed research lineage is not the one canonical M3C lineage")
+    checks.append("governance_documents_are_canonical")
+
     results_bytes = require_canonical_file_bytes(
         (root / M3C_RESULTS_RELPATH).read_bytes(), "m3c results"
     )
@@ -269,6 +289,11 @@ def verify_published_run(repo_root: str | Path) -> tuple[str, ...]:
         raise M3CArchiveError("results experiment_id disagrees with run-001")
     if results.to_json_bytes() != results_bytes:
         raise M3CArchiveError("committed results are not byte-canonical for the model")
+    # Bind the results' embedded protocol digest to the digest the run registered (not only
+    # transitively via the decision), so a results file pointing at a different protocol is
+    # caught in the shallow verifier, not only by deep replay.
+    if results.protocol_sha256 != registered.protocol_sha256:
+        raise M3CArchiveError("results protocol_sha256 disagrees with the registered event")
     checks.append("results_revalidate")
 
     decision_bytes = require_canonical_file_bytes(

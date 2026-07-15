@@ -30,6 +30,7 @@ import pandas as pd
 
 from eth_research._json import require_canonical_file_bytes
 from eth_research.data.provenance import content_fingerprint, sha256_bytes
+from eth_research.data.validation import require_utc_timestamp
 from eth_research.fractional.cost_model import SCENARIOS, SCENARIOS_BY_NAME, CostScenario
 from eth_research.fractional.engine import FractionalBacktestResult
 from eth_research.m3c.candidate import M3C_CANDIDATE_ID, M3C_STRATEGY_NAMES
@@ -224,11 +225,13 @@ class M3CFoldCell:
             strategy=require_nonempty_str("strategy", data["strategy"]),
             cost_scenario=require_nonempty_str("cost_scenario", data["cost_scenario"]),
             fold_index=require_nonnegative_int("fold_index", data["fold_index"]),
-            oos_first_open_time=pd.Timestamp(
-                require_str("oos_first_open_time", data["oos_first_open_time"])
+            oos_first_open_time=require_utc_timestamp(
+                "oos_first_open_time",
+                pd.Timestamp(require_str("oos_first_open_time", data["oos_first_open_time"])),
             ),
-            oos_last_open_time=pd.Timestamp(
-                require_str("oos_last_open_time", data["oos_last_open_time"])
+            oos_last_open_time=require_utc_timestamp(
+                "oos_last_open_time",
+                pd.Timestamp(require_str("oos_last_open_time", data["oos_last_open_time"])),
             ),
             oos_row_count=require_positive_int("oos_row_count", data["oos_row_count"]),
             context_row_count=require_nonnegative_int(
@@ -758,8 +761,10 @@ class M3CResults:
         if len(self.paired_comparisons) != OOS_FOLD_COUNT:
             raise M3CResultsError(f"expected {OOS_FOLD_COUNT} paired comparisons")
         folds = [pc.fold_index for pc in self.paired_comparisons]
-        if sorted(folds) != list(range(OOS_FOLD_COUNT)):
-            raise M3CResultsError("paired comparisons must cover folds 0..4 exactly once")
+        # Require ascending 0..4 order as serialized (not merely the set), so the numerics
+        # allowlist's positional keying paired_comparisons[i] is sound by construction.
+        if folds != list(range(OOS_FOLD_COUNT)):
+            raise M3CResultsError("paired comparisons must be folds 0..4 in ascending order")
         by_cell = {(c.strategy, c.cost_scenario, c.fold_index): c for c in self.fold_cells}
         for pc in self.paired_comparisons:
             cand = by_cell[(M3C_CANDIDATE_ID, PRIMARY_SCENARIO, pc.fold_index)]
