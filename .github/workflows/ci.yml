@@ -41,6 +41,19 @@ jobs:
         run: uv run --no-sync python -m eth_research.environment --repo-root . --compat
       - name: Tests
         run: uv run --no-sync pytest
+      - name: M3D honest governance state (data-only graph verify + status)
+        run: |
+          set -euo pipefail
+          uv run --no-sync python -m eth_research.m3d.replay --repo-root . --deep
+          uv run --no-sync python -m eth_research.m3d.status --repo-root . > "$RUNNER_TEMP/m3d_status.json"
+          jq . "$RUNNER_TEMP/m3d_status.json"
+          test "$(jq -r '.maturity_state' "$RUNNER_TEMP/m3d_status.json")" = "immature"
+          test "$(jq -r '.evaluation_authorized' "$RUNNER_TEMP/m3d_status.json")" = "false"
+          test "$(jq -r '.strategy_evaluation_performed' "$RUNNER_TEMP/m3d_status.json")" = "false"
+          test "$(jq -r '.candidate_declared' "$RUNNER_TEMP/m3d_status.json")" = "false"
+          test "$(jq -r '.performance_metrics_computed' "$RUNNER_TEMP/m3d_status.json")" = "false"
+          test "$(jq -r '.promotion_decision_exists' "$RUNNER_TEMP/m3d_status.json")" = "false"
+          test "$(jq -r '.evaluation_ledger_byte_count' "$RUNNER_TEMP/m3d_status.json")" = "0"
 
   authoritative-runtime:
     # The one runtime the authorized benchmark may run on: CPython 3.12.3 with
