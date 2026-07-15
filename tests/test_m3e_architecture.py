@@ -60,7 +60,11 @@ _ALLOWED_ETH_RESEARCH: frozenset[str] = frozenset(
         "eth_research.m3d.protocol",
         "eth_research.m3d.quality",
         "eth_research.m3d.publication",
+        "eth_research.m3d.reacquisition_audit",
         "eth_research.m3d.maturity",
+        # the reviewed data-only whole-program verifier M3E leans on to prove the
+        # entire accepted M3D program (and all it transitively pins) is intact
+        "eth_research.m3d.verify_m3d_program",
     }
 )
 

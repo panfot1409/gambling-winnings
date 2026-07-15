@@ -731,3 +731,48 @@ def write_m3e_runner(
 def m3e_write_runner() -> Callable[..., object]:
     """Factory to stage one synthetic M3E update runner (raws + plan + receipt)."""
     return write_m3e_runner
+
+
+def stage_m3e_proposal(proposal_dir: Path, *, repo_root: Path, as_of: str = "2026-07-22T02:17:00Z"):
+    """Stage a complete synthetic M3E proposal directory (two runners + derived evidence).
+
+    Both runners replay the same update plan with distinct runner identities (so they
+    are isolated), and the comparison/transition/manifest are assembled offline via
+    the real assembler and written into ``proposal_dir``. ``repo_root`` supplies the
+    accepted M3D base the transition re-derives from.
+    """
+    from eth_research.m3e.accepted_base import verify_accepted_base
+    from eth_research.m3e.cutoff import plan_update_window
+    from eth_research.m3e.proposal import assemble_proposal
+    from eth_research.m3e.update_plan import build_update_plan
+
+    proposal_dir = Path(proposal_dir)
+    proposal_dir.mkdir(parents=True, exist_ok=True)
+    base = verify_accepted_base(repo_root)
+    plan = build_update_plan(base, plan_update_window(base, as_of))
+    write_m3e_runner(
+        proposal_dir / "runner_a",
+        plan,
+        attempt_id="coinbase-eth-usd-prospective-update-runner-a",
+        source_commit="a" * 40,
+        workflow_run_id="run-99",
+        runner_identity="ubuntu-x64-a",
+    )
+    write_m3e_runner(
+        proposal_dir / "runner_b",
+        plan,
+        attempt_id="coinbase-eth-usd-prospective-update-runner-b",
+        source_commit="b" * 40,
+        workflow_run_id="run-99",
+        runner_identity="ubuntu-x64-b",
+    )
+    assembled = assemble_proposal(repo_root, proposal_dir)
+    for rel, data in assembled.blobs:
+        (proposal_dir / rel).write_bytes(data)
+    return assembled
+
+
+@pytest.fixture
+def m3e_stage_proposal() -> Callable[..., object]:
+    """Factory to stage a complete synthetic M3E proposal directory."""
+    return stage_m3e_proposal
