@@ -538,3 +538,95 @@ def make_m3a_checkout(tmp_path: Path) -> Path:
 def m3a_checkout(tmp_path: Path) -> Path:
     """A disposable clone carrying the full real M2B+M3A layer (see helper)."""
     return make_m3a_checkout(tmp_path)
+
+
+# --- Synthetic M3D prospective cohort staging --------------------------------
+
+# Coinbase field order [time, low, high, open, close, volume]; three completed
+# daily candles (07-12/07-13/07-14) in the newest-first order Coinbase returns.
+_M3D_DEFAULT_ROWS: tuple[tuple[float, ...], ...] = (
+    (1783987200.0, 1771.36, 1895.61, 1774.57, 1890.63, 138211.47661573),
+    (1783900800.0, 1748.05, 1844.67, 1805.56, 1774.57, 106281.79272453),
+    (1783814400.0, 1778.55, 1825.46, 1786.81, 1805.51, 39647.67901761),
+)
+
+
+def _build_m3d_staged_cohort(
+    tmp_path: Path,
+    *,
+    rows: Sequence[Sequence[float]] = _M3D_DEFAULT_ROWS,
+    m2b_last_open: str = "2026-07-11T00:00:00+00:00",
+    attempt_id: str | None = None,
+) -> Path:
+    """Stage a synthetic committed repo with an M3D genesis acquisition + M2B lock.
+
+    Builds the committed plan, writes a synthetic raw body + status sidecar, runs
+    the real offline runner to produce the receipt, then drops the sidecar so the
+    tree matches a real bot acquisition commit. ``rows`` are Coinbase-order candles
+    (newest-first ok); ``m2b_last_open`` seeds the minimal M2B dataset lock used by
+    the cross-dataset overlap check. No network, no strategy, no evaluation.
+    """
+    from eth_research.m3d.acquire_runner import (
+        RESPONSES_SIDECAR,
+        verify_responses_and_write_receipt,
+    )
+    from eth_research.m3d.acquisition_plan import (
+        GENESIS_ATTEMPT_ID,
+        build_prospective_acquisition_plan,
+    )
+    from eth_research.m3d.validation import canonical_json_bytes
+
+    attempt = attempt_id or GENESIS_ATTEMPT_ID
+    raw_dir = tmp_path / "research/m3d/raw/coinbase" / attempt
+    raw_dir.mkdir(parents=True)
+    plan = build_prospective_acquisition_plan(
+        attempt_id=attempt,
+        as_of_utc=pd.Timestamp("2026-07-15T00:00:00Z"),
+        docs_recheck={
+            "access_date": "2026-07-15",
+            "http_status": 403,
+            "accessible": False,
+            "source_of_truth": "m2b_verified_adapter_contract",
+        },
+    )
+    (raw_dir / "acquisition_plan.json").write_bytes(plan.to_json_bytes())
+    filename = str(plan.windows[0]["raw_filename"])
+    # Coinbase serves the bucket time as a JSON integer; keep it integral so the
+    # strict adapter accepts the synthetic body exactly as it would a real one.
+    body_rows = [[int(row[0]), *list(row[1:])] for row in rows]
+    (raw_dir / filename).write_bytes(json.dumps(body_rows).encode())
+    (raw_dir / RESPONSES_SIDECAR).write_text(
+        json.dumps(
+            {
+                "content_type": "application/json",
+                "filename": filename,
+                "http_code": 200,
+                "ordinal": 0,
+                "retrieved_at": "2026-07-15T12:00:00Z",
+            },
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    verify_responses_and_write_receipt(
+        raw_dir / "acquisition_plan.json",
+        raw_dir,
+        raw_dir / "acquisition_receipt.json",
+        attempt_id=attempt,
+        workflow_run_id="123",
+        source_commit="a" * 40,
+        client_identity="curl/8.0",
+        runner_identity="ubuntu-x64",
+        created_at_utc="2026-07-15T12:00:05Z",
+    )
+    (raw_dir / RESPONSES_SIDECAR).unlink()
+    m2b = tmp_path / "research/m2b"
+    m2b.mkdir(parents=True)
+    (m2b / "dataset_lock.json").write_bytes(canonical_json_bytes({"last_open_time": m2b_last_open}))
+    return tmp_path
+
+
+@pytest.fixture
+def m3d_staged_cohort() -> Callable[..., Path]:
+    """Factory for a synthetic committed repo carrying a staged M3D genesis cohort."""
+    return _build_m3d_staged_cohort
