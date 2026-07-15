@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -98,7 +99,7 @@ def test_require_mapping_and_list_and_str() -> None:
         v.require_nonempty_str("s", "")
 
 
-def test_load_canonical_json_bytes_enforces_trailing_newline(tmp_path) -> None:
+def test_load_canonical_json_bytes_enforces_trailing_newline(tmp_path: Path) -> None:
     good = tmp_path / "good.json"
     good.write_bytes(v.canonical_json_bytes({"a": 1}))
     raw, doc = v.load_canonical_json_bytes(good, "good")

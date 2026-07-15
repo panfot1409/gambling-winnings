@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -20,7 +21,7 @@ from eth_research.m3d.validation import canonical_json_bytes
 _REPO = Path(__file__).resolve().parents[1]
 
 
-def _built_doc() -> dict:
+def _built_doc() -> dict[str, Any]:
     return copy.deepcopy(build_research_program_snapshot(_REPO).document)
 
 

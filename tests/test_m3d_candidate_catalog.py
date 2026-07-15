@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -18,11 +19,11 @@ from eth_research.m3d.candidate_catalog import (
 _REPO = Path(__file__).resolve().parents[1]
 
 
-def _built() -> dict:
+def _built() -> dict[str, Any]:
     return copy.deepcopy(build_research_specification_catalog(_REPO).document)
 
 
-def _entry(doc: dict, identifier: str) -> dict:
+def _entry(doc: dict[str, Any], identifier: str) -> dict[str, Any]:
     return next(s for s in doc["strategies"] if s["identifier"] == identifier)
 
 
@@ -60,7 +61,7 @@ def test_no_strategy_is_promotion_eligible() -> None:
     assert all(not s["promotion_eligible"] for s in _built()["strategies"])
 
 
-def test_anti_orphan_missing_classification_fails(monkeypatch) -> None:
+def test_anti_orphan_missing_classification_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     reduced = dict(cc._CLASSIFICATION)
     reduced.pop("donchian_55_20")
     monkeypatch.setattr(cc, "_CLASSIFICATION", reduced)
@@ -68,7 +69,7 @@ def test_anti_orphan_missing_classification_fails(monkeypatch) -> None:
         build_research_specification_catalog(_REPO)
 
 
-def test_reverse_invariant_extra_classification_fails(monkeypatch) -> None:
+def test_reverse_invariant_extra_classification_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     extra = dict(cc._CLASSIFICATION)
     extra["ghost_strategy"] = dict(extra["cash"])
     monkeypatch.setattr(cc, "_CLASSIFICATION", extra)
