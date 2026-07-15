@@ -1,0 +1,64 @@
+{
+  "acquisition_rules": {
+    "completed_utc_days_only": true,
+    "no_backfill_before_start": true,
+    "no_data_substitution": true,
+    "no_duplicate_repair": true,
+    "no_forming_candle": true,
+    "no_gap_filling": true,
+    "no_interpolation": true,
+    "no_sorting_repair": true
+  },
+  "cohort_start": "2026-07-12T00:00:00Z",
+  "evaluation_ledger": {
+    "expected_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "must_be_byte_empty": true,
+    "path": "research/m3d/prospective_evaluations.jsonl"
+  },
+  "future_evaluation_requirements": [
+    "separate_human_authorized_milestone",
+    "new_protocol",
+    "candidate_declared_before_access",
+    "new_single_use_evaluation_ledger"
+  ],
+  "identity": {
+    "base_asset": "ETH",
+    "interval_days": 1,
+    "interval_iso8601": "P1DT0H0M0S",
+    "market_type": "spot",
+    "quote_asset": "USD",
+    "symbol": "ETH-USD",
+    "timestamp_convention": "candle_open_utc",
+    "venue": "coinbase-exchange"
+  },
+  "immutable": true,
+  "kind": "prospective_cohort_protocol",
+  "maturity": {
+    "cohort_start_fixed": true,
+    "maturity_authorizes_evaluation": false,
+    "maturity_means_data_availability_only": true,
+    "minimum_consecutive_daily_candles": 365,
+    "minimum_maturity_row_count": 365,
+    "nominal_maturity_exclusive_end": "2027-07-12T00:00:00Z",
+    "nominal_maturity_last_open": "2027-07-11T00:00:00Z"
+  },
+  "package_version": "0.7.0",
+  "prohibitions": {
+    "no_candidate_identifiers": true,
+    "no_evaluation_authorization": true,
+    "no_optimization": true,
+    "no_performance_endpoints": true,
+    "no_promotion_rule": true,
+    "no_strategy_identifiers": true
+  },
+  "relationship_to_m2b": {
+    "final_m2b_candle_open": "2026-07-11T00:00:00Z",
+    "strictly_after": true,
+    "zero_overlap": true
+  },
+  "schema_version": 1,
+  "source": {
+    "documentation_url": "https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles",
+    "endpoint": "https://api.exchange.coinbase.com/products/ETH-USD/candles"
+  }
+}
