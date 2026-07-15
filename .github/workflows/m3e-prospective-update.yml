@@ -26,6 +26,16 @@ on:
   schedule:
     - cron: "17 2 * * 1" # Mondays 02:17 UTC
   workflow_dispatch:
+  # TEMPORARY audit-mode bootstrap (retired in a later commit): because a
+  # workflow_dispatch is not dispatchable from a non-default branch and a schedule
+  # only fires on the default branch, a committed push sentinel is the only way to
+  # exercise this standing workflow live on the stacked feature branch. It proves the
+  # facility runs and — at today's date — correctly detects a no-op and proposes
+  # nothing. Removed, together with the sentinel, once the live evidence is recorded.
+  push:
+    branches: ["claude/m3e-review-only-prospective-updates"]
+    paths:
+      - "research/m3e/audit.trigger"
 
 permissions:
   contents: read
