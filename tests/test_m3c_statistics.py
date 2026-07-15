@@ -109,3 +109,23 @@ def test_psr_is_bounded_and_undefined_variance_is_rejected() -> None:
     assert psr.sample_size == 300
     with pytest.raises(_REJECT):
         probabilistic_sharpe_ratio(np.full(50, 0.01))  # zero variance
+
+
+def test_block_length_matches_exact_integer_floor_cube_root() -> None:
+    # An independent exact floor-cbrt (pure integer search) must agree everywhere in a
+    # wide range, including every perfect cube and its neighbours, so the committed
+    # block-length rule never depends on transcendental cube-root rounding (N-audit).
+    def exact_floor_cbrt(n: int) -> int:
+        k = 0
+        while (k + 1) ** 3 <= n:
+            k += 1
+        return k
+
+    for n in range(1, 5000):
+        assert block_length(n) == max(1, exact_floor_cbrt(n))
+    for cube in (8, 27, 64, 125, 216, 343, 1000, 8000, 27000):
+        for n in (cube - 1, cube, cube + 1):
+            assert block_length(n) == max(1, exact_floor_cbrt(n))
+    # The real M3C candidate causal_proxy_base fold sizes (225, 226) both give L = 6.
+    assert block_length(225) == 6
+    assert block_length(226) == 6

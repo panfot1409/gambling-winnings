@@ -39,11 +39,31 @@ class StatisticsError(ValueError):
     """A paired-inference input violated the strict alignment/domain contract."""
 
 
+def _integer_cube_root(n: int) -> int:
+    """Exact floor of the real cube root of ``n >= 0`` using integer arithmetic only.
+
+    A float cube root (``n ** (1/3)``) is not correctly rounded and can land on the
+    wrong side of an integer for perfect (or near-perfect) cubes; this seeds from the
+    float estimate and then corrects deterministically, so the block-length rule never
+    depends on transcendental rounding.
+    """
+    if n < 0:
+        raise StatisticsError("cube root of a negative count is undefined")
+    if n == 0:
+        return 0
+    k: int = round(n ** (1.0 / 3.0))
+    while k * k * k > n:
+        k -= 1
+    while (k + 1) ** 3 <= n:
+        k += 1
+    return k
+
+
 def block_length(n: int) -> int:
-    """The committed a-priori block length: floor(n**(1/3)), at least 1."""
+    """The committed a-priori block length: exact ``floor(n**(1/3))``, at least 1."""
     if n <= 0:
         raise StatisticsError("fold observation count must be positive")
-    return max(1, int(n ** (1.0 / 3.0) + 1e-9))
+    return max(1, _integer_cube_root(n))
 
 
 def paired_log_excess(candidate_net: np.ndarray, bnh_net: np.ndarray) -> np.ndarray:
@@ -163,8 +183,9 @@ def fold_stratified_block_bootstrap(
         fold_count=len(folds),
         block_lengths=tuple(block_lengths),
         point_estimate=point,
-        ci_lower=float(np.percentile(means, _LOWER_PCT)),
-        ci_upper=float(np.percentile(means, _UPPER_PCT)),
+        # Pin the interpolation method explicitly (do not rely on the library default).
+        ci_lower=float(np.percentile(means, _LOWER_PCT, method="linear")),
+        ci_upper=float(np.percentile(means, _UPPER_PCT, method="linear")),
     )
 
 
@@ -190,7 +211,11 @@ def slow_reference_bootstrap(
             acc += float(np.sum(pieces[:n]))
         means.append(acc / count)
     arr = np.array(means)
-    return point, float(np.percentile(arr, _LOWER_PCT)), float(np.percentile(arr, _UPPER_PCT))
+    return (
+        point,
+        float(np.percentile(arr, _LOWER_PCT, method="linear")),
+        float(np.percentile(arr, _UPPER_PCT, method="linear")),
+    )
 
 
 @dataclass(frozen=True)
