@@ -224,6 +224,28 @@ def verify_responses_and_write_receipt(
     return receipt
 
 
+def plan_update(repo_root: str | Path, as_of_utc: str, out_path: str | Path) -> int:
+    """Verify the accepted base, compute the due window, and write the update plan.
+
+    Wall-clock-free: ``as_of_utc`` is injected by the workflow (never read inside the
+    library). Writes the update plan only when a new completed day is due; on a no-op
+    it writes nothing and prints ``NO-OP`` so the workflow can exit without fetching.
+    """
+    from eth_research.m3e.accepted_base import verify_accepted_base
+    from eth_research.m3e.cutoff import plan_update_window
+    from eth_research.m3e.update_plan import build_update_plan
+
+    base = verify_accepted_base(repo_root)
+    decision = plan_update_window(base, as_of_utc)
+    if decision.is_noop:
+        print(f"NO-OP: {decision.reason}")
+        return 0
+    plan = build_update_plan(base, decision)
+    write_atomic(Path(out_path), plan.to_json_bytes())
+    print(f"DUE: {plan.expected_total_buckets} bucket(s); idempotency {plan.idempotency_key[:16]}")
+    return 0
+
+
 def _reject_unexpected_files(staging: Path, plan: ProspectiveUpdatePlan) -> None:
     expected = {str(w["raw_filename"]) for w in plan.windows}
     allowed = expected | {
@@ -244,6 +266,11 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - workflow e
     parser = argparse.ArgumentParser(description="M3E prospective update runner (offline)")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    plan_cmd = sub.add_parser("plan")
+    plan_cmd.add_argument("--repo-root", required=True)
+    plan_cmd.add_argument("--as-of", required=True)
+    plan_cmd.add_argument("--out", required=True)
+
     emit = sub.add_parser("emit-plan")
     emit.add_argument("--plan", required=True)
     emit.add_argument("--out", required=True)
@@ -260,6 +287,8 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - workflow e
     verify.add_argument("--created-at", required=True)
 
     args = parser.parse_args(argv)
+    if args.command == "plan":
+        return plan_update(args.repo_root, args.as_of, args.out)
     if args.command == "emit-plan":
         return emit_curl_plan(args.plan, args.out)
     receipt = verify_responses_and_write_receipt(
