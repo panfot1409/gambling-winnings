@@ -195,9 +195,8 @@ def new_window_canonical_rows(bundles: list[RunnerWindowBundle]) -> list[list[An
     return rows
 
 
-def new_window_fingerprint(bundles: list[RunnerWindowBundle]) -> str:
-    """Domain-separated fingerprint over the full ordered new-window canonical rows."""
-    rows = new_window_canonical_rows(bundles)
+def fingerprint_new_window_rows(rows: list[list[Any]]) -> str:
+    """Domain-separated fingerprint over ordered new-window canonical rows."""
     if not rows:
         raise M3EValidationError("new window has no rows")
     return domain_sha256(
@@ -210,3 +209,8 @@ def new_window_fingerprint(bundles: list[RunnerWindowBundle]) -> str:
             "rows": rows,
         },
     )
+
+
+def new_window_fingerprint(bundles: list[RunnerWindowBundle]) -> str:
+    """Domain-separated fingerprint over the full ordered new-window canonical rows."""
+    return fingerprint_new_window_rows(new_window_canonical_rows(bundles))
