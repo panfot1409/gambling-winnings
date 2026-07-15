@@ -36,7 +36,9 @@ _COINBASE_HOST_RE = re.compile(r"https?://[^\s\"']*coinbase", re.IGNORECASE)
 
 
 def _all_workflow_files() -> list[Path]:
-    return sorted(WORKFLOWS.glob("*.yml"))
+    # GitHub executes both extensions; scan both so a write-capable *.yaml cannot
+    # hide from the host-allowlist / id-token / artifact-upload controls.
+    return sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
 
 
 class TestAcquisitionWorkflowsRetired:

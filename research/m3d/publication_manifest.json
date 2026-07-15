@@ -3,7 +3,7 @@
   "artifacts": [
     {
       "path": "research/m3d/prospective_manifest.json",
-      "sha256": "652941e377a2740a971ffa32b76eaba25911f4539a3eb9fbd1c4a4d5eb1758ef"
+      "sha256": "24457fb92a300b28cf5343283be9d39772cd599ec16e641235fd9cc0bc1be4b4"
     },
     {
       "path": "research/m3d/prospective_quality.json",
@@ -20,6 +20,6 @@
   ],
   "kind": "prospective_publication_manifest",
   "package_version": "0.7.0",
-  "publication_root_sha256": "842871d8d54f9bd0217ea7e6f22c5fe34c96968ca4145e3e4c47a1d4b798569a",
+  "publication_root_sha256": "357cbb84852875c1bc59058b63ca0f30690bb6731c7912be68303680f54b8d1e",
   "schema_version": 1
 }

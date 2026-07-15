@@ -55,7 +55,8 @@
     "protocol_sha256": "cb08396babb1d8c8c454b5eae12210ff0a0edf17ebafb55688de341d280094a5",
     "quality_report_sha256": "f39929484784db99af4ec314f25cfc7cf6e5eef73d9cc43834b47e2f32e7c0eb",
     "reacquisition_audit_sha256": "d4ff04a86d755c1c6dcd132ce26265169d232e22d962c22bb162ed7ec7fb4d42",
-    "segment_chain_sha256": "05cd7b84c06aac9b02f2843dd3ae04d6a9a03f87e23ed432ed0e3497e53aef20"
+    "segment_chain_sha256": "05cd7b84c06aac9b02f2843dd3ae04d6a9a03f87e23ed432ed0e3497e53aef20",
+    "specification_catalog_sha256": "e7c9cacb181857180c0e6005e596f1b72be7b2df2de9fd86039010d189d69d72"
   },
   "remaining_rows": 362,
   "row_count": 3,

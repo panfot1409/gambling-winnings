@@ -25,6 +25,7 @@ import pandas as pd
 
 from eth_research.m3d import _upstream as up
 from eth_research.m3d.acquisition_plan import AUDIT_ATTEMPT_ID, GENESIS_ATTEMPT_ID
+from eth_research.m3d.candidate_catalog import CATALOG_PATH
 from eth_research.m3d.data_use import LEDGER_PATH as DATA_USE_PATH
 from eth_research.m3d.exhaustion import DECISION_PATH as EXHAUSTION_PATH
 from eth_research.m3d.multiplicity import LEDGER_PATH as MULTIPLICITY_PATH
@@ -142,6 +143,7 @@ def _build_document(repo_root: str | Path) -> dict[str, Any]:
         "reacquisition_audit_sha256": up.hash_file(repo_root, REACQUISITION_AUDIT_PATH),
         "protocol_sha256": up.hash_file(repo_root, PROTOCOL_PATH),
         "program_snapshot_sha256": up.hash_file(repo_root, SNAPSHOT_PATH),
+        "specification_catalog_sha256": up.hash_file(repo_root, CATALOG_PATH),
         "multiplicity_ledger_sha256": up.hash_file(repo_root, MULTIPLICITY_PATH),
         "data_use_ledger_sha256": up.hash_file(repo_root, DATA_USE_PATH),
         "exhaustion_decision_sha256": up.hash_file(repo_root, EXHAUSTION_PATH),

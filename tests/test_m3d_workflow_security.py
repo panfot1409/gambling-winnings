@@ -45,11 +45,18 @@ def test_every_action_use_is_pinned_by_full_sha() -> None:
 
 
 def test_no_workflow_uses_a_piped_installer() -> None:
+    # Structural per-line check: no non-comment line may pipe a download into a
+    # shell (robust, unlike a whole-file substring short-circuit).
     for workflow in _workflows():
         text = workflow.read_text()
-        assert "curl" not in text or "| sh" not in text, f"{workflow.name}: curl|sh"
-        assert "| bash" not in text, f"{workflow.name}: piped bash"
-        assert "| sh" not in text or "uv" not in text, f"{workflow.name}: piped installer"
+        assert "install.sh | sh" not in text
+        assert "install.sh|sh" not in text
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            if ("curl" in stripped or "wget" in stripped) and "|" in stripped:
+                raise AssertionError(f"{workflow.name}: a download is piped into a shell")
 
 
 def test_only_acquire_workflow_may_write_or_reach_coinbase() -> None:

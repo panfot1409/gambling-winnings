@@ -16,8 +16,9 @@ import pytest
 
 from eth_research.m3d.cohort import verify_cohort_manifest
 from eth_research.m3d.raw_bundle import build_raw_bundles
+from eth_research.m3d.reacquisition_audit import verify_reacquisition_audit
 from eth_research.m3d.segment import verify_prospective_segments
-from eth_research.m3d.validation import M3DValidationError, canonical_json_bytes
+from eth_research.m3d.validation import M3DValidationError, canonical_json_bytes, sha256_bytes
 from eth_research.m3d.verify_m3d_program import _scan_prohibited_imports, verify_m3d_program
 
 _GENESIS = "coinbase-eth-usd-prospective-genesis-001"
@@ -91,7 +92,36 @@ def test_tampering_the_segment_chain_is_rejected(m3a_checkout: Path) -> None:
 
 
 def test_injecting_a_prohibited_import_is_caught(m3a_checkout: Path) -> None:
+    # An engine module absent from the deny-list intuition (fractional.accounting)
+    # is still caught because the scan is an allow-list.
     target = m3a_checkout / "src/eth_research/m3d/status.py"
-    target.write_text("import eth_research.strategies\n" + target.read_text())
-    with pytest.raises(M3DValidationError, match="prohibited modules"):
+    target.write_text("import eth_research.fractional.accounting\n" + target.read_text())
+    with pytest.raises(M3DValidationError, match="non-allowlisted eth_research modules"):
         _scan_prohibited_imports(m3a_checkout)
+
+
+def test_a_non_independent_audit_reacquisition_is_rejected(m3a_checkout: Path) -> None:
+    base = "research/m3d/raw/coinbase"
+    genesis_receipt = json.loads(
+        (m3a_checkout / base / _GENESIS / "acquisition_receipt.json").read_text()
+    )
+    audit_dir = m3a_checkout / base / "coinbase-eth-usd-prospective-audit-002"
+    audit_path = audit_dir / "acquisition_receipt.json"
+    audit = json.loads(audit_path.read_text())
+    audit["source_commit"] = genesis_receipt["source_commit"]  # forge non-independence
+    audit_path.write_bytes(canonical_json_bytes(audit))
+    with pytest.raises(M3DValidationError, match="distinct source commits"):
+        verify_reacquisition_audit(m3a_checkout)
+
+
+def test_a_truncated_cohort_tail_is_rejected(m3a_checkout: Path) -> None:
+    raw = m3a_checkout / _RAW
+    rows = json.loads(raw.read_text())  # descending [07-14, 07-13, 07-12]
+    raw.write_bytes(json.dumps(rows[1:]).encode())  # drop the newest completed day
+    receipt_path = m3a_checkout / f"research/m3d/raw/coinbase/{_GENESIS}/acquisition_receipt.json"
+    receipt = json.loads(receipt_path.read_text())
+    receipt["responses"][0]["response_sha256"] = sha256_bytes(raw.read_bytes())
+    receipt["responses"][0]["response_byte_length"] = len(raw.read_bytes())
+    receipt_path.write_bytes(canonical_json_bytes(receipt))
+    with pytest.raises(M3DValidationError, match=r"planned|reach the plan window end"):
+        build_raw_bundles(m3a_checkout, _GENESIS)

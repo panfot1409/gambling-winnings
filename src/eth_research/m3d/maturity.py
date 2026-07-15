@@ -17,7 +17,6 @@ from typing import Any
 
 from eth_research.m3d.cohort import assess_prospective_maturity
 from eth_research.m3d.protocol import (
-    MINIMUM_MATURITY_ROWS,
     require_prospective_evaluation_ledger_empty,
 )
 from eth_research.m3d.validation import M3DValidationError
@@ -95,7 +94,10 @@ def evaluate_maturity(repo_root: str | Path) -> ProspectiveMaturityState:
         evaluation_authorized=bool(facts["evaluation_authorized"]),
         conditions=dict(facts["maturity_conditions"]),
     )
-    if state.minimum_maturity_rows != MINIMUM_MATURITY_ROWS:
+    # Pin the floor against a hard literal, not against the imported constant it is
+    # derived from — so lowering MINIMUM_MATURITY_ROWS is caught here independently
+    # of the protocol validator and the manifest byte-rebuild that also enforce it.
+    if state.minimum_maturity_rows != 365:
         raise M3DValidationError("maturity floor was tampered (must be 365)")
     if state.evaluation_authorized:
         raise M3DValidationError("M3D never authorizes evaluation (HARD STOP)")

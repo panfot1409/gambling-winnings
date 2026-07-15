@@ -102,6 +102,11 @@ jobs:
           done
       - name: Offline deep replay (rebuild everything byte-exact; full graph verify)
         run: uv run --no-sync python -m eth_research.m3d.replay --repo-root . --deep
+      - name: Replay mutated no tracked file
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
       - name: All three ledgers are byte-empty after
         run: |
           set -euo pipefail

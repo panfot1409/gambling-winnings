@@ -35,6 +35,7 @@ from eth_research.m3d.receipt import load_prospective_attempt_receipt
 from eth_research.m3d.validation import (
     M3DValidationError,
     domain_sha256,
+    require_positive_int,
     require_str,
     sha256_bytes,
 )
@@ -174,6 +175,20 @@ def build_raw_bundles(repo_root: str | Path, attempt_id: str) -> list[Prospectiv
             str(window["end_param"]),
             raw_bytes,
         )
+        # Bind the delivered cohort to the pre-registered plan window: exactly the
+        # planned number of buckets, and the last open must reach the final
+        # completed bucket (window_end - 1 day). This rejects a truncated tail that
+        # would otherwise pass as an internally-contiguous shorter cohort.
+        expected = require_positive_int("expected_bucket_count", window["expected_bucket_count"])
+        if bundle.row_count != expected:
+            raise M3DValidationError(
+                f"window {ordinal}: {bundle.row_count} rows does not equal the planned {expected}"
+            )
+        planned_last = pd.Timestamp(str(window["window_end"])) - pd.Timedelta(days=1)
+        if pd.Timestamp(bundle.last_open) != planned_last:
+            raise M3DValidationError(
+                f"window {ordinal}: last open {bundle.last_open} does not reach the plan window end"
+            )
         bundles.append(bundle)
 
     bundles.sort(key=lambda b: b.ordinal)

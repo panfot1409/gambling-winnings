@@ -15,6 +15,7 @@ from eth_research.m3d.maturity import (
 )
 from eth_research.m3d.validation import M3DValidationError
 from eth_research.m3d.verify_m3d_program import (
+    _no_write_or_coinbase_workflow,
     _scan_forbidden_fields,
     _scan_prohibited_imports,
     verify_m3d_program,
@@ -30,9 +31,10 @@ def test_verify_m3d_program_runs_the_full_chain() -> None:
     checks = verify_m3d_program(REPO_ROOT)
     names = [name for name, _ in checks]
     assert len(names) == 25
+    assert len(set(names)) == 25  # labels are unique
     assert names[0] == "01_upstream_anchors"
-    assert "22_immature_and_unauthorized" in names
-    assert "24_no_unexpected_write_workflow" in names
+    assert "23_immature_and_unauthorized" in names
+    assert "25_no_write_or_coinbase_workflow" in names
 
 
 def test_verify_m3d_program_has_no_skip_parameter() -> None:
@@ -82,7 +84,37 @@ def test_a_forbidden_evaluation_artifact_is_rejected(tmp_path: Path) -> None:
 
 
 def test_a_smuggled_performance_field_is_rejected() -> None:
-    with pytest.raises(M3DValidationError, match="smuggled evaluation field"):
+    with pytest.raises(M3DValidationError, match="smuggled evaluation token"):
         _scan_forbidden_fields({"row_count": 3, "diagnostics": {"sharpe_ratio": 1.2}})
-    # A clean governance document passes.
-    _scan_forbidden_fields({"row_count": 3, "maturity_state": "immature"})
+    # Expanded metric vocabulary is caught, as key OR value.
+    with pytest.raises(M3DValidationError, match=r"max_drawdown|drawdown"):
+        _scan_forbidden_fields({"stats": {"max_drawdown": 0.0}})
+    with pytest.raises(M3DValidationError, match="cagr"):
+        _scan_forbidden_fields({"note": "cagr=0.42"})  # forbidden token in a VALUE
+    # A clean governance document passes (hashes and timestamps do not trip it).
+    _scan_forbidden_fields(
+        {
+            "row_count": 3,
+            "maturity_state": "immature",
+            "sha256": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+            "first_open": "2026-07-12T00:00:00Z",
+        }
+    )
+
+
+def test_a_write_capable_yaml_workflow_is_caught(tmp_path: Path) -> None:
+    workflows = tmp_path / ".github/workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "evil.yaml").write_text("permissions:\n  contents: write\n")
+    with pytest.raises(M3DValidationError, match="grants contents: write"):
+        _no_write_or_coinbase_workflow(tmp_path)
+
+
+def test_a_coinbase_contacting_workflow_is_caught(tmp_path: Path) -> None:
+    workflows = tmp_path / ".github/workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "fetch.yml").write_text(
+        "jobs:\n  x:\n    steps:\n      - run: curl https://api.exchange.coinbase.com/x\n"
+    )
+    with pytest.raises(M3DValidationError, match="Coinbase host"):
+        _no_write_or_coinbase_workflow(tmp_path)

@@ -80,8 +80,20 @@ def _build_document(repo_root: str | Path) -> dict[str, Any]:
             f"row_count_match={row_count_match} fingerprint_match={fingerprint_match} "
             f"differing_fields={differing}"
         )
+    # Independence is not established by distinct plan hashes alone — those differ
+    # by attempt_id by construction. The two attempts must come from distinct
+    # source commits and distinct workflow runs, which an offline verifier records
+    # as the external-audit hook (the runs are separately reviewable in CI).
     if genesis["plan_sha256"] == audit["plan_sha256"]:
         raise M3DValidationError("genesis and audit must be independent attempts (distinct plans)")
+    if genesis["source_commit"] == audit["source_commit"]:
+        raise M3DValidationError(
+            "genesis and audit must come from distinct source commits (not independent)"
+        )
+    if genesis["workflow_run_id"] == audit["workflow_run_id"]:
+        raise M3DValidationError(
+            "genesis and audit must come from distinct workflow runs (not independent)"
+        )
 
     return {
         "schema_version": REACQUISITION_AUDIT_SCHEMA_VERSION,
