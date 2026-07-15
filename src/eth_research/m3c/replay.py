@@ -1,49 +1,43 @@
 """Version-independent fresh-clone replay of the one M3C candidate run.
 
 ``check_replay`` accepts exactly four committed checkpoints, so the same CI is
-green at each:
+green at each: **pristine**, **registered**, **failed**, and **completed**.
 
-* **pristine** — the registry carries no run-001 event and none of the four
-  immutable artifacts exist. The only guarantees are the two byte-empty sealed
-  ledgers and the absent outputs.
-* **registered** — the registry carries exactly ``registered`` (the committed
-  pre-registration) and no artifacts exist yet. Every one of the five recorded
-  inputs — protocol, lineage, budget, development partition, and frozen dossier —
-  must equal the committed file, so a registration cannot bind a stale or tampered
-  input while staying green.
-* **completed** — the registry carries ``registered`` → ``started`` →
-  ``completed``. From the committed raw Coinbase bytes alone the research-train
-  partition is reconstructed offline, the 75-cell grid is re-run and reduced
-  through the one shared pipeline, and the reproduced results are compared to the
-  committed results **field by field**: every financial, structural, provenance,
-  and cost field must match **byte-for-byte**, while a small, named set of
-  secondary *statistical* scalars — the fold-seam-aware bootstrap interval, the
-  per-fold paired daily log-excess, and the descriptive PSR — is required to agree
-  only to a tight relative tolerance, because each is the output of a
-  non-correctly-rounded transcendental library function (``np.log1p``, integer
-  powers, ``math.erf``) that legitimately differs in its last unit-in-the-last-place
-  across libm builds and CPU microarchitectures (IEEE-754 mandates correct rounding
-  for ``+ - * /`` and ``sqrt`` only). The reproduction must additionally yield the
-  **identical
-  mechanical promotion verdict**, so the tolerated drift is proven decision-
-  irrelevant, not merely small. Then :func:`verify_published_run` re-derives the
-  decision and re-renders the report **byte-for-byte from the committed results** and
-  re-checks the whole registry/manifest/bundle chain and the five bound inputs. Any
-  other divergence fails closed. See ``docs/M3C_STATISTICAL_METHOD_NOTE.md`` §8.
-* **failed** — the registry carries ``registered`` → ``started`` → ``failed``: the
-  single-use id was honestly consumed by a run that did not complete, with no
-  artifacts published. This is a real committed state (not a mid-lifecycle
-  inconsistency), so an honest failure does not brick CI.
+For the **completed** run the reproduced results are checked against the committed
+results under four separated contracts (see ``docs/M3C_STATISTICAL_METHOD_NOTE.md``
+§8 and :mod:`eth_research.m3c.numerics`):
 
-Both sealed ledgers must be byte-empty in every state. No networking; no sealed row
-is ever read (the loader returns research-train rows only).
+* **Contract A — financial/structural raw replay.** From the committed raw Coinbase
+  bytes alone the research-train partition is reconstructed offline, the 75-cell grid
+  is re-run and reduced through the one shared pipeline, and **every** financial,
+  accounting, cost, strategy, fold, timestamp, structural, provenance, registry, and
+  identity field must reproduce **byte-for-byte**.
+* **Contract B — bounded statistical replay.** Only a structurally-exact allowlist of
+  secondary statistical scalars (the fold-seam-aware bootstrap interval, the per-fold
+  paired daily log-excess, and the descriptive PSR) may differ, and only by a bounded
+  number of representable binary64 steps (``MAX_REPLAY_ULPS``), with exact
+  path/type/finite/sign/zero guards — because each is the output of a
+  non-correctly-rounded transcendental (``numpy.log1p`` and/or ``math.erf``) whose last
+  ULP is not identical across libm builds. This is **bounded ULP variation**, not
+  "last-ULP identical". Any other difference fails closed.
+* **Contract C — committed-artifact consistency.** :func:`verify_published_run`
+  re-derives the decision and re-renders the report **byte-for-byte from the committed
+  results** and re-checks the registry/manifest/bundle chain and the five bound inputs.
+* **Contract D — reproduced-report rendering.** The report rendered from the
+  *reproduced* results (not the committed ones) must equal the committed report
+  byte-for-byte. The report prints statistics at ``.6g``, so a bounded-ULP drift cannot
+  change a rendered byte; this is enforced on every supported runtime.
+
+The reproduction must additionally re-derive the **identical mechanical promotion
+verdict** (the full per-criterion pass/fail vector), so the tolerated drift is proven
+decision-irrelevant, not merely small. Both sealed ledgers must be byte-empty in every
+state. No networking; no sealed row is ever read.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import sys
 from pathlib import Path
@@ -56,6 +50,12 @@ from eth_research.m3c.decision import (
     M3C_DECISION_RELPATH,
     CandidateDecision,
     evaluate_candidate_decision,
+)
+from eth_research.m3c.numerics import (
+    MAX_REPLAY_ULPS,
+    classify_reproduction_json,
+    feeds_promotion_criterion,
+    format_path,
 )
 from eth_research.m3c.pipeline import reproduce_results
 from eth_research.m3c.registry import (
@@ -73,8 +73,8 @@ from eth_research.m3c.results import (
     M3C_PROTOCOL_RELPATH,
     M3C_REPORT_RELPATH,
     M3C_RESULTS_RELPATH,
-    M3CResults,
     load_m3c_results,
+    render_m3c_report,
 )
 
 _GATE_LEDGER_RELPATH: str = "research/m3a/development_gate_access.jsonl"
@@ -88,144 +88,47 @@ _ARTIFACTS: tuple[str, ...] = (
     M3C_MANIFEST_RELPATH,
 )
 
-# ------------------------------------------------------------ reproduction tolerance
-#
-# IEEE-754 mandates correctly-rounded ``+ - * /`` and ``sqrt`` but NOT the
-# transcendental library functions. Different libm builds / CPU microarchitectures
-# therefore legitimately return last-unit-in-the-last-place-different values for
-# ``log1p``, integer powers, and ``erf`` (the "table-maker's dilemma"). Every M3C
-# financial number is produced by the M3B engine and reproduces byte-for-byte on CI
-# (the green ``m3b-replay`` proves the shared engine is cross-machine stable), so the
-# ONLY result leaves that can differ across the execution host and a fresh-clone
-# verifier are the M3C-new statistical scalars listed below. They are permitted a
-# tight relative tolerance ~6 orders of magnitude tighter than the P1 decision
-# threshold (whose magnitude is ~2.3e-3); every other field must be exact, and the
-# reproduction must still yield the identical mechanical verdict. See
-# ``docs/M3C_STATISTICAL_METHOD_NOTE.md`` §8 and ``docs/M3C_BUG_LOG.md``.
-_REPRO_REL_TOL: float = 1e-9
-_REPRO_ABS_TOL: float = 1e-12
-
-_TRANSCENDENTAL_LEAVES: frozenset[tuple[Any, ...]] = frozenset(
-    {
-        ("bootstrap", "point_estimate"),  # mean of np.log1p paired excess
-        ("bootstrap", "ci_lower"),  # percentile of np.log1p-derived resample means
-        ("bootstrap", "ci_upper"),
-        ("psr_diagnostic", "observed_sharpe"),  # of the log1p paired-excess series
-        ("psr_diagnostic", "skewness"),  # standardized integer-power moment
-        ("psr_diagnostic", "kurtosis"),
-        ("psr_diagnostic", "psr"),  # 0.5*(1+math.erf(...))
-    }
-)
-
 
 class M3CReplayError(RuntimeError):
     """The M3C replay found the committed state inconsistent."""
 
 
-def _is_transcendental_leaf(path: tuple[Any, ...]) -> bool:
-    """True iff ``path`` names a secondary statistical scalar that may drift by ULPs."""
-    if path in _TRANSCENDENTAL_LEAVES:
-        return True
-    # paired_comparisons[i].mean_daily_paired_log_excess (np.log1p) for any fold i.
-    return (
-        len(path) == 3
-        and path[0] == "paired_comparisons"
-        and path[2] == "mean_daily_paired_log_excess"
-    )
-
-
-def _walk_json_diffs(
-    committed: Any, reproduced: Any, path: tuple[Any, ...] = ()
-) -> list[tuple[tuple[Any, ...], Any, Any]]:
-    """Every leaf path at which two canonical-JSON structures differ."""
-    if isinstance(committed, dict) and isinstance(reproduced, dict):
-        diffs: list[tuple[tuple[Any, ...], Any, Any]] = []
-        for key in sorted(set(committed) | set(reproduced), key=str):
-            here = (*path, key)
-            if key not in committed or key not in reproduced:
-                diffs.append(
-                    (here, committed.get(key, "<absent>"), reproduced.get(key, "<absent>"))
-                )
-            else:
-                diffs.extend(_walk_json_diffs(committed[key], reproduced[key], here))
-        return diffs
-    if isinstance(committed, list) and isinstance(reproduced, list):
-        if len(committed) != len(reproduced):
-            return [(path, f"<len {len(committed)}>", f"<len {len(reproduced)}>")]
-        diffs = []
-        for i, (a, b) in enumerate(zip(committed, reproduced, strict=True)):
-            diffs.extend(_walk_json_diffs(a, b, (*path, i)))
-        return diffs
-    return [] if committed == reproduced else [(path, committed, reproduced)]
-
-
-def _classify_json_reproduction(
-    committed_json: Any, reproduced_json: Any
-) -> tuple[list[tuple[tuple[Any, ...], Any, Any]], list[tuple[tuple[Any, ...], Any, Any]]]:
-    """Partition committed-vs-reproduced leaf differences into ``(tolerated, hard)``.
-
-    A difference is *tolerated* only when it is a named transcendental statistical
-    leaf whose two float values agree to the tight relative tolerance (cross-machine
-    last-ULP noise). Every other difference — any financial, structural, provenance,
-    decision-relevant, non-float, or out-of-tolerance value — is *hard* and fails
-    closed. Booleans and integers are never floats here, so they are always hard.
-    """
-    tolerated: list[tuple[tuple[Any, ...], Any, Any]] = []
-    hard: list[tuple[tuple[Any, ...], Any, Any]] = []
-    for path, committed_value, reproduced_value in _walk_json_diffs(
-        committed_json, reproduced_json
-    ):
-        if (
-            _is_transcendental_leaf(path)
-            and type(committed_value) is float
-            and type(reproduced_value) is float
-            and math.isclose(
-                committed_value,
-                reproduced_value,
-                rel_tol=_REPRO_REL_TOL,
-                abs_tol=_REPRO_ABS_TOL,
-            )
-        ):
-            tolerated.append((path, committed_value, reproduced_value))
-        else:
-            hard.append((path, committed_value, reproduced_value))
-    return tolerated, hard
-
-
-def _classify_reproduction(
-    committed: M3CResults, reproduced: M3CResults
-) -> tuple[list[tuple[tuple[Any, ...], Any, Any]], list[tuple[tuple[Any, ...], Any, Any]]]:
-    """Classify a reproduced :class:`M3CResults` against the committed one."""
-    return _classify_json_reproduction(
-        json.loads(committed.to_json_bytes()), json.loads(reproduced.to_json_bytes())
-    )
-
-
-def _rel_delta(a: float, b: float) -> float:
-    scale = max(abs(a), abs(b))
-    return abs(a - b) / scale if scale else 0.0
-
-
-def _format_diffs(diffs: list[tuple[tuple[Any, ...], Any, Any]]) -> str:
-    lines: list[str] = []
-    for path, committed_value, reproduced_value in diffs:
-        location = ".".join(str(part) for part in path)
-        if type(committed_value) is float and type(reproduced_value) is float:
-            lines.append(
-                f"  {location}: committed={committed_value!r} reproduced={reproduced_value!r} "
-                f"abs={abs(committed_value - reproduced_value):.3e} "
-                f"rel={_rel_delta(committed_value, reproduced_value):.3e}"
-            )
-        else:
-            lines.append(
-                f"  {location}: committed={committed_value!r} reproduced={reproduced_value!r}"
-            )
-    return "\n".join(lines)
-
-
 def _criteria_vector(decision: CandidateDecision) -> tuple[tuple[str, bool], ...]:
     """The ordered (criterion id, pass/fail) vector — the mechanical verdict itself."""
     return tuple((criterion.criterion_id, criterion.passed) for criterion in decision.criteria)
+
+
+def _format_hard(hard: list[tuple[tuple[Any, ...], Any, Any, str]]) -> str:
+    lines: list[str] = []
+    for path, committed_value, reproduced_value, reason in hard:
+        lines.append(
+            f"  {format_path(path)}: committed={committed_value!r} "
+            f"reproduced={reproduced_value!r} [{reason}]"
+        )
+    return "\n".join(lines)
+
+
+def _format_tolerated(tolerated: list[tuple[tuple[Any, ...], float, float, int]]) -> str:
+    lines: list[str] = []
+    for path, committed_value, reproduced_value, ulps in tolerated:
+        criterion = feeds_promotion_criterion(path)
+        lines.append(
+            f"  {format_path(path)}: committed={committed_value!r} "
+            f"reproduced={reproduced_value!r} abs={abs(committed_value - reproduced_value):.3e} "
+            f"ulps={ulps} cap={MAX_REPLAY_ULPS} feeds_criterion={criterion or '-'}"
+        )
+    return "\n".join(lines)
+
+
+def _first_line_diff(committed: bytes, reproduced: bytes) -> str:
+    a = committed.decode("utf-8", "replace").splitlines()
+    b = reproduced.decode("utf-8", "replace").splitlines()
+    for i in range(max(len(a), len(b))):
+        av = a[i] if i < len(a) else "<absent>"
+        bv = b[i] if i < len(b) else "<absent>"
+        if av != bv:
+            return f"  first differing line {i + 1}:\n    committed: {av!r}\n    reproduced: {bv!r}"
+    return "  (no line-level difference found; trailing bytes differ)"
 
 
 def _emit_ci_annotation(level: str, title: str, message: str) -> None:
@@ -241,18 +144,19 @@ def _emit_ci_annotation(level: str, title: str, message: str) -> None:
     print(f"::{level} title={title}::{encoded}")
 
 
-def _emit_tolerated_drift(tolerated: list[tuple[tuple[Any, ...], Any, Any]]) -> None:
-    """Record any tolerated cross-machine transcendental drift in the audit trail."""
+def _emit_tolerated_drift(tolerated: list[tuple[tuple[Any, ...], float, float, int]]) -> None:
+    """Record any tolerated bounded-ULP statistical variation in the audit trail."""
     if not tolerated:
         return
+    max_ulps = max(ulps for *_, ulps in tolerated)
     body = (
-        f"{len(tolerated)} secondary statistical leaf field(s) differ only in cross-machine "
-        f"transcendental last-ULP noise (<= rel {_REPRO_REL_TOL:g}, abs {_REPRO_ABS_TOL:g}); "
-        "every financial, structural, decision, and report byte reproduced exactly and the "
-        "mechanical verdict is identical:\n" + _format_diffs(tolerated)
+        f"{len(tolerated)} secondary statistical leaf field(s) differ by bounded ULP "
+        f"variation (max {max_ulps} <= cap {MAX_REPLAY_ULPS}); every financial, structural, "
+        "decision, and report byte reproduced exactly and the mechanical verdict is "
+        "identical:\n" + _format_tolerated(tolerated)
     )
-    print("REPLAY NOTE (tolerated transcendental drift):\n" + body)
-    _emit_ci_annotation("notice", "M3C tolerated transcendental drift", body)
+    print("REPLAY NOTE (bounded ULP variation):\n" + body)
+    _emit_ci_annotation("notice", "M3C bounded ULP variation", body)
 
 
 def _require_ledgers_byte_empty(root: Path) -> None:
@@ -286,8 +190,58 @@ def _require_registration_binds_inputs(root: Path, registered: M3CRegistryEvent)
             )
 
 
+def _check_completed_run(root: Path, registered: M3CRegistryEvent) -> None:
+    """Contracts A-D for the one published run (raises on any violation)."""
+    committed_results = load_m3c_results(root / M3C_RESULTS_RELPATH)
+    reproduced = reproduce_results(root, registered)
+
+    # Contracts A + B: everything exact except allowlisted statistical leaves within
+    # the bounded-ULP cap.
+    tolerated, hard = classify_reproduction_json(
+        json.loads(committed_results.to_json_bytes()), json.loads(reproduced.to_json_bytes())
+    )
+    if hard:
+        raise M3CReplayError(
+            "reproduced results diverge from the committed results (a financial, structural, "
+            "sign, zero-crossing, or over-cap statistical difference):\n" + _format_hard(hard)
+        )
+
+    # The bounded drift must not move the mechanical verdict: re-derive the decision from
+    # the raw-data reproduction and require the identical criterion vector (no tolerance
+    # on decision booleans or the status string).
+    committed_decision = CandidateDecision.from_json_bytes(
+        (root / M3C_DECISION_RELPATH).read_bytes()
+    )
+    reproduced_decision = evaluate_candidate_decision(
+        reproduced, verification_passed=committed_decision.verification_passed
+    )
+    if _criteria_vector(reproduced_decision) != _criteria_vector(committed_decision):
+        raise M3CReplayError(
+            "cross-machine reproduction changes a mechanical promotion criterion; the "
+            "bounded statistical variation is not decision-irrelevant"
+        )
+    if reproduced_decision.outcome != committed_decision.outcome:
+        raise M3CReplayError("reproduced decision outcome disagrees with the committed decision")
+
+    # Contract D: the report rendered from the REPRODUCED results equals the committed
+    # report byte-for-byte (statistics print at .6g, coarser than the ULP drift).
+    reproduced_report = render_m3c_report(reproduced, reproduced_decision).encode("utf-8")
+    committed_report = (root / M3C_REPORT_RELPATH).read_bytes()
+    if reproduced_report != committed_report:
+        raise M3CReplayError(
+            "the report rendered from the reproduced results is not byte-identical to the "
+            "committed report:\n" + _first_line_diff(committed_report, reproduced_report)
+        )
+
+    _emit_tolerated_drift(tolerated)
+
+    # Contract C: committed decision re-derives, committed report re-renders, and the
+    # registry/manifest/bundle chain and five inputs all bind.
+    verify_published_run(root)
+
+
 def check_replay(repo_root: str | Path) -> tuple[str, ...]:
-    """Tri-state replay check; returns ``(state, *checks)``. Raises on any drift."""
+    """Quad-state replay check; returns ``(state, *checks)``. Raises on any drift."""
     root = Path(repo_root)
     _require_ledgers_byte_empty(root)
 
@@ -311,8 +265,7 @@ def check_replay(repo_root: str | Path) -> tuple[str, ...]:
             raise M3CReplayError(
                 f"run-001 is only registered but artifacts exist: {artifacts_present}"
             )
-        registered = run_events[0]
-        _require_registration_binds_inputs(root, registered)
+        _require_registration_binds_inputs(root, run_events[0])
         return (
             "registered",
             "ledgers_byte_empty",
@@ -337,46 +290,20 @@ def check_replay(repo_root: str | Path) -> tuple[str, ...]:
     if missing:
         raise M3CReplayError(f"completed run is missing published artifacts: {missing}")
 
-    registered = run_events[0]
-    committed_results = load_m3c_results(root / M3C_RESULTS_RELPATH)
-    reproduced = reproduce_results(root, registered)
-    tolerated, hard = _classify_reproduction(committed_results, reproduced)
-    if hard:
-        raise M3CReplayError(
-            "reproduced results diverge from the committed results beyond cross-machine "
-            "transcendental last-ULP tolerance (a financial, structural, or out-of-tolerance "
-            "statistical difference):\n" + _format_diffs(hard)
-        )
-    # The tolerated drift must not be able to move the mechanical verdict: re-derive the
-    # decision from the raw-data reproduction and require an identical criterion vector.
-    # This proves the drift is decision-irrelevant, not merely small.
-    committed_decision = CandidateDecision.from_json_bytes(
-        (root / M3C_DECISION_RELPATH).read_bytes()
-    )
-    reproduced_decision = evaluate_candidate_decision(
-        reproduced, verification_passed=committed_decision.verification_passed
-    )
-    if _criteria_vector(reproduced_decision) != _criteria_vector(committed_decision):
-        raise M3CReplayError(
-            "cross-machine reproduction changes a mechanical promotion criterion; the "
-            "tolerated statistical drift is not decision-irrelevant"
-        )
-    _emit_tolerated_drift(tolerated)
-    # The committed decision and report re-derive byte-for-byte from the committed
-    # results, and the whole registry/manifest/bundle chain binds.
-    verify_published_run(root)
+    _check_completed_run(root, run_events[0])
     return (
         "completed",
         "ledgers_byte_empty",
-        "results_reproduced",
-        "decision_reproduced",
-        "report_reproduced",
-        "archive_verified",
+        "results_reproduced_financial_exact",  # Contract A
+        "results_reproduced_statistical_bounded_ulp",  # Contract B
+        "verdict_reproduced_identical",
+        "report_reproduced_from_reproduced_results",  # Contract D
+        "archive_verified",  # Contract C
     )
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Tri-state replay of the M3C candidate run.")
+    parser = argparse.ArgumentParser(description="Quad-state replay of the M3C candidate run.")
     parser.add_argument("--repo-root", default=".", help="repository root (default: .)")
     parser.add_argument("--check", action="store_true", help="verify committed state (default)")
     args = parser.parse_args(argv)
