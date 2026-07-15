@@ -1,0 +1,86 @@
+{
+  "attempt_id": "coinbase-eth-usd-prospective-genesis-001",
+  "errors": [
+    {
+      "category": "malformed_response",
+      "count": 0
+    },
+    {
+      "category": "unexpected_shape",
+      "count": 0
+    },
+    {
+      "category": "nonnumeric_value",
+      "count": 0
+    },
+    {
+      "category": "nonfinite_value",
+      "count": 0
+    },
+    {
+      "category": "duplicate_timestamp",
+      "count": 0
+    },
+    {
+      "category": "unsorted_timestamp",
+      "count": 0
+    },
+    {
+      "category": "gap",
+      "count": 0
+    },
+    {
+      "category": "wrong_interval",
+      "count": 0
+    },
+    {
+      "category": "nonpositive_price",
+      "count": 0
+    },
+    {
+      "category": "negative_volume",
+      "count": 0
+    },
+    {
+      "category": "ohlc_inconsistency",
+      "count": 0
+    },
+    {
+      "category": "row_outside_plan",
+      "count": 0
+    },
+    {
+      "category": "forming_candle",
+      "count": 0
+    },
+    {
+      "category": "overlap_with_m2b",
+      "count": 0
+    }
+  ],
+  "first_open": "2026-07-12T00:00:00Z",
+  "kind": "prospective_quality_report",
+  "last_open": "2026-07-14T00:00:00Z",
+  "m2b_final_open": "2026-07-11T00:00:00+00:00",
+  "package_version": "0.7.0",
+  "row_count": 3,
+  "schema_version": 1,
+  "total_errors": 0,
+  "warnings": [
+    {
+      "category": "zero_volume",
+      "count": 0,
+      "example_timestamps": []
+    },
+    {
+      "category": "extreme_intraday_range",
+      "count": 0,
+      "example_timestamps": []
+    },
+    {
+      "category": "extreme_close_to_close_move",
+      "count": 0,
+      "example_timestamps": []
+    }
+  ]
+}

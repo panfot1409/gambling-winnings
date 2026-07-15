@@ -31,7 +31,6 @@ from eth_research.m3d.validation import (
 LEDGER_PATH = "research/m3d/research_data_use.jsonl"
 LEDGER_SCHEMA_VERSION = 1
 LEDGER_KIND = "research_data_use_ledger"
-PROSPECTIVE_MANIFEST = "research/m3d/prospective_manifest.json"
 
 _USE_TYPES = (
     "integrity_only",
@@ -240,34 +239,12 @@ def _build_records(repo_root: str | Path) -> list[dict[str, Any]]:
         )
     )
 
-    # The prospective M3D cohort (once it exists) is data-quality/provenance only.
-    if (Path(repo_root) / PROSPECTIVE_MANIFEST).is_file():
-        manifest = require_mapping(
-            "prospective_manifest", up.load_json(repo_root, PROSPECTIVE_MANIFEST)
-        )
-        records.append(
-            _entry(
-                partition="m3d_prospective_cohort",
-                milestone="m3d",
-                experiment=None,
-                use_type="schema_quality",
-                fingerprint=require_str(
-                    "prospective fingerprint", manifest["canonical_content_fingerprint"]
-                ),
-                first_open=require_str("prospective first_open", manifest["first_open"]),
-                last_open=require_str("prospective last_open", manifest["last_open"]),
-                row_count=manifest["row_count"],
-                signals=False,
-                pnl=False,
-                metrics=False,
-                access_ledger=up.PROSPECTIVE_EVALUATION_LEDGER,
-                access_events=up.ledger_facts(repo_root, up.PROSPECTIVE_EVALUATION_LEDGER)[
-                    "event_count"
-                ],
-                source_artifacts=_artifact_refs(repo_root, [PROSPECTIVE_MANIFEST]),
-            )
-        )
-
+    # The prospective M3D cohort is deliberately NOT recorded here: this ledger is
+    # the frozen record of *historical* research data use (M2B/M3A/M3B/M3C) and the
+    # sealed-partition firewall, whereas the future-only prospective cohort's
+    # complete data-use record (schema/quality only, no signals/P&L/metrics) lives
+    # in the cohort manifest. Keeping it out preserves this ledger's byte identity
+    # and avoids a provenance cascade into the exhaustion anchor that binds it.
     return records
 
 

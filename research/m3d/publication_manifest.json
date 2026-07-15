@@ -1,0 +1,25 @@
+{
+  "artifact_count": 4,
+  "artifacts": [
+    {
+      "path": "research/m3d/prospective_manifest.json",
+      "sha256": "652941e377a2740a971ffa32b76eaba25911f4539a3eb9fbd1c4a4d5eb1758ef"
+    },
+    {
+      "path": "research/m3d/prospective_quality.json",
+      "sha256": "f39929484784db99af4ec314f25cfc7cf6e5eef73d9cc43834b47e2f32e7c0eb"
+    },
+    {
+      "path": "research/m3d/prospective_segments.jsonl",
+      "sha256": "05cd7b84c06aac9b02f2843dd3ae04d6a9a03f87e23ed432ed0e3497e53aef20"
+    },
+    {
+      "path": "research/m3d/reacquisition_audit.json",
+      "sha256": "d4ff04a86d755c1c6dcd132ce26265169d232e22d962c22bb162ed7ec7fb4d42"
+    }
+  ],
+  "kind": "prospective_publication_manifest",
+  "package_version": "0.7.0",
+  "publication_root_sha256": "842871d8d54f9bd0217ea7e6f22c5fe34c96968ca4145e3e4c47a1d4b798569a",
+  "schema_version": 1
+}
