@@ -79,8 +79,7 @@ def assess_prospective_maturity(repo_root: str | Path) -> dict[str, Any]:
     row_count = len(rows)
     opens = [pd.Timestamp(row[0]) for row in rows]
     contiguous = all(
-        (later - earlier).total_seconds() == _INTERVAL_SECONDS
-        for earlier, later in pairwise(opens)
+        (later - earlier).total_seconds() == _INTERVAL_SECONDS for earlier, later in pairwise(opens)
     )
     quality = require_mapping(
         "quality", strict_json_loads(build_prospective_quality_bytes(repo_root))

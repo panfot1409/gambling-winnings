@@ -113,8 +113,6 @@ def verify_reacquisition_audit(repo_root: str | Path) -> dict[str, Any]:
     mapping = require_mapping("reacquisition_audit", doc)
     if raw != build_reacquisition_audit_bytes(repo_root):
         raise M3DValidationError("committed reacquisition audit does not match the rebuilt audit")
-    require_exact(
-        "canonical_content_match", bool(mapping["canonical_content_match"]), True
-    )
+    require_exact("canonical_content_match", bool(mapping["canonical_content_match"]), True)
     require_exact("differing_fields", int(mapping["differing_fields"]), 0)
     return mapping

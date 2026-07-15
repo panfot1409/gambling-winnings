@@ -56,9 +56,7 @@ def test_real_audit_reacquisition_matches_genesis_canonically() -> None:
     genesis = combined_canonical_rows(build_raw_bundles(REPO_ROOT, GENESIS))
     audit = combined_canonical_rows(build_raw_bundles(REPO_ROOT, AUDIT))
     assert genesis == audit
-    assert cohort_canonical_fingerprint(
-        build_raw_bundles(REPO_ROOT, AUDIT)
-    ) == _GENESIS_FINGERPRINT
+    assert cohort_canonical_fingerprint(build_raw_bundles(REPO_ROOT, AUDIT)) == _GENESIS_FINGERPRINT
 
 
 def test_real_bundle_rederives_row_count_and_bounds_from_receipt() -> None:
