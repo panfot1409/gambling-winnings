@@ -24,9 +24,13 @@ results under four separated contracts (see ``docs/M3C_STATISTICAL_METHOD_NOTE.m
   re-derives the decision and re-renders the report **byte-for-byte from the committed
   results** and re-checks the registry/manifest/bundle chain and the five bound inputs.
 * **Contract D — reproduced-report rendering.** The report rendered from the
-  *reproduced* results (not the committed ones) must equal the committed report
-  byte-for-byte. The report prints statistics at ``.6g``, so a bounded-ULP drift cannot
-  change a rendered byte; this is enforced on every supported runtime.
+  *reproduced* results (not the committed ones) must reproduce every displayed
+  financial/statistical value in the committed report. It is **not** fully byte-identical:
+  the report embeds ``sha256(results)`` as a provenance digest, and that SHA avalanches
+  under any bounded-ULP statistical drift, so the digest line legitimately differs across
+  machines. Substituting the reproduced results-digest back to the committed one must yield
+  exact byte-equality — every ``.6g`` statistic and financial table must match. This is
+  "identical modulo the results-digest line", enforced on every supported runtime.
 
 The reproduction must additionally re-derive the **identical mechanical promotion
 verdict** (the full per-criterion pass/fail vector), so the tolerated drift is proven
@@ -43,7 +47,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from eth_research.data.provenance import sha256_file
+from eth_research.data.provenance import sha256_bytes, sha256_file
 from eth_research.development import DEVELOPMENT_PARTITION_RELPATH, FROZEN_M2_DOSSIER_RELPATH
 from eth_research.m3c.archive import M3C_MANIFEST_RELPATH, verify_published_run
 from eth_research.m3c.decision import (
@@ -118,6 +122,33 @@ def _format_tolerated(tolerated: list[tuple[tuple[Any, ...], float, float, int]]
             f"ulps={ulps} cap={MAX_REPLAY_ULPS} feeds_criterion={criterion or '-'}"
         )
     return "\n".join(lines)
+
+
+def _require_report_reproduces(
+    committed_report: bytes,
+    reproduced_report: bytes,
+    committed_results_digest: bytes,
+    reproduced_results_digest: bytes,
+) -> None:
+    """Contract D: reports identical except the (avalanching) results-digest line.
+
+    The committed report embeds ``sha256(committed results)`` and the reproduced report
+    embeds ``sha256(reproduced results)`` as a provenance digest. Those two SHAs differ
+    whenever any statistical field drifts by a ULP, so the report cannot be byte-identical
+    across machines — but every displayed financial/statistical value must be. Substituting
+    the reproduced digest back to the committed one must reproduce the committed report
+    byte-for-byte; any residual difference is a real rendering change and fails closed.
+    """
+    if committed_results_digest not in committed_report:
+        raise M3CReplayError("committed report does not embed the committed results digest")
+    if reproduced_results_digest not in reproduced_report:
+        raise M3CReplayError("reproduced report does not embed the reproduced results digest")
+    normalized = reproduced_report.replace(reproduced_results_digest, committed_results_digest)
+    if normalized != committed_report:
+        raise M3CReplayError(
+            "the report rendered from the reproduced results differs beyond the results-digest "
+            "provenance line:\n" + _first_line_diff(committed_report, normalized)
+        )
 
 
 def _first_line_diff(committed: bytes, reproduced: bytes) -> str:
@@ -223,15 +254,22 @@ def _check_completed_run(root: Path, registered: M3CRegistryEvent) -> None:
     if reproduced_decision.outcome != committed_decision.outcome:
         raise M3CReplayError("reproduced decision outcome disagrees with the committed decision")
 
-    # Contract D: the report rendered from the REPRODUCED results equals the committed
-    # report byte-for-byte (statistics print at .6g, coarser than the ULP drift).
+    # Contract D: the report rendered from the REPRODUCED results reproduces every displayed
+    # financial/statistical value in the committed report. It is NOT fully byte-identical:
+    # the report embeds sha256(results) as a provenance digest, and that SHA avalanches under
+    # any bounded-ULP statistical drift, so the digest line legitimately differs across
+    # machines. Substituting the reproduced results-digest back to the committed one must
+    # yield exact byte-equality — every other byte (all .6g statistics and financial tables)
+    # is required to match. This is "identical modulo the results-digest line", not
+    # "byte-reproduced".
     reproduced_report = render_m3c_report(reproduced, reproduced_decision).encode("utf-8")
     committed_report = (root / M3C_REPORT_RELPATH).read_bytes()
-    if reproduced_report != committed_report:
-        raise M3CReplayError(
-            "the report rendered from the reproduced results is not byte-identical to the "
-            "committed report:\n" + _first_line_diff(committed_report, reproduced_report)
-        )
+    _require_report_reproduces(
+        committed_report,
+        reproduced_report,
+        sha256_bytes(committed_results.to_json_bytes()).encode("ascii"),
+        sha256_bytes(reproduced.to_json_bytes()).encode("ascii"),
+    )
 
     _emit_tolerated_drift(tolerated)
 
@@ -297,7 +335,7 @@ def check_replay(repo_root: str | Path) -> tuple[str, ...]:
         "results_reproduced_financial_exact",  # Contract A
         "results_reproduced_statistical_bounded_ulp",  # Contract B
         "verdict_reproduced_identical",
-        "report_reproduced_from_reproduced_results",  # Contract D
+        "report_reproduced_modulo_results_digest",  # Contract D
         "archive_verified",  # Contract C
     )
 

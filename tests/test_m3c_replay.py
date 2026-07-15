@@ -163,3 +163,52 @@ def test_started_only_mid_lifecycle_is_rejected(tmp_path: Path) -> None:
     append_registry_event(reg_path, started)
     with pytest.raises(M3CReplayError):
         check_replay(tmp_path)  # [registered, started] is never a committed state
+
+
+# ------------------------------------------------------------- Contract D (report modulo digest)
+# The committed report embeds sha256(results) as a provenance digest; that SHA avalanches
+# under any bounded-ULP statistical drift, so the report is NOT byte-identical across
+# machines. Contract D requires identity in every displayed value modulo that one digest.
+
+
+def test_contract_d_accepts_reports_differing_only_in_the_results_digest() -> None:
+    from eth_research.m3c.replay import _require_report_reproduces
+
+    committed_digest = b"a" * 64
+    reproduced_digest = b"b" * 64  # a different (avalanched) results SHA on the other machine
+    committed = b"# report\n- digest `" + committed_digest + b"`\n- Point: `-0.000127`\n"
+    reproduced = b"# report\n- digest `" + reproduced_digest + b"`\n- Point: `-0.000127`\n"
+    _require_report_reproduces(committed, reproduced, committed_digest, reproduced_digest)
+
+
+def test_contract_d_accepts_byte_identical_reports_on_zero_drift() -> None:
+    from eth_research.m3c.replay import _require_report_reproduces
+
+    digest = b"c" * 64  # same digest both sides (same-host, no drift)
+    report = b"- digest `" + digest + b"`\n- Point: `-0.000127`\n"
+    _require_report_reproduces(report, report, digest, digest)
+
+
+def test_contract_d_rejects_a_changed_displayed_value() -> None:
+    from eth_research.m3c.replay import _require_report_reproduces
+
+    committed_digest = b"a" * 64
+    reproduced_digest = b"b" * 64
+    committed = b"- digest `" + committed_digest + b"`\n- Point: `-0.000127`\n"
+    reproduced = b"- digest `" + reproduced_digest + b"`\n- Point: `-0.000200`\n"  # real change
+    with pytest.raises(M3CReplayError):
+        _require_report_reproduces(committed, reproduced, committed_digest, reproduced_digest)
+
+
+def test_contract_d_rejects_a_missing_digest_line() -> None:
+    from eth_research.m3c.replay import _require_report_reproduces
+
+    committed_digest = b"a" * 64
+    reproduced_digest = b"b" * 64
+    with pytest.raises(M3CReplayError):
+        _require_report_reproduces(
+            b"no digest here\n",
+            b"- `" + reproduced_digest + b"`\n",
+            committed_digest,
+            reproduced_digest,
+        )
