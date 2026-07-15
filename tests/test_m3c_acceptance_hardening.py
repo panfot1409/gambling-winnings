@@ -78,3 +78,34 @@ def test_replay_rejects_a_symlinked_sealed_ledger(tmp_path: Path) -> None:
     (tmp_path / "research/m2b/test_evaluations.jsonl").write_bytes(b"")
     with pytest.raises(M3CReplayError):
         _require_ledgers_byte_empty(tmp_path)
+
+
+def test_annualized_return_is_fractional_pow_derived_scoping_the_exact_envelope() -> None:
+    # Auditor A-F1: annualized_return uses a fractional pow (a non-correctly-rounded
+    # transcendental) yet is a Contract-A financial field. It reproduces byte-for-byte on
+    # the supported glibc/x86_64 envelope; this documents WHY the exact claim is scoped to
+    # that envelope (an equivalent exp(y*log x) formulation already differs by a few ULP).
+    import math
+    import struct
+
+    def _ulp(a: float, b: float) -> int:
+        def key(x: float) -> int:
+            s = struct.unpack("<q", struct.pack("<d", x))[0]
+            return s if s >= 0 else -0x8000000000000000 - s
+
+        return abs(key(a) - key(b))
+
+    payload = json.loads(_RESULTS.read_bytes())
+    worst_cross_formulation = 0
+    for cell in payload["fold_cells"]:
+        base = cell["marked_terminal_equity"] / cell["initial_cash"]
+        y = 365.25 / cell["oos_row_count"]
+        # The committed value IS the fractional-pow formulation, to the last bit.
+        assert cell["annualized_return"] == base**y - 1.0
+        # An equivalent exp(y*log x) formulation can differ (the knife-edge that scopes
+        # the exact byte-for-byte claim to the homogeneous supported envelope).
+        worst_cross_formulation = max(
+            worst_cross_formulation, _ulp(base**y - 1.0, math.exp(y * math.log(base)) - 1.0)
+        )
+    assert worst_cross_formulation >= 1  # the two formulations are not bit-identical
+    assert worst_cross_formulation <= 8  # ...but stay within a small ULP band here

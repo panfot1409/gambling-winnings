@@ -12,6 +12,13 @@ Integer-power moments (``x**3``, ``x**4``) and percentile interpolation are *not
 themselves transcendental; where they appear they only **propagate** the upstream
 ``log1p`` variation, they do not add new transcendental error.
 
+This module governs only the *statistical* allowlist (Contract B). Some engine
+**financial** fields flow through a *fractional* ``pow`` (e.g. ``annualized_return =
+(terminal/initial)**(365.25/n) - 1``), which is also a non-correctly-rounded
+transcendental; those fields are held to exact Contract A and reproduce byte-for-byte
+on the supported Linux/x86_64 glibc CPython 3.12.3/3.12/3.13 envelope (the CI matrix) —
+the scope of the exact claim; see ``docs/M3C_STATISTICAL_METHOD_NOTE.md`` §8.
+
 This module replaces the earlier ``math.isclose(rel_tol=1e-9, abs_tol=1e-12)`` gate,
 which — around the real committed values — admitted tens of millions of ULPs (see
 ``docs/M3C_BUG_LOG.md`` N2). Here acceptance is an exact integer ULP distance with a

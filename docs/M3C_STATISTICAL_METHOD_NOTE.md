@@ -131,52 +131,86 @@ touched in M3C — is the instrument that would. A passing primary yields **only
 | interval | two-sided 95% percentile |
 | decision alpha | `0.05` |
 
-## 8. Cross-machine numerical reproducibility (post-run, empirically observed)
+## 8. Cross-machine numerical reproducibility (post-run, bounded-ULP contract)
 
 IEEE-754 mandates *correctly-rounded* results only for `+ - * /` and `sqrt`. It does
 **not** mandate correct rounding for the transcendental library functions, so a
-conforming `log1p`, integer power (`x**3`, `x**4`), or `erf` may return a value whose
-last unit-in-the-last-place (ULP) differs between libm builds and CPU
-microarchitectures (the "table-maker's dilemma"). This is a property of portable
-floating point, not a defect.
+conforming `log1p` or `erf` may return a value whose last unit-in-the-last-place (ULP)
+differs between libm builds and CPU microarchitectures (the "table-maker's dilemma").
+This is a property of portable floating point, not a defect. Note the precise sources:
+`log1p` and `erf` are transcendental; **integer powers** (`x**3`, `x**4` for the
+standardized moments) and **percentile linear interpolation** and floating **reductions**
+(sums/means) are *not* transcendental — where they appear they only **propagate** the
+`log1p`/`erf` variation from upstream, they do not themselves add correct-rounding error.
 
-Every **financial** figure in `candidate_results.json` is produced by the reviewed
-M3B backtest engine, which reproduces byte-for-byte across machines — the green
-`m3b-replay` CI on independent GitHub runners is the standing proof. The **only**
-result fields that carry a transcendental in their derivation are the M3C-new
-secondary statistics:
+Every **financial** figure in `candidate_results.json` is produced by the reviewed M3B
+backtest engine, which reproduces byte-for-byte across machines — the green `m3b-replay`
+CI on independent GitHub runners is the standing proof. The **only** result leaves whose
+derivation carries a transcendental are the M3C-new secondary statistics, and they are
+enumerated exactly (`eth_research.m3c.numerics.ALLOWED_STATISTICAL_LEAVES`):
 
-| field(s) | transcendental path |
+| leaf | derivation (variation originates in the transcendental) |
 | --- | --- |
-| `bootstrap.point_estimate` / `ci_lower` / `ci_upper` | `np.log1p` (paired excess) → mean / percentile |
-| `paired_comparisons[*].mean_daily_paired_log_excess` | `np.log1p` |
-| `psr_diagnostic.observed_sharpe` / `skewness` / `kurtosis` | `np.log1p` series → integer-power moments |
-| `psr_diagnostic.psr` | `math.erf` |
+| `bootstrap.point_estimate` | mean of the `log1p` paired-excess series |
+| `bootstrap.ci_lower` / `ci_upper` | 2.5 / 97.5 percentile of `log1p`-derived resample means |
+| `paired_comparisons[0..4].mean_daily_paired_log_excess` | per-fold mean of `log1p` excess |
+| `psr_diagnostic.observed_sharpe` | mean/std of the `log1p` series |
+| `psr_diagnostic.skewness` / `kurtosis` | standardized 3rd/4th moments of the `log1p` series |
+| `psr_diagnostic.psr` | `0.5 * (1 + math.erf(z))` of the above |
 
-Empirically, the values committed by the one execution (on its host) and the values a
-fresh clone recomputes on a different host agree to roughly `1e-13` relative — a last
-ULP or two. The replay (`eth_research.m3c.replay`) therefore enforces the honest
-reproducibility contract:
+`benchmark_sharpe` (`= 0.0`), the counts, the seed, `resamples`, `confidence`,
+`algorithm`, and `block_lengths` are constants or integers and must reproduce exactly.
 
-- **every** financial, structural, provenance, and cost field must reproduce
-  **byte-for-byte**, on any machine;
-- the named statistical scalars above must agree to a tight relative tolerance
-  (`1e-9`, with a `1e-12` absolute floor) — about six orders of magnitude tighter than
-  the P1 decision threshold, whose magnitude is ~`2.3e-3`;
-- any other difference, or a statistical scalar exceeding that tolerance, **fails
-  closed** (the replay lists the exact offending fields as a CI annotation);
-- and the raw-data reproduction must re-derive the **identical mechanical promotion
-  verdict** (the same per-criterion pass/fail vector), so the tolerated drift is proven
-  decision-irrelevant, not merely small.
+**The contract** (`eth_research.m3c.numerics` + `eth_research.m3c.replay`). Acceptance is
+an **exact integer ULP distance**, not a relative/absolute tolerance. A reproduced value
+may differ from the committed one only if all hold: the leaf is one of the exactly
+enumerated paths above; both values are exactly `float`; both finite; identically signed
+(no zero crossing, no signed-zero flip); and the ULP distance is `<= MAX_REPLAY_ULPS = 8`.
+The cap is evidence-based — the observed cross-machine drift on the supported
+Linux/x86_64 CPython 3.12.3 + 3.13 runners is **1–2 ULPs**, in exactly two leaves
+(`bootstrap.point_estimate` at 2 ULPs and `paired_comparisons[0].mean_daily_paired_log_excess`
+at 1 ULP); 8 gives bounded headroom. Anything else — any financial/structural difference,
+any non-float, sign flip, or over-cap statistical drift — **fails closed**, and the CI
+annotation prints, per absorbed leaf, the committed and reproduced values, the exact ULP
+distance, the cap, and whether the leaf feeds a promotion criterion. This is **bounded ULP
+variation**, deliberately not described as "last-ULP identical".
 
-The decision and the human-readable report are byte-unaffected regardless: the report
-prints these statistics at `.6g` (six significant figures, far coarser than the
-~13th-figure drift), and the mechanical decision depends only on the **sign** of
-`bootstrap.ci_lower` (P1), which is `-2.3e-3` — nine orders of magnitude from a sign
-flip. On the execution host itself, the orchestrator's independent second rebuild (the
-P6 determinism gate) still requires bit-for-bit identical output, so same-host
-non-determinism remains a hard failure.
+The reproduction is separated into four contracts: **A** financial/structural raw replay
+(exact); **B** bounded statistical replay (the above); **C** committed-artifact
+consistency (decision re-derives and report re-renders byte-for-byte from the committed
+results); and **D** reproduced-report rendering — the report rendered from the *reproduced*
+results reproduces every displayed value in the committed report. Contract D is **not**
+fully byte-identical: the report embeds `sha256(results)` as a provenance digest, and that
+SHA avalanches under any bounded-ULP drift, so the digest line legitimately differs; the
+replay substitutes the reproduced digest back and requires exact equality of every other
+byte (every `.6g` statistic and financial table). The raw-data reproduction must also
+re-derive the **identical mechanical verdict** (the full per-criterion pass/fail vector),
+so the bounded drift is proven decision-irrelevant. The mechanical decision itself depends
+only on the **sign** of `bootstrap.ci_lower` (P1), which is `-2.3e-3` — a bounded-ULP
+change cannot approach a sign flip — and the report prints statistics at `.6g`, coarser
+than the ~13th-significant-figure drift, so no displayed value changes. On the execution
+host, the orchestrator's independent second rebuild (the P6 determinism gate) still
+requires bit-for-bit identical output, so same-host non-determinism remains a hard failure.
+
+**Supported-envelope scope (honest limitation).** The byte-for-byte financial-field
+claim is scoped to, and verified on, the declared runtime envelope: Linux/x86_64
+(glibc), CPython 3.12.3 authoritative + 3.12 / 3.13 compat, with the numerical stack
+pinned by `uv.lock`. This is exactly the `m3c-replay` CI matrix. Some engine financial
+fields are themselves derived through a *fractional* `pow` — notably
+`annualized_return = (terminal/initial)**(365.25/n) - 1` and the Sharpe/Sortino ratios
+that consume it — and fractional `pow` is a non-correctly-rounded transcendental too. On
+the homogeneous supported envelope these reproduce **byte-for-byte** (the CI drift
+annotation shows only the two `log1p`-derived statistical leaves, never a financial
+field; the green `m3b-replay` reproduces the same engine fields independently). But an
+alternate mathematically-equivalent formulation (`exp(y·log x)`) already differs from the
+committed `pow` value by up to ~8 ULP on 16 of the 75 cells, so on a genuinely different
+libm (musl, or a non-x86_64 microarchitecture) `annualized_return` could drift and the
+exact Contract-A check would *false-reject*. Widening the envelope beyond the tested one
+would therefore require giving these `pow`-derived engine fields the same bounded-ULP
+treatment; within the declared envelope the exact claim holds and is CI-verified. This
+limitation is recorded rather than papered over (independent-acceptance auditor finding).
 
 This is deliberately a *stronger* honesty posture than a blanket "bit-identical on all
-hardware" claim, which no numerically-literate reviewer would accept for `erf` or
-`log1p`. The discovery and its resolution are recorded in `docs/M3C_BUG_LOG.md`.
+hardware" claim, which no numerically-literate reviewer would accept for `erf` or `log1p`.
+The discovery, the earlier looser gate it replaced, and the Contract-D fix are recorded in
+`docs/M3C_BUG_LOG.md`.
