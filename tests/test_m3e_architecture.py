@@ -212,3 +212,39 @@ def test_importing_m3e_pulls_no_engine_into_sys_modules() -> None:
     assert result.returncode == 0, f"probe failed: {result.stderr}"
     hits = [line for line in result.stdout.splitlines() if line.strip()]
     assert not hits, "importing eth_research.m3e loaded prohibited modules: " + ", ".join(hits)
+
+
+def test_m3e_package_version_is_a_frozen_literal() -> None:
+    """M3E is complete: its version is pinned to the literal 0.8.0 (not the live
+    ``eth_research.__version__``), so a later milestone bumping the running package
+    cannot break byte-exact replay of the committed M3E artifacts."""
+    import ast
+
+    from eth_research.m3e import M3E_PACKAGE_VERSION
+
+    assert M3E_PACKAGE_VERSION == "0.8.0"
+    # The source assigns a string literal, never a reference to the live version.
+    init_src = (_M3E_DIR / "__init__.py").read_text()
+    tree = ast.parse(init_src)
+    literal = None
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "M3E_PACKAGE_VERSION"
+        ):
+            assert isinstance(node.value, ast.Constant), "version must be a frozen string literal"
+            literal = node.value.value
+    assert literal == "0.8.0"
+
+
+def test_verifier_and_architecture_allowlists_agree() -> None:
+    """The verifier's import allow-list is byte-identical to this test's — the two
+    are maintained independently as defence in depth, so lock them together."""
+    from eth_research.m3e.verify_m3e_program import (
+        _ALLOWED_ETH_RESEARCH_IMPORTS,
+        _PROHIBITED_NETWORK_PREFIXES,
+    )
+
+    assert _ALLOWED_ETH_RESEARCH_IMPORTS == _ALLOWED_ETH_RESEARCH
+    assert set(_PROHIBITED_NETWORK_PREFIXES) == set(_PROHIBITED_NETWORK_MODULES)

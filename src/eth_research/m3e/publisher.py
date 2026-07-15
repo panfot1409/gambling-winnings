@@ -87,5 +87,9 @@ def assert_draft_only(descriptor: dict[str, Any]) -> None:
     base = require_str("base_branch", descriptor["base_branch"])
     if base == head:
         raise M3EValidationError("proposal base and head must differ")
-    if base.startswith("bot/m3e-prospective-update/"):
-        raise M3EValidationError("proposal base must be an accepted branch, not a bot branch")
+    # The base is pinned to the accepted cohort branch — never the default branch,
+    # another milestone branch, a bot branch, or the empty string.
+    if base != ACCEPTED_COHORT_BRANCH:
+        raise M3EValidationError(
+            "proposal base must be an accepted branch (the accepted cohort branch)"
+        )

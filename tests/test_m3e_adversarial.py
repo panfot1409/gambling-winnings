@@ -170,6 +170,24 @@ def test_injecting_a_prohibited_import_is_caught(m3a_checkout: Path) -> None:
         _scan_m3e_imports(m3a_checkout)
 
 
+def test_injecting_a_relative_engine_import_is_caught(m3a_checkout: Path) -> None:
+    # A RELATIVE import into a sibling engine (``from ..fractional.engine``) resolves
+    # to the real off-limits module and is caught — the scan resolves node.level.
+    target = m3a_checkout / "src/eth_research/m3e/status.py"
+    target.write_text("from ..fractional.engine import x  # noqa\n" + target.read_text())
+    with pytest.raises(M3EValidationError, match="non-allowlisted"):
+        _scan_m3e_imports(m3a_checkout)
+
+
+def test_injecting_a_network_import_is_caught(m3a_checkout: Path) -> None:
+    # An m3e module opening a socket / http client is refused: it holds no key and
+    # opens no socket, so its own source must never import a network module.
+    target = m3a_checkout / "src/eth_research/m3e/status.py"
+    target.write_text("import socket\n" + target.read_text())
+    with pytest.raises(M3EValidationError, match="network"):
+        _scan_m3e_imports(m3a_checkout)
+
+
 def test_a_content_writing_workflow_is_caught(m3a_checkout: Path) -> None:
     # Any workflow at HEAD granting write to repository contents is rejected.
     hostile = m3a_checkout / ".github/workflows/zz_hostile.yml"

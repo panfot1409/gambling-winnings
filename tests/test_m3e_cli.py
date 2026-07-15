@@ -14,6 +14,16 @@ from eth_research.m3e.validation import M3EValidationError
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 
 
+def test_status_guard_rejects_a_numeric_evaluation_quantity() -> None:
+    # A future accidental numeric field carrying a computed evaluation quantity is
+    # refused by the recursive key guard (e.g. drawdown / turnover / sortino), while
+    # a False governance flag with the same substring stays exempt.
+    for key in ("max_drawdown", "portfolio_turnover", "sortino_ratio", "gross_exposure"):
+        with pytest.raises(M3EValidationError, match="could leak evaluation data"):
+            _assert_no_forbidden_keys({"accepted_base": {key: 0.3}})
+    _assert_no_forbidden_keys({"governance_flags": {"performance_metrics_computed": False}})
+
+
 def test_status_reports_only_safe_governance_facts() -> None:
     status = build_status(REPO_ROOT)
     assert status["kind"] == "m3e_review_only_update_status"

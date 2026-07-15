@@ -79,6 +79,72 @@ def test_no_workflow_at_head_is_unsafe() -> None:
     _no_unsafe_workflow(REPO_ROOT)
 
 
+# --------------------------------------------------------------------------- #
+# hardened scanner: the substring-evasion matrix must all fail closed         #
+# --------------------------------------------------------------------------- #
+_SAFE = (
+    "name: x\non: push\npermissions:\n  contents: read\n"
+    "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n"
+)
+
+
+def _scan_body(tmp_path: Path, body: str) -> None:
+    wf = tmp_path / ".github/workflows"
+    wf.mkdir(parents=True, exist_ok=True)
+    (wf / "hostile.yml").write_text(body)
+    _no_unsafe_workflow(tmp_path)
+
+
+def test_a_clean_read_only_workflow_passes_the_scanner(tmp_path: Path) -> None:
+    _scan_body(tmp_path, _SAFE)  # control: the baseline is accepted
+
+
+@pytest.mark.parametrize(
+    ("label", "body"),
+    [
+        (
+            "write-all",
+            "name: x\non: push\npermissions: write-all\njobs:\n  j:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        ),
+        (
+            "quoted-contents-write",
+            "name: x\non: push\npermissions:\n  contents: 'write'\njobs:\n  j:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        ),
+        (
+            "spaced-contents-write",
+            "name: x\non: push\npermissions:\n  contents:  write\njobs:\n  j:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        ),
+        ("secrets-index", _SAFE + "      - run: echo ${{ secrets['PAT'] }}\n"),
+        ("secrets-inherit", _SAFE + "    secrets: inherit\n"),
+        ("upload-artifact", _SAFE + "      - uses: actions/upload-artifact@abc\n"),
+        ("upload-pages-artifact", _SAFE + "      - uses: actions/upload-pages-artifact@abc\n"),
+        ("force-push-f", _SAFE + "      - run: git push -f origin main\n"),
+        ("force-push-refspec", _SAFE + "      - run: git push origin +HEAD:main\n"),
+        ("automerge-auto-eq", _SAFE + "      - run: gh pr merge --auto=true 1\n"),
+        (
+            "automerge-graphql",
+            _SAFE + "      - run: gh api graphql -f q=enablePullRequestAutoMerge\n",
+        ),
+        (
+            "automerge-action",
+            _SAFE + "      - uses: peter-evans/enable-pull-request-automerge@abc\n",
+        ),
+        ("coinbase-no-scheme", _SAFE + "      - run: curl api.exchange.coinbase.com/x -o o\n"),
+        (
+            "no-permissions-block",
+            "name: x\non: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n"
+            "    steps:\n      - run: echo hi\n",
+        ),
+    ],
+)
+def test_hardened_scanner_rejects_each_evasion(label: str, body: str, tmp_path: Path) -> None:
+    with pytest.raises(M3EValidationError):
+        _scan_body(tmp_path, body)
+
+
 @pytest.mark.parametrize(
     "bad",
     [

@@ -94,7 +94,11 @@ def test_a_forbidden_evaluation_artifact_in_the_proposal_is_caught(
 ) -> None:
     m3e_stage_proposal(tmp_path / "prop", repo_root=REPO_ROOT)
     (tmp_path / "prop" / "candidate_results.json").write_text("{}")
-    with pytest.raises(M3EValidationError, match="forbidden evaluation artifact"):
+    # The closed expected-file-set check refuses any unexpected top-level entry
+    # (stronger than the name-marker scan, which still guards the runner subtrees).
+    with pytest.raises(
+        M3EValidationError, match=r"unexpected entries|forbidden evaluation artifact"
+    ):
         verify_update_proposal(REPO_ROOT, tmp_path / "prop")
 
 

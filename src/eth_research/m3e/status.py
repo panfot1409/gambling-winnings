@@ -20,21 +20,41 @@ from eth_research.m3e.proposal import GOVERNANCE_FLAGS, REVIEW_POLICY
 from eth_research.m3e.registry import verify_registry
 from eth_research.m3e.validation import M3EValidationError
 
+# Substrings a status *key* may never contain when its value is non-boolean — a
+# numeric leak of a computed evaluation quantity. (Boolean governance flags such as
+# ``evaluation_authorized`` / ``performance_metrics_computed`` are bool-exempt, and
+# ``prospective_evaluation_byte_count`` is an integer whose key legitimately
+# contains "evaluation"/"metric"; those two words are therefore intentionally absent
+# from this list.) The set is otherwise the comprehensive strategy/performance
+# vocabulary so a future accidental numeric field cannot slip an evaluation value
+# through the data-only status.
 FORBIDDEN_STATUS_KEY_SUBSTRINGS = (
     "price",
+    "ohlcv",
     "return",
+    "profit",
+    "pnl",
+    "equity",
     "signal",
     "weight",
     "position",
+    "exposure",
+    "leverage",
     "fill",
-    "pnl",
-    "equity",
+    "fee",
+    "turnover",
+    "sharpe",
+    "sortino",
+    "calmar",
+    "cagr",
+    "alpha",
+    "beta",
+    "volatility",
+    "drawdown",
     "metric",
     "ranking",
     "recommend",
-    "sharpe",
-    "alpha",
-    "ohlcv",
+    "momentum",
 )
 
 

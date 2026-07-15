@@ -144,3 +144,16 @@ def test_assert_draft_only_rejects_a_bot_base() -> None:
                 "base_branch": "bot/m3e-prospective-update/20260715-20260722-" + "b" * 16,
             }
         )
+
+
+def test_assert_draft_only_pins_the_base_to_the_accepted_cohort_branch() -> None:
+    # The base is never the default branch, another milestone branch, or empty.
+    for bad_base in (
+        "main",
+        "master",
+        "claude/m3c-adaptive-research-governance",
+        "",
+        "refs/heads/main",
+    ):
+        with pytest.raises(M3EValidationError, match="base must be an accepted branch"):
+            assert_draft_only({**_GOOD_DESCRIPTOR, "base_branch": bad_base})

@@ -8,9 +8,10 @@ bytes and proves, in one un-skippable 35-check graph:
   still rejected, the cohort is immature/unauthorized, and the **entire accepted
   M3D program is intact** (via the reviewed M3D verifier);
 * the isolated ``m3e`` package imports only its allow-listed strategy-free
-  utilities, and **no** workflow at HEAD can write repository contents, contact a
-  Coinbase host, use a secret, force-push, use ``pull_request_target``, or enable
-  auto-merge;
+  utilities and no network/wallet client (relative imports resolved), and **no**
+  workflow at HEAD grants a write permission (including ``write-all`` or an omitted
+  permissions block), contacts a Coinbase host, references a secret, force-pushes,
+  uploads an artifact, uses ``pull_request_target``, or enables auto-merge;
 * both runner artifacts verify against the *same* update plan, are isolated, and
   produce **byte-identical canonical content** (the two-runner attestation);
 * the committed comparison and transition rebuild byte-for-byte and their hashes are
@@ -94,18 +95,81 @@ _ALLOWED_ETH_RESEARCH_IMPORTS = frozenset(
         "eth_research.m3d.verify_m3d_program",
     }
 )
-_COINBASE_HOST_RE = re.compile(r"https?://[^\s\"']*coinbase", re.IGNORECASE)
-# Filenames inside a proposal that would betray a smuggled evaluation output.
+# Network / wallet client prefixes the isolated m3e SOURCE must never import (it
+# opens no socket and holds no key). Checked statically here — mirrors the
+# ``_PROHIBITED_NETWORK_MODULES`` list in tests/test_m3e_architecture.py.
+_PROHIBITED_NETWORK_PREFIXES = (
+    "urllib",
+    "urllib.request",
+    "http",
+    "http.client",
+    "socket",
+    "ssl",
+    "requests",
+    "aiohttp",
+    "httpx",
+    "websocket",
+    "websockets",
+    "web3",
+    "eth_account",
+    "ccxt",
+)
+# Coinbase host reference, scheme-agnostic (a bare ``exchange.coinbase.com`` in a
+# ``curl`` argument connects just as well as an ``https://`` URL).
+_COINBASE_HOST_RE = re.compile(r"(?:https?://[^\s\"']*)?coinbase\.(?:com|pro)\b", re.IGNORECASE)
+# A workflow permission scope explicitly set to a write value (any scope, quoted or
+# not, any surrounding whitespace) — e.g. ``contents: write`` / ``permissions: write-all``.
+_WRITE_PERM_RE = re.compile(
+    r"^\s*[A-Za-z_-]+\s*:\s*['\"]?write(?:-all)?['\"]?\s*(?:#.*)?$", re.MULTILINE
+)
+# A repository secret reference in either dotted (``secrets.X``) or index
+# (``secrets['X']``) form, or a wholesale ``secrets: inherit`` hand-off.
+_SECRETS_RE = re.compile(r"secrets\s*[.\[]|secrets\s*:\s*inherit", re.IGNORECASE)
+# A force-push written with the ``-f`` alias or a leading ``+`` refspec.
+_FORCE_PUSH_RE = re.compile(r"git\s+push\b[^\n]*?(?:\s-\S*f\b|\s\+\S)", re.IGNORECASE)
+# Auto-merge in any spelling: the MCP tool name, the GraphQL mutation, the
+# community action, or ``gh pr merge --auto``.
+_AUTO_MERGE_RE = re.compile(
+    r"enable_pr_auto_merge|enablepullrequestautomerge|enable-pull-request-automerge|--auto\b",
+    re.IGNORECASE,
+)
+# Filenames inside a proposal that would betray a smuggled evaluation output. This
+# is the comprehensive strategy/performance vocabulary — the proposal directory is
+# additionally restricted to an exact expected file set (see ``_no_forbidden_artifact``).
 _FORBIDDEN_ARTIFACT_MARKERS = (
     "results",
+    "result",
     "decision",
     "candidate",
-    "metrics",
+    "metric",
     "promotion",
+    "promote",
     "ranking",
     "evaluation",
+    "evaluate",
     "backtest",
     "pnl",
+    "sharpe",
+    "sortino",
+    "calmar",
+    "alpha",
+    "drawdown",
+    "turnover",
+    "return",
+    "profit",
+    "signal",
+    "weight",
+    "position",
+    "exposure",
+    "leverage",
+    "performance",
+    "equity",
+    "strategy",
+)
+# The exact top-level entries a verified proposal directory may contain — anything
+# else (a dropped ``weights.json`` / ``returns.json`` / a stray directory) is refused.
+_EXPECTED_PROPOSAL_ENTRIES = frozenset(
+    {PROPOSAL_MANIFEST_NAME, COMPARISON_NAME, TRANSITION_NAME, RUNNER_A_DIR, RUNNER_B_DIR}
 )
 _LEDGERS = {
     "development_gate": up.SEALED_LEDGERS["development_gate"],
@@ -114,18 +178,40 @@ _LEDGERS = {
 }
 
 
+def _module_targets(path: Path, src_root: Path) -> list[str]:
+    """Absolute dotted module names imported by ``path`` (relative imports resolved)."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    self_pkg = ".".join(path.relative_to(src_root).with_suffix("").parts[:-1])
+    modules: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:  # relative import — resolve against the module's package
+                base_parts = self_pkg.split(".")
+                if node.level > 1:
+                    base_parts = base_parts[: -(node.level - 1)]
+                base = ".".join(base_parts)
+                module = f"{base}.{node.module}" if node.module else base
+            else:
+                module = node.module or ""
+            if module:
+                modules.append(module)
+    return modules
+
+
 def _scan_m3e_imports(repo_root: str | Path) -> None:
-    package = Path(repo_root) / "src/eth_research/m3e"
+    src_root = Path(repo_root) / "src"
+    package = src_root / "eth_research/m3e"
     offenders: list[str] = []
     for path in sorted(package.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        modules: list[str] = []
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                modules.extend(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-                modules.append(node.module)
-        for module in modules:
+        for module in _module_targets(path, src_root):
+            if any(
+                module == prefix or module.startswith(prefix + ".")
+                for prefix in _PROHIBITED_NETWORK_PREFIXES
+            ):
+                offenders.append(f"{path.name}: {module} (network/wallet)")
+                continue
             if not module.startswith("eth_research"):
                 continue
             if module == "eth_research.m3e" or module.startswith("eth_research.m3e."):
@@ -133,7 +219,7 @@ def _scan_m3e_imports(repo_root: str | Path) -> None:
             if module not in _ALLOWED_ETH_RESEARCH_IMPORTS:
                 offenders.append(f"{path.name}: {module}")
     if offenders:
-        raise M3EValidationError(f"m3e imports non-allowlisted eth_research modules: {offenders}")
+        raise M3EValidationError(f"m3e imports non-allowlisted or network modules: {offenders}")
 
 
 def _no_unsafe_workflow(repo_root: str | Path) -> None:
@@ -141,21 +227,39 @@ def _no_unsafe_workflow(repo_root: str | Path) -> None:
     files = sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")])
     for path in files:
         text = path.read_text(encoding="utf-8")
-        if "contents: write" in text or "contents:write" in text:
-            raise M3EValidationError(f"{path.name} grants contents: write at HEAD")
+        if "permissions:" not in text:
+            raise M3EValidationError(
+                f"{path.name} declares no explicit (read-only) permissions block"
+            )
+        if "write-all" in text:
+            raise M3EValidationError(f"{path.name} grants write-all permissions at HEAD")
+        if _WRITE_PERM_RE.search(text):
+            raise M3EValidationError(f"{path.name} grants a write permission at HEAD")
         if _COINBASE_HOST_RE.search(text):
             raise M3EValidationError(f"{path.name} contacts a Coinbase host at HEAD")
-        if "secrets." in text:
+        if _SECRETS_RE.search(text):
             raise M3EValidationError(f"{path.name} references a repository secret")
-        if "--force" in text or "--force-with-lease" in text:
+        if "--force" in text or "--force-with-lease" in text or _FORCE_PUSH_RE.search(text):
             raise M3EValidationError(f"{path.name} force-pushes")
         if "pull_request_target" in text:
             raise M3EValidationError(f"{path.name} uses pull_request_target")
-        if "enable_pr_auto_merge" in text or "--auto\n" in text or " --auto " in text:
+        if _AUTO_MERGE_RE.search(text):
             raise M3EValidationError(f"{path.name} enables auto-merge")
+        if "upload-artifact" in text or "upload-pages-artifact" in text:
+            raise M3EValidationError(f"{path.name} uploads a workflow artifact")
 
 
 def _no_forbidden_artifact(proposal_dir: Path) -> None:
+    # 1. The proposal directory's top level is an exact, closed set: manifest +
+    #    comparison + transition + the two runner directories, nothing else. A
+    #    dropped evaluation output (weights.json, returns.json, …) is refused here
+    #    even if its name carries no strategy marker.
+    entries = {p.name for p in proposal_dir.iterdir()}
+    unexpected = sorted(entries - _EXPECTED_PROPOSAL_ENTRIES)
+    if unexpected:
+        raise M3EValidationError(f"proposal contains unexpected entries: {unexpected}")
+    # 2. Belt-and-suspenders: no file anywhere in the tree carries a strategy /
+    #    performance / evaluation marker in its name.
     for path in sorted(proposal_dir.rglob("*")):
         if not path.is_file():
             continue

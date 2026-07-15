@@ -21,11 +21,14 @@ their own recorded versions and are never rewritten.
 
 from __future__ import annotations
 
-from eth_research import __version__ as _PACKAGE_VERSION
-
-# The M3E governance/proposal artifacts stamp the running development package
-# version. M3E is the current milestone, so this tracks the live version (0.8.0),
-# unlike a completed milestone which pins its own frozen literal.
-M3E_PACKAGE_VERSION: str = _PACKAGE_VERSION
+# Milestone 3E is complete and its artifacts are frozen at development version
+# 0.8.0. This constant pins the literal 0.8.0 that every committed M3E artifact
+# (accepted_base.json, the proposal registry, and any proposal manifest) already
+# stamps — exactly as every prior completed milestone pins its own version
+# (``M3D_PACKAGE_VERSION = "0.7.0"``, ``M3C_PACKAGE_VERSION = "0.6.0"``, …). The
+# freeze is replay-neutral: the pinned value equals the live package version at
+# freeze time, so every M3E artifact rebuilds byte-for-byte and ``m3e-replay``
+# stays green even after a later milestone bumps the running package to 0.9.0.
+M3E_PACKAGE_VERSION: str = "0.8.0"
 
 __all__ = ["M3E_PACKAGE_VERSION"]
