@@ -165,3 +165,81 @@ green.
 - **Outcome unchanged.** The mechanical verdict is still
   `rejected_for_development_gate_promotion`; the observed cross-host drift is ~`1e-13`
   relative, ~10 orders of magnitude from flipping P1's sign.
+
+## Independent acceptance — numerical replay-contract closure
+
+A later independent-acceptance pass audited the post-run fix above and found the
+`math.isclose(rel_tol=1e-9, abs_tol=1e-12)` gate — while directionally right — far too
+loose and imprecise. Six defects (N1–N6) were reproduced with tests, then fixed by the
+exact bounded-binary64-ULP contract (`eth_research.m3c.numerics`, commit `e699688`; the
+1e-9 gate described in the previous section is **superseded**).
+
+- **N1 (MEDIUM) — FIXED.** The docs said "four named scalars"; the predicate actually
+  admitted **12** leaves for the five-fold result (7 fixed + 5 per-fold means).
+  *Fix:* an exactly-enumerated allowlist; `test_allowlist_is_structurally_exact`.
+- **N2 (HIGH) — FIXED.** `isclose(1e-9, 1e-12)` was not a last-ULP bound: reproduced
+  with tests to admit **36,893,488 ULPs** around `point_estimate` and **8,945,706**
+  around the fold-0 mean; a 1,000,000-ULP mutation classified as tolerated. *Fix:* an
+  exact integer ULP distance with `MAX_REPLAY_ULPS = 8`; `test_same_relative_delta_but_
+  millions_of_ulps_is_hard`, `test_exactly_cap_plus_one_is_hard`.
+- **N3 (MEDIUM) — FIXED.** The fold predicate matched any list index (fold 5, 99, …),
+  not only 0..4. *Fix:* the allowlist enumerates `paired_comparisons[0..OOS_FOLD_COUNT-1]`
+  exactly; `test_classifier_hard_fails_every_non_approved_mutation[fold-index-5]`.
+- **N4 (LOW) — FIXED.** The docs conflated transcendentals (`log1p`, `erf`) with integer
+  powers (not transcendental) and percentile interpolation / reductions (which only
+  propagate the upstream variation). *Fix:* corrected §8 and the module docstrings.
+- **N5 (LOW) — FIXED.** Comparing a "1e-9 relative tolerance" to the *magnitude* of the
+  P1 threshold was dimensionally meaningless. *Fix:* removed; acceptance is now an
+  integer ULP cap, and the decision's robustness is stated separately as the sign of
+  `ci_lower` being `-2.3e-3`.
+- **N6 (MEDIUM) — FIXED.** `verify_published_run` proves committed-artifact consistency
+  (Contract C) but not raw-data → reproduced-results → rendered-report identity.
+  *Fix:* added Contract D (render from the reproduced results); `check_replay` now
+  separates Contracts A/B/C/D. See below for the Contract-D correction.
+
+**Contract D — results-digest avalanche (found by CI, FIXED, commit `de04a81`).** The
+first cut of Contract D required the report rendered from the reproduced results to be
+byte-identical to the committed report. That passed locally (same-host repro has zero
+drift) but failed on all three runners: the report embeds `sha256(results)` as a
+provenance digest (e.g. committed `4db76efb…` vs reproduced `63d7fa6d…`), and that SHA
+avalanches under the 1–2 ULP statistical drift, so the digest line legitimately differs.
+*Fix:* Contract D is now a semantic comparison — substitute the reproduced results-digest
+back to the committed one and require exact byte-equality of every other byte (every `.6g`
+statistic and financial table). Named `report_reproduced_modulo_results_digest`, not
+"byte-reproduced". Unit-tested (`test_contract_d_*`) so the drift path is covered locally.
+
+Two output-neutral hygiene changes accompanied the contract (commit `3cc63e6`, verified
+byte-identical by `replay --check`): `np.percentile(..., method="linear")` is pinned
+explicitly, and `block_length` uses an exact integer floor-cube-root instead of
+`int(n**(1/3) + 1e-9)` (proven to agree across `[1,100000]` and on the real fold sizes).
+
+**Outcome unchanged.** The mechanical verdict remains
+`rejected_for_development_gate_promotion`; no immutable artifact, ledger, or lifecycle
+event was changed, and the single-use run was not re-executed.
+
+## Independent-acceptance red team (three more auditors)
+
+After the numerical-contract correction, three further independent read-only auditors
+re-attacked the whole surface. **No Class A (financial/scientific-integrity) or Class D
+(sealed-access/budget-drift) working exploit** was found; every concrete control
+(byte-empty ledgers, single-use id, candidate fingerprint, next-open causality,
+fold isolation, decision re-derivation) held. Their real findings were reproduced and
+fixed; the rest are documented non-defects. Full detail in
+`docs/M3C_INDEPENDENT_ACCEPTANCE_AUDIT.md`.
+
+| id | severity | finding | disposition |
+| --- | --- | --- | --- |
+| A-F1 | B | `annualized_return` is fractional-`pow`-derived (non-CR transcendental) yet Contract-A byte-exact; robust only on the homogeneous supported envelope | **scoped + documented** (method note §8, numerics docstring, test); not loosened — within the tested Linux/x86_64 glibc envelope it reproduces byte-for-byte |
+| A-F4 | C | numerics allowlist keys `paired_comparisons` by position, but the model left fold order unpinned | **FIXED** — results require folds 0..4 in ascending serialized order |
+| A-F2 / A-F3 | C | P7 (and P5's `min_equity`) are structurally non-discriminating | **accepted (documented)** — already noted in the pre-registration log; `decision.py` is bound to the immutable committed decision and cannot change |
+| B-F1 / C-F1 | B (→D-adjacent) | `research_budget.json` / `research_lineage.json` bound by SHA only; governance invariants never semantically verified | **FIXED** — `verify_published_run` now parses both strictly and requires byte-equality with the one canonical `build_research_budget()` / `build_m3c_lineage()` (new check `governance_documents_are_canonical`) |
+| C-F2 | B | fold-cell timestamp parse was decode-and-repair (accepted naive / non-UTC) | **FIXED** — `require_utc_timestamp` |
+| C-F3 | D | registry `event_time_utc` accepted a non-UTC offset | **FIXED** — `require_utc_timestamp` |
+| C-F4 | C | shallow verifier didn't bind `results.protocol_sha256` to the registered protocol | **FIXED** — explicit binding added |
+| B-F2 | C | replay ledger check lacked the orchestrator's symlink guard | **FIXED** — symlink / non-regular-file rejected |
+| B-F3 | C | `build_m3c_fold_frames` has no explicit boundary re-guard (safe by construction) | **accepted** — the only data source is the boundary-guarded research-train loader; noted as defense-in-depth |
+| C-F5 | C | `recovery.finalize` doesn't re-run `verify_published_run` after appending | **accepted** — finalize is deliberately calculation-free; CI replay/verify is the safety net (documented) |
+
+Every fix was proven byte-neutral (`replay --check` still reproduces the committed run;
+`verify_archive --deep` reports 15 checks) and touches no immutable artifact, ledger, or
+lifecycle event.

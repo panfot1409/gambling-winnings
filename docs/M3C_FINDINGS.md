@@ -82,21 +82,22 @@ not a venue-calibrated model.
   were never accessed. M3C evaluated the research-train partition only.
 - The registry is a clean hash chain `registered → started → completed`, and the
   `completed` event's `promotion_status` is the mechanical decision outcome.
-- `python -m eth_research.m3c.replay --repo-root . --check` reports **completed**: on
-  the execution host it reproduces every artifact byte-for-byte; on any other host it
-  reproduces the decision and report byte-for-byte and every financial, structural, and
-  cost field of the results byte-for-byte, requiring only a named handful of secondary
-  statistical scalars (the bootstrap interval, the per-fold paired log-excess, the
-  descriptive PSR) to agree to a tight relative tolerance — they are transcendental
-  outputs (`log1p`, integer powers, `erf`) that IEEE-754 does not make cross-machine
-  reproducible past a last ULP, and the reproduction is additionally required to yield
-  the **identical mechanical verdict**, so the drift is provably decision-irrelevant
-  (see `docs/M3C_STATISTICAL_METHOD_NOTE.md` §8).
-  `python -m eth_research.m3c.verify_archive --repo-root . --deep` passes **14 checks**;
+- `python -m eth_research.m3c.replay --repo-root . --check` reports **completed** under
+  four contracts: every financial, structural, provenance, and cost field of the results
+  reproduces **byte-for-byte**; a structurally-exact allowlist of secondary statistical
+  scalars (the bootstrap interval, the per-fold paired log-excess, the descriptive PSR) may
+  differ only by a bounded number of representable binary64 steps (`<= 8 ULPs`), because
+  each is derived from a non-correctly-rounded transcendental (`log1p`/`erf`); the decision
+  re-derives byte-for-byte and the report reproduces byte-for-byte modulo its avalanching
+  results-digest line; and the reproduction must yield the **identical mechanical verdict**,
+  so the drift is provably decision-irrelevant (see `docs/M3C_STATISTICAL_METHOD_NOTE.md`
+  §8). `python -m eth_research.m3c.verify_archive --repo-root . --deep` passes **15 checks**;
   the recovery finalizer reports `no-intent`.
 - The pre-registration red team (three independent adversarial auditors) found no
-  CRITICAL or HIGH defect; its findings and fixes are recorded in
-  `docs/M3C_BUG_LOG.md`. The statistical method is fixed a-priori in
+  CRITICAL or HIGH defect, and a later independent-acceptance red team (three more
+  independent auditors) found no financial/scientific-integrity or sealed-access defect;
+  all findings and fixes are recorded in `docs/M3C_BUG_LOG.md` and
+  `docs/M3C_INDEPENDENT_ACCEPTANCE_AUDIT.md`. The statistical method is fixed a-priori in
   `docs/M3C_STATISTICAL_METHOD_NOTE.md`.
 
 ## Reproduce
@@ -106,5 +107,5 @@ From a fresh clone on the locked runtime:
 ```bash
 uv sync --locked --all-extras
 python -m eth_research.m3c.replay --repo-root . --check          # -> completed
-python -m eth_research.m3c.verify_archive --repo-root . --deep    # -> 14 checks
+python -m eth_research.m3c.verify_archive --repo-root . --deep    # -> 15 checks
 ```

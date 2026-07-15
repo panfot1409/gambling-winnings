@@ -60,13 +60,15 @@ python -m eth_research.m3c.recovery --repo-root . --status
 
 The replay reconstructs the research-train partition offline from the committed
 raw Coinbase bytes, re-runs the 5×3×5 grid through the one shared pipeline, and
-requires the committed run to reproduce — the decision and report byte-for-byte and
-every financial field of the results byte-for-byte, allowing only a named set of
-secondary statistical scalars (the fold-seam-aware bootstrap interval, the per-fold
-paired log-excess, the PSR) to differ by a cross-machine transcendental last ULP,
-and additionally requiring the **identical mechanical verdict** (see
-`docs/M3C_STATISTICAL_METHOD_NOTE.md` §8). The decision is re-derived from the
-committed results and must match byte-for-byte; a hand-edited outcome is rejected.
+requires the committed run to reproduce under four contracts: every financial,
+structural, provenance, and cost field **byte-for-byte**; a structurally-exact
+allowlist of secondary statistical scalars (the fold-seam-aware bootstrap interval,
+the per-fold paired log-excess, the PSR) only within a bounded **integer ULP distance
+`<= 8`** (each is `log1p`/`erf`-derived); the decision re-derived byte-for-byte; and the
+report reproduced byte-for-byte modulo its avalanching results-digest line — plus the
+**identical mechanical verdict** (see `docs/M3C_STATISTICAL_METHOD_NOTE.md` §8). A
+hand-edited outcome, a reordered fold, a lying governance document, or a non-UTC
+timestamp is rejected.
 
 ## Honest reading
 
