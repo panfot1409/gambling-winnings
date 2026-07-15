@@ -8,6 +8,7 @@ import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -31,6 +32,10 @@ from eth_research.data.lock import DatasetLock
 from eth_research.data.provenance import DatasetIdentity, sha256_bytes, sha256_file
 from eth_research.data.synthetic import make_synthetic_ohlcv
 from eth_research.protocol import BenchmarkProtocol
+
+if TYPE_CHECKING:
+    from eth_research.m3d.receipt import ProspectiveAttemptReceipt
+    from eth_research.m3e.proposal import AssembledProposal
 
 
 @pytest.fixture
@@ -674,7 +679,7 @@ def write_m3e_runner(
     runner_identity: str,
     client_identity: str = "synthetic offline runner (no networking)",
     mutate: Callable[[int, list[list[float | int]]], list[list[float | int]]] | None = None,
-):
+) -> ProspectiveAttemptReceipt:
     """Write one runner's synthetic raw bodies + a validated M3D-schema receipt.
 
     Reuses the reviewed :class:`ProspectiveAttemptReceipt` schema (an M3E runner is
@@ -728,12 +733,14 @@ def write_m3e_runner(
 
 
 @pytest.fixture
-def m3e_write_runner() -> Callable[..., object]:
+def m3e_write_runner() -> Callable[..., ProspectiveAttemptReceipt]:
     """Factory to stage one synthetic M3E update runner (raws + plan + receipt)."""
     return write_m3e_runner
 
 
-def stage_m3e_proposal(proposal_dir: Path, *, repo_root: Path, as_of: str = "2026-07-22T02:17:00Z"):
+def stage_m3e_proposal(
+    proposal_dir: Path, *, repo_root: Path, as_of: str = "2026-07-22T02:17:00Z"
+) -> AssembledProposal:
     """Stage a complete synthetic M3E proposal directory (two runners + derived evidence).
 
     Both runners replay the same update plan with distinct runner identities (so they
@@ -773,6 +780,6 @@ def stage_m3e_proposal(proposal_dir: Path, *, repo_root: Path, as_of: str = "202
 
 
 @pytest.fixture
-def m3e_stage_proposal() -> Callable[..., object]:
+def m3e_stage_proposal() -> Callable[..., AssembledProposal]:
     """Factory to stage a complete synthetic M3E proposal directory."""
     return stage_m3e_proposal

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 import eth_research
+from eth_research.m3d.receipt import ProspectiveAttemptReceipt
 from eth_research.m3e.accepted_base import verify_accepted_base
 from eth_research.m3e.acquisition import (
     build_runner_bundles,
@@ -15,20 +17,29 @@ from eth_research.m3e.acquisition import (
     new_window_fingerprint,
 )
 from eth_research.m3e.cutoff import plan_update_window
-from eth_research.m3e.update_plan import build_update_plan
+from eth_research.m3e.update_plan import ProspectiveUpdatePlan, build_update_plan
 from eth_research.m3e.validation import M3EValidationError
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 _AS_OF = "2026-07-22T02:17:00Z"
 
+_Mutate = Callable[[int, list[list[float | int]]], list[list[float | int]]]
+
 
 @pytest.fixture
-def plan():
+def plan() -> ProspectiveUpdatePlan:
     base = verify_accepted_base(REPO_ROOT)
     return build_update_plan(base, plan_update_window(base, _AS_OF))
 
 
-def _runner(m3e_write_runner, tmp_path, plan, name, *, mutate=None):
+def _runner(
+    m3e_write_runner: Callable[..., ProspectiveAttemptReceipt],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+    name: str,
+    *,
+    mutate: _Mutate | None = None,
+) -> tuple[Path, ProspectiveAttemptReceipt]:
     raw_dir = tmp_path / name
     receipt = m3e_write_runner(
         raw_dir,
@@ -42,7 +53,11 @@ def _runner(m3e_write_runner, tmp_path, plan, name, *, mutate=None):
     return raw_dir, receipt
 
 
-def test_a_runner_produces_the_seven_new_completed_days(m3e_write_runner, tmp_path, plan) -> None:
+def test_a_runner_produces_the_seven_new_completed_days(
+    m3e_write_runner: Callable[..., ProspectiveAttemptReceipt],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+) -> None:
     raw_dir, receipt = _runner(m3e_write_runner, tmp_path, plan, "a")
     bundles = build_runner_bundles(raw_dir=raw_dir, update_plan=plan, receipt=receipt)
     rows = new_window_canonical_rows(bundles)
@@ -51,7 +66,11 @@ def test_a_runner_produces_the_seven_new_completed_days(m3e_write_runner, tmp_pa
     assert rows[-1][0] == "2026-07-21T00:00:00Z"
 
 
-def test_two_independent_runners_agree_byte_for_byte(m3e_write_runner, tmp_path, plan) -> None:
+def test_two_independent_runners_agree_byte_for_byte(
+    m3e_write_runner: Callable[..., ProspectiveAttemptReceipt],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+) -> None:
     dir_a, rec_a = _runner(m3e_write_runner, tmp_path, plan, "a")
     dir_b, rec_b = _runner(m3e_write_runner, tmp_path, plan, "b")
     fp_a = new_window_fingerprint(
@@ -64,9 +83,11 @@ def test_two_independent_runners_agree_byte_for_byte(m3e_write_runner, tmp_path,
 
 
 def test_a_perturbed_runner_yields_a_different_fingerprint(
-    m3e_write_runner, tmp_path, plan
+    m3e_write_runner: Callable[..., ProspectiveAttemptReceipt],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
 ) -> None:
-    def bump_close(_ordinal, rows):
+    def bump_close(_ordinal: int, rows: list[list[float | int]]) -> list[list[float | int]]:
         rows[0][4] = rows[0][4] + 1.0  # nudge one close price
         return rows
 
@@ -81,7 +102,11 @@ def test_a_perturbed_runner_yields_a_different_fingerprint(
     assert fp_a != fp_b
 
 
-def test_a_tampered_raw_byte_breaks_the_receipt_binding(m3e_write_runner, tmp_path, plan) -> None:
+def test_a_tampered_raw_byte_breaks_the_receipt_binding(
+    m3e_write_runner: Callable[..., ProspectiveAttemptReceipt],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+) -> None:
     raw_dir, receipt = _runner(m3e_write_runner, tmp_path, plan, "a")
     # Overwrite the raw file after the receipt is sealed → SHA-256 mismatch.
     target = raw_dir / str(plan.windows[0]["raw_filename"])
@@ -92,8 +117,12 @@ def test_a_tampered_raw_byte_breaks_the_receipt_binding(m3e_write_runner, tmp_pa
         build_runner_bundles(raw_dir=raw_dir, update_plan=plan, receipt=receipt)
 
 
-def test_a_truncated_tail_is_rejected(m3e_write_runner, tmp_path, plan) -> None:
-    def drop_newest(_ordinal, rows):
+def test_a_truncated_tail_is_rejected(
+    m3e_write_runner: Callable[..., ProspectiveAttemptReceipt],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+) -> None:
+    def drop_newest(_ordinal: int, rows: list[list[float | int]]) -> list[list[float | int]]:
         return rows[1:]  # rows are descending; drop the newest completed day
 
     raw_dir, receipt = _runner(m3e_write_runner, tmp_path, plan, "a", mutate=drop_newest)
@@ -101,7 +130,11 @@ def test_a_truncated_tail_is_rejected(m3e_write_runner, tmp_path, plan) -> None:
         build_runner_bundles(raw_dir=raw_dir, update_plan=plan, receipt=receipt)
 
 
-def test_a_receipt_for_a_different_plan_is_rejected(m3e_write_runner, tmp_path, plan) -> None:
+def test_a_receipt_for_a_different_plan_is_rejected(
+    m3e_write_runner: Callable[..., ProspectiveAttemptReceipt],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+) -> None:
     base = verify_accepted_base(REPO_ROOT)
     other = build_update_plan(base, plan_update_window(base, "2026-07-23T02:17:00Z"))
     raw_dir, receipt = _runner(m3e_write_runner, tmp_path, other, "a")
@@ -109,7 +142,11 @@ def test_a_receipt_for_a_different_plan_is_rejected(m3e_write_runner, tmp_path, 
         build_runner_bundles(raw_dir=raw_dir, update_plan=plan, receipt=receipt)
 
 
-def test_a_symlinked_raw_file_is_refused(m3e_write_runner, tmp_path, plan) -> None:
+def test_a_symlinked_raw_file_is_refused(
+    m3e_write_runner: Callable[..., ProspectiveAttemptReceipt],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+) -> None:
     raw_dir, receipt = _runner(m3e_write_runner, tmp_path, plan, "a")
     target = raw_dir / str(plan.windows[0]["raw_filename"])
     real = target.read_bytes()

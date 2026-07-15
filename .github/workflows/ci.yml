@@ -54,6 +54,19 @@ jobs:
           test "$(jq -r '.performance_metrics_computed' "$RUNNER_TEMP/m3d_status.json")" = "false"
           test "$(jq -r '.promotion_decision_exists' "$RUNNER_TEMP/m3d_status.json")" = "false"
           test "$(jq -r '.evaluation_ledger_byte_count' "$RUNNER_TEMP/m3d_status.json")" = "0"
+      - name: M3E review-only honest state (byte-exact replay + status)
+        run: |
+          set -euo pipefail
+          uv run --no-sync python -m eth_research.m3e.replay --repo-root . --deep
+          uv run --no-sync python -m eth_research.m3e.status --repo-root . > "$RUNNER_TEMP/m3e_status.json"
+          jq . "$RUNNER_TEMP/m3e_status.json"
+          test "$(jq -r '.accepted_base.maturity_state' "$RUNNER_TEMP/m3e_status.json")" = "immature"
+          test "$(jq -r '.accepted_base.evaluation_authorized' "$RUNNER_TEMP/m3e_status.json")" = "false"
+          test "$(jq -r '.workflow_posture.active' "$RUNNER_TEMP/m3e_status.json")" = "false"
+          test "$(jq -r '.registry.proposals_recorded' "$RUNNER_TEMP/m3e_status.json")" = "0"
+          test "$(jq -r '.governance_flags.strategy_evaluated' "$RUNNER_TEMP/m3e_status.json")" = "false"
+          test "$(jq -r '.governance_flags.money_moved' "$RUNNER_TEMP/m3e_status.json")" = "false"
+          test "$(jq -r '.ledgers.prospective_evaluation_byte_count' "$RUNNER_TEMP/m3e_status.json")" = "0"
 
   authoritative-runtime:
     # The one runtime the authorized benchmark may run on: CPython 3.12.3 with

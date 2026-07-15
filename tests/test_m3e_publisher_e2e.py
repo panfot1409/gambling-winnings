@@ -10,6 +10,7 @@ and always ends in a draft, human-review-required proposal.
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -34,7 +35,7 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def _stage_runners(m3e_write_runner, clone: Path):
+def _stage_runners(m3e_write_runner: Callable[..., object], clone: Path) -> Path:
     from eth_research.m3e.accepted_base import verify_accepted_base
     from eth_research.m3e.cutoff import plan_update_window
     from eth_research.m3e.update_plan import build_update_plan
@@ -61,7 +62,9 @@ def _stage_runners(m3e_write_runner, clone: Path):
     return proposal_dir
 
 
-def test_end_to_end_proposal_in_a_disposable_repo(m3a_checkout, m3e_write_runner) -> None:
+def test_end_to_end_proposal_in_a_disposable_repo(
+    m3a_checkout: Path, m3e_write_runner: Callable[..., object]
+) -> None:
     clone = m3a_checkout
     proposal_dir = _stage_runners(m3e_write_runner, clone)
 

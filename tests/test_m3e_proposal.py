@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import inspect
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,6 +15,7 @@ from eth_research.m3e.proposal import (
     COMPARISON_NAME,
     PROPOSAL_MANIFEST_DOMAIN,
     PROPOSAL_MANIFEST_NAME,
+    AssembledProposal,
 )
 from eth_research.m3e.validation import M3EValidationError, canonical_json_bytes, domain_sha256
 from eth_research.m3e.verify_m3e_program import verify_update_proposal
@@ -20,14 +23,16 @@ from eth_research.m3e.verify_m3e_program import verify_update_proposal
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 
 
-def _rehash_manifest(doc: dict) -> bytes:
+def _rehash_manifest(doc: dict[str, Any]) -> bytes:
     body = {k: v for k, v in doc.items() if k != "manifest_sha256"}
     doc = dict(doc)
     doc["manifest_sha256"] = domain_sha256(PROPOSAL_MANIFEST_DOMAIN, body)
     return canonical_json_bytes(doc)
 
 
-def test_a_clean_proposal_passes_all_35_checks(m3e_stage_proposal, tmp_path) -> None:
+def test_a_clean_proposal_passes_all_35_checks(
+    m3e_stage_proposal: Callable[..., AssembledProposal], tmp_path: Path
+) -> None:
     m3e_stage_proposal(tmp_path / "prop", repo_root=REPO_ROOT)
     checks = verify_update_proposal(REPO_ROOT, tmp_path / "prop")
     names = [name for name, _ in checks]
@@ -42,13 +47,17 @@ def test_verifier_has_no_skip_parameter() -> None:
     assert params == ["repo_root", "proposal_dir"]
 
 
-def test_assembled_branch_is_a_bot_proposal_branch(m3e_stage_proposal, tmp_path) -> None:
+def test_assembled_branch_is_a_bot_proposal_branch(
+    m3e_stage_proposal: Callable[..., AssembledProposal], tmp_path: Path
+) -> None:
     assembled = m3e_stage_proposal(tmp_path / "prop", repo_root=REPO_ROOT)
     assert assembled.proposal_branch.startswith("bot/m3e-prospective-update/")
     assert assembled.transition.proposed_row_count == 10
 
 
-def test_a_tampered_comparison_file_is_caught(m3e_stage_proposal, tmp_path) -> None:
+def test_a_tampered_comparison_file_is_caught(
+    m3e_stage_proposal: Callable[..., AssembledProposal], tmp_path: Path
+) -> None:
     m3e_stage_proposal(tmp_path / "prop", repo_root=REPO_ROOT)
     comp = tmp_path / "prop" / COMPARISON_NAME
     doc = json.loads(comp.read_text())
@@ -58,7 +67,9 @@ def test_a_tampered_comparison_file_is_caught(m3e_stage_proposal, tmp_path) -> N
         verify_update_proposal(REPO_ROOT, tmp_path / "prop")
 
 
-def test_a_set_governance_flag_is_rejected(m3e_stage_proposal, tmp_path) -> None:
+def test_a_set_governance_flag_is_rejected(
+    m3e_stage_proposal: Callable[..., AssembledProposal], tmp_path: Path
+) -> None:
     assembled = m3e_stage_proposal(tmp_path / "prop", repo_root=REPO_ROOT)
     doc = dict(assembled.manifest_document)
     doc["governance_flags"] = {**doc["governance_flags"], "strategy_evaluated": True}
@@ -67,7 +78,9 @@ def test_a_set_governance_flag_is_rejected(m3e_stage_proposal, tmp_path) -> None
         verify_update_proposal(REPO_ROOT, tmp_path / "prop")
 
 
-def test_a_flipped_review_policy_is_rejected(m3e_stage_proposal, tmp_path) -> None:
+def test_a_flipped_review_policy_is_rejected(
+    m3e_stage_proposal: Callable[..., AssembledProposal], tmp_path: Path
+) -> None:
     assembled = m3e_stage_proposal(tmp_path / "prop", repo_root=REPO_ROOT)
     doc = dict(assembled.manifest_document)
     doc["review_policy"] = {**doc["review_policy"], "auto_merge_forbidden": False}
@@ -77,7 +90,7 @@ def test_a_flipped_review_policy_is_rejected(m3e_stage_proposal, tmp_path) -> No
 
 
 def test_a_forbidden_evaluation_artifact_in_the_proposal_is_caught(
-    m3e_stage_proposal, tmp_path
+    m3e_stage_proposal: Callable[..., AssembledProposal], tmp_path: Path
 ) -> None:
     m3e_stage_proposal(tmp_path / "prop", repo_root=REPO_ROOT)
     (tmp_path / "prop" / "candidate_results.json").write_text("{}")
@@ -85,7 +98,9 @@ def test_a_forbidden_evaluation_artifact_in_the_proposal_is_caught(
         verify_update_proposal(REPO_ROOT, tmp_path / "prop")
 
 
-def test_a_forged_manifest_self_hash_is_rejected(m3e_stage_proposal, tmp_path) -> None:
+def test_a_forged_manifest_self_hash_is_rejected(
+    m3e_stage_proposal: Callable[..., AssembledProposal], tmp_path: Path
+) -> None:
     assembled = m3e_stage_proposal(tmp_path / "prop", repo_root=REPO_ROOT)
     doc = dict(assembled.manifest_document)
     doc["idempotency_key"] = "0" * 64  # a lie, without recomputing the self-hash

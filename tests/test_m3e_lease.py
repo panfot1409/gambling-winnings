@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import eth_research
-from eth_research.m3e.accepted_base import verify_accepted_base
+from eth_research.m3e.accepted_base import AcceptedProspectiveBase, verify_accepted_base
 from eth_research.m3e.cutoff import plan_update_window
 from eth_research.m3e.lease import (
     PROPOSAL_BRANCH_PREFIX,
@@ -15,7 +15,7 @@ from eth_research.m3e.lease import (
     assert_publishable_proposal_branch,
     proposal_branch_name,
 )
-from eth_research.m3e.update_plan import build_update_plan
+from eth_research.m3e.update_plan import ProspectiveUpdatePlan, build_update_plan
 from eth_research.m3e.validation import M3EValidationError
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
@@ -23,7 +23,7 @@ _KEY = "a" * 64
 _KEY2 = "b" * 64
 
 
-def _real_plan():
+def _real_plan() -> tuple[AcceptedProspectiveBase, ProspectiveUpdatePlan]:
     base = verify_accepted_base(REPO_ROOT)
     return base, build_update_plan(base, plan_update_window(base, "2026-07-22T02:17:00Z"))
 
@@ -122,13 +122,19 @@ def test_lease_skips_when_an_open_proposal_key_exists() -> None:
 
 def test_lease_id_is_deterministic() -> None:
     _base, plan = _real_plan()
-    kwargs = {
-        "idempotency_key": plan.idempotency_key,
-        "plan_sha256": plan.plan_sha256,
-        "first_missing_open": plan.first_missing_open,
-        "completed_day_exclusive_end": plan.completed_day_exclusive_end,
-    }
-    assert acquire_proposal_lease(**kwargs).lease_id == acquire_proposal_lease(**kwargs).lease_id
+    first = acquire_proposal_lease(
+        idempotency_key=plan.idempotency_key,
+        plan_sha256=plan.plan_sha256,
+        first_missing_open=plan.first_missing_open,
+        completed_day_exclusive_end=plan.completed_day_exclusive_end,
+    )
+    second = acquire_proposal_lease(
+        idempotency_key=plan.idempotency_key,
+        plan_sha256=plan.plan_sha256,
+        first_missing_open=plan.first_missing_open,
+        completed_day_exclusive_end=plan.completed_day_exclusive_end,
+    )
+    assert first.lease_id == second.lease_id
 
 
 def test_a_non_hex_idempotency_key_is_rejected() -> None:

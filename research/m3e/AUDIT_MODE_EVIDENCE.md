@@ -31,14 +31,21 @@ at `2026-07-16T00:00:00Z`. The live run therefore:
   is not before the completed-day cutoff 2026-07-15T00:00:00Z
   ```
 
-  It set `due=false` and **skipped** "Upload the update plan".
-- **`runner` job — skipped** (two-runner acquisition not reached: nothing to fetch).
-- **`assemble` job — skipped** (no proposal assembled).
+  It determined `due=false`.
 
-No Coinbase request was made, no proposal was assembled, **no branch was created, no
-pull request was opened, nothing was pushed**. The facility ran end-to-end and
-correctly proposed nothing — exactly the safe behaviour required when no update is
+No exchange request was made, no proposal was assembled, **no branch was created, no
+pull request was opened, nothing was pushed or uploaded**. The workflow ran end-to-end
+and correctly proposed nothing — exactly the safe behaviour required when no update is
 due, and the literal meaning of *READY, NOT ACTIVE*.
+
+> Note on the final workflow shape: the run above exercised the base-verification and
+> completed-day-cutoff logic — the `plan`/probe step — and correctly no-opped. The
+> standing `m3e-prospective-update.yml` at the final HEAD is a strictly **read-only
+> update-due probe** that runs exactly that logic (no fetch, no artifact upload, no
+> push, no PR), consistent with this repository's accepted no-artifact-upload security
+> invariant. The full acquisition → two-runner-attestation → assemble → draft-PR
+> automation is the offline `eth_research.m3e` machinery, proven end-to-end by the
+> disposable-repo rehearsal, and is activated only by a separate human-reviewed step.
 
 ## Positive path (proven offline, not against real market data)
 

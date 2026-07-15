@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 import eth_research
+from eth_research._atomic import write_atomic
 from eth_research.m3e.accepted_base import verify_accepted_base
 from eth_research.m3e.assembly import assemble_update_proposal
 from eth_research.m3e.cutoff import plan_update_window
@@ -22,7 +24,7 @@ from eth_research.m3e.verify_m3e_program import verify_update_proposal
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 
 
-def _stage_runners(m3e_write_runner, proposal_dir: Path) -> None:
+def _stage_runners(m3e_write_runner: Callable[..., object], proposal_dir: Path) -> None:
     base = verify_accepted_base(REPO_ROOT)
     plan = build_update_plan(base, plan_update_window(base, "2026-07-22T02:17:00Z"))
     m3e_write_runner(
@@ -43,7 +45,9 @@ def _stage_runners(m3e_write_runner, proposal_dir: Path) -> None:
     )
 
 
-def test_assemble_writes_and_self_verifies(m3e_write_runner, tmp_path) -> None:
+def test_assemble_writes_and_self_verifies(
+    m3e_write_runner: Callable[..., object], tmp_path: Path
+) -> None:
     prop = tmp_path / "prop"
     _stage_runners(m3e_write_runner, prop)
     assembled, digests = assemble_update_proposal(REPO_ROOT, prop)
@@ -56,7 +60,7 @@ def test_assemble_writes_and_self_verifies(m3e_write_runner, tmp_path) -> None:
     assert assembled.proposal_branch.startswith("bot/m3e-prospective-update/")
 
 
-def test_assembly_is_idempotent(m3e_write_runner, tmp_path) -> None:
+def test_assembly_is_idempotent(m3e_write_runner: Callable[..., object], tmp_path: Path) -> None:
     prop = tmp_path / "prop"
     _stage_runners(m3e_write_runner, prop)
     assemble_update_proposal(REPO_ROOT, prop)
@@ -72,7 +76,9 @@ def test_assembly_is_idempotent(m3e_write_runner, tmp_path) -> None:
     assert first == second
 
 
-def test_a_malformed_target_fails_closed(m3e_write_runner, tmp_path) -> None:
+def test_a_malformed_target_fails_closed(
+    m3e_write_runner: Callable[..., object], tmp_path: Path
+) -> None:
     prop = tmp_path / "prop"
     _stage_runners(m3e_write_runner, prop)
     # A non-regular-file where an evidence file must go is refused before any write.
@@ -84,18 +90,19 @@ def test_a_malformed_target_fails_closed(m3e_write_runner, tmp_path) -> None:
 
 
 def test_an_injected_write_failure_rolls_back_the_batch(
-    monkeypatch, m3e_write_runner, tmp_path
+    monkeypatch: pytest.MonkeyPatch,
+    m3e_write_runner: Callable[..., object],
+    tmp_path: Path,
 ) -> None:
     import eth_research.m3d.publication as pub
 
     prop = tmp_path / "prop"
     _stage_runners(m3e_write_runner, prop)
-    real_write = pub.write_atomic
 
-    def flaky(path, data):
+    def flaky(path: Path, data: bytes) -> None:
         if Path(path).name == PROPOSAL_MANIFEST_NAME:
             raise OSError("injected write failure on the final blob")
-        return real_write(path, data)
+        write_atomic(path, data)
 
     monkeypatch.setattr(pub, "write_atomic", flaky)
     with pytest.raises(M3EValidationError):

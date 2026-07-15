@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -17,7 +18,7 @@ from eth_research.m3e.acquire_runner import (
 )
 from eth_research.m3e.cutoff import plan_update_window
 from eth_research.m3e.runner_boundary import load_and_verify_runner
-from eth_research.m3e.update_plan import build_update_plan
+from eth_research.m3e.update_plan import ProspectiveUpdatePlan, build_update_plan
 from eth_research.m3e.validation import M3EValidationError, sha256_bytes
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
@@ -25,7 +26,7 @@ _AS_OF = "2026-07-22T02:17:00Z"
 
 
 @pytest.fixture
-def plan():
+def plan() -> ProspectiveUpdatePlan:
     base = verify_accepted_base(REPO_ROOT)
     return build_update_plan(base, plan_update_window(base, _AS_OF))
 
@@ -44,7 +45,7 @@ def _descending(window_start: str, window_end: str) -> list[list[float | int]]:
     return rows
 
 
-def _stage_with_sidecar(staging: Path, plan) -> None:
+def _stage_with_sidecar(staging: Path, plan: ProspectiveUpdatePlan) -> None:
     staging.mkdir(parents=True, exist_ok=True)
     (staging / "update_plan.json").write_bytes(plan.to_json_bytes())
     lines = []
@@ -69,7 +70,9 @@ def _stage_with_sidecar(staging: Path, plan) -> None:
 # --------------------------------------------------------------------------- #
 # workflow-artifact boundary                                                  #
 # --------------------------------------------------------------------------- #
-def test_boundary_re_derives_a_runner_artifact(m3e_write_runner, tmp_path, plan) -> None:
+def test_boundary_re_derives_a_runner_artifact(
+    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
     raw_dir = tmp_path / "runner_a"
     m3e_write_runner(
         raw_dir,
@@ -87,7 +90,9 @@ def test_boundary_re_derives_a_runner_artifact(m3e_write_runner, tmp_path, plan)
     assert runner.identity_tuple() == ("a" * 40, "run-a", "ubuntu-x64-a")
 
 
-def test_boundary_pins_both_runners_to_the_same_plan(m3e_write_runner, tmp_path, plan) -> None:
+def test_boundary_pins_both_runners_to_the_same_plan(
+    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
     raw_dir = tmp_path / "runner_a"
     m3e_write_runner(
         raw_dir,
@@ -106,7 +111,7 @@ def test_boundary_pins_both_runners_to_the_same_plan(m3e_write_runner, tmp_path,
 # --------------------------------------------------------------------------- #
 # offline runner CLI                                                          #
 # --------------------------------------------------------------------------- #
-def test_emit_curl_plan_lists_the_windows(tmp_path, plan) -> None:
+def test_emit_curl_plan_lists_the_windows(tmp_path: Path, plan: ProspectiveUpdatePlan) -> None:
     (tmp_path / "update_plan.json").write_bytes(plan.to_json_bytes())
     out = tmp_path / "curl_plan.json"
     emit_curl_plan(tmp_path / "update_plan.json", out)
@@ -117,7 +122,9 @@ def test_emit_curl_plan_lists_the_windows(tmp_path, plan) -> None:
     assert "://" not in json.dumps(doc["windows"])
 
 
-def test_offline_verify_writes_a_matching_receipt(tmp_path, plan) -> None:
+def test_offline_verify_writes_a_matching_receipt(
+    tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
     staging = tmp_path / "staging"
     _stage_with_sidecar(staging, plan)
     receipt = verify_responses_and_write_receipt(
@@ -137,7 +144,9 @@ def test_offline_verify_writes_a_matching_receipt(tmp_path, plan) -> None:
     assert runner.row_count == 7
 
 
-def test_offline_verify_rejects_an_unexpected_staged_file(tmp_path, plan) -> None:
+def test_offline_verify_rejects_an_unexpected_staged_file(
+    tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
     staging = tmp_path / "staging"
     _stage_with_sidecar(staging, plan)
     (staging / "stowaway.json").write_text("[]")
@@ -155,7 +164,9 @@ def test_offline_verify_rejects_an_unexpected_staged_file(tmp_path, plan) -> Non
         )
 
 
-def test_offline_verify_rejects_a_non_200_sidecar(tmp_path, plan) -> None:
+def test_offline_verify_rejects_a_non_200_sidecar(
+    tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
     staging = tmp_path / "staging"
     _stage_with_sidecar(staging, plan)
     # Rewrite the sidecar with a 500 for the first window.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -10,21 +11,31 @@ import eth_research
 from eth_research.m3e.accepted_base import verify_accepted_base
 from eth_research.m3e.comparison import compare_runners
 from eth_research.m3e.cutoff import plan_update_window
-from eth_research.m3e.runner_boundary import load_and_verify_runner
-from eth_research.m3e.update_plan import build_update_plan
+from eth_research.m3e.runner_boundary import VerifiedRunner, load_and_verify_runner
+from eth_research.m3e.update_plan import ProspectiveUpdatePlan, build_update_plan
 from eth_research.m3e.validation import M3EValidationError
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 _AS_OF = "2026-07-22T02:17:00Z"
 
+_Mutate = Callable[[int, list[list[float | int]]], list[list[float | int]]]
+
 
 @pytest.fixture
-def plan():
+def plan() -> ProspectiveUpdatePlan:
     base = verify_accepted_base(REPO_ROOT)
     return build_update_plan(base, plan_update_window(base, _AS_OF))
 
 
-def _runner(m3e_write_runner, tmp_path, plan, label, *, mutate=None, runner_identity=None):
+def _runner(
+    m3e_write_runner: Callable[..., object],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+    label: str,
+    *,
+    mutate: _Mutate | None = None,
+    runner_identity: str | None = None,
+) -> VerifiedRunner:
     raw_dir = tmp_path / f"runner_{label}"
     m3e_write_runner(
         raw_dir,
@@ -40,7 +51,9 @@ def _runner(m3e_write_runner, tmp_path, plan, label, *, mutate=None, runner_iden
     )
 
 
-def test_two_isolated_runners_agree(m3e_write_runner, tmp_path, plan) -> None:
+def test_two_isolated_runners_agree(
+    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
     a = _runner(m3e_write_runner, tmp_path, plan, "a")
     b = _runner(m3e_write_runner, tmp_path, plan, "b")
     result = compare_runners(a, b)
@@ -51,8 +64,10 @@ def test_two_isolated_runners_agree(m3e_write_runner, tmp_path, plan) -> None:
     assert result.first_open == "2026-07-15T00:00:00Z"
 
 
-def test_disagreeing_runners_hard_stop(m3e_write_runner, tmp_path, plan) -> None:
-    def bump(_ordinal, rows):
+def test_disagreeing_runners_hard_stop(
+    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
+    def bump(_ordinal: int, rows: list[list[float | int]]) -> list[list[float | int]]:
         rows[0][4] = rows[0][4] + 1.0
         return rows
 
@@ -62,7 +77,9 @@ def test_disagreeing_runners_hard_stop(m3e_write_runner, tmp_path, plan) -> None
         compare_runners(a, b)
 
 
-def test_runners_on_different_plans_hard_stop(m3e_write_runner, tmp_path, plan) -> None:
+def test_runners_on_different_plans_hard_stop(
+    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
     base = verify_accepted_base(REPO_ROOT)
     other = build_update_plan(base, plan_update_window(base, "2026-07-23T02:17:00Z"))
     a = _runner(m3e_write_runner, tmp_path, plan, "a")
@@ -81,7 +98,9 @@ def test_runners_on_different_plans_hard_stop(m3e_write_runner, tmp_path, plan) 
         compare_runners(a, b)
 
 
-def test_non_isolated_runners_hard_stop(m3e_write_runner, tmp_path, plan) -> None:
+def test_non_isolated_runners_hard_stop(
+    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
     # Same runner identity on both sides → not two isolated runners.
     a = _runner(m3e_write_runner, tmp_path, plan, "a", runner_identity="ubuntu-x64-same")
     b = _runner(m3e_write_runner, tmp_path, plan, "b", runner_identity="ubuntu-x64-same")
@@ -89,7 +108,9 @@ def test_non_isolated_runners_hard_stop(m3e_write_runner, tmp_path, plan) -> Non
         compare_runners(a, b)
 
 
-def test_comparison_hash_is_deterministic(m3e_write_runner, tmp_path, plan) -> None:
+def test_comparison_hash_is_deterministic(
+    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
     a = _runner(m3e_write_runner, tmp_path, plan, "a")
     b = _runner(m3e_write_runner, tmp_path, plan, "b")
     assert compare_runners(a, b).comparison_sha256 == compare_runners(a, b).comparison_sha256
