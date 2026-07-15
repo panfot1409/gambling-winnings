@@ -126,6 +126,33 @@ def test_plan_window_never_exceeds_bucket_cap() -> None:
     assert all(w["expected_bucket_count"] <= MAX_BUCKETS_PER_REQUEST for w in _plan().windows)
 
 
+def test_plan_request_end_param_is_last_completed_bucket_open() -> None:
+    """Coinbase start/end are INCLUSIVE bucket opens, so the request end_param must
+    be window_end - 1 day (the last completed bucket), never window_end itself —
+    otherwise the request pulls the still-forming candle at window_end."""
+    plan = _plan()
+    for window in plan.windows:
+        window_end = pd.Timestamp(str(window["window_end"]))
+        assert window["start_param"] == str(window["window_start"])
+        assert pd.Timestamp(str(window["end_param"])) == window_end - pd.Timedelta(days=1)
+    # Genesis specifically: request [2026-07-12, 2026-07-14] inclusive → 3 completed
+    # candles, excluding the forming 2026-07-15 candle at the half-open window end.
+    w0 = plan.windows[0]
+    assert w0["start_param"] == "2026-07-12T00:00:00Z"
+    assert w0["end_param"] == "2026-07-14T00:00:00Z"
+    assert w0["window_end"] == "2026-07-15T00:00:00Z"
+
+
+def test_plan_rejects_end_param_equal_to_window_end() -> None:
+    """Regression: the pre-fix bug set end_param == window_end, which fetched the
+    forming candle. The validator must now reject any such plan."""
+    doc = json.loads(_plan().to_json_bytes())
+    window = doc["windows"][0]
+    window["end_param"] = window["window_end"]  # reintroduce the inclusive-boundary bug
+    with pytest.raises(ValueError, match="end_param must be the canonical request string"):
+        ProspectiveAcquisitionPlan.from_mapping(doc)
+
+
 def test_window_url_is_pinned_host_with_no_secrets() -> None:
     url = window_url("2026-07-12T00:00:00Z", "2026-07-15T00:00:00Z")
     assert url.startswith("https://api.exchange.coinbase.com/products/ETH-USD/candles?")

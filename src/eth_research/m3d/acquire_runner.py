@@ -191,8 +191,11 @@ def verify_responses_and_write_receipt(
         body = body_path.read_bytes()
         if len(body) > MAX_BODY_BYTES:
             raise AcquisitionRunnerError(f"window {ordinal} body exceeds the size cap")
-        window_start = pd.Timestamp(str(window["start_param"]))
-        window_end = pd.Timestamp(str(window["end_param"]))
+        # Parse against the half-open plan window [window_start, window_end); the
+        # inclusive Coinbase request params (start_param/end_param) are provenance,
+        # not the parse bounds (end_param == window_end - 1 day).
+        window_start = pd.Timestamp(str(window["window_start"]))
+        window_end = pd.Timestamp(str(window["window_end"]))
         try:
             parsed = parse_candles_chunk(body, window_start=window_start, window_end=window_end)
         except AcquisitionError as exc:

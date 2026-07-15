@@ -118,10 +118,19 @@ class ProspectiveAcquisitionWindow:
             raise M3DValidationError("expected_bucket_count must equal the window's day span")
         if buckets > MAX_BUCKETS_PER_REQUEST:
             raise M3DValidationError(f"window exceeds {MAX_BUCKETS_PER_REQUEST} buckets")
+        # Coinbase start/end query params are INCLUSIVE bucket opens, so the
+        # request covers [start_param, end_param] inclusive while the plan window
+        # is the half-open [window_start, window_end). The last bucket in the
+        # half-open window opens at window_end - 1 day, so end_param must be that
+        # open (never window_end itself, which would pull the forming candle).
         if require_str("start_param", mapping["start_param"]) != canonical_utc_request(start):
-            raise M3DValidationError("start_param is not the canonical UTC request string")
-        if require_str("end_param", mapping["end_param"]) != canonical_utc_request(end):
-            raise M3DValidationError("end_param is not the canonical UTC request string")
+            raise M3DValidationError(
+                "start_param must be the canonical request string for window_start"
+            )
+        if require_str("end_param", mapping["end_param"]) != canonical_utc_request(end - _DAY):
+            raise M3DValidationError(
+                "end_param must be the canonical request string for window_end - 1 day"
+            )
         return cls(
             ordinal=require_nonnegative_int("ordinal", mapping["ordinal"]),
             window_start=require_str("window_start", mapping["window_start"]),
@@ -319,7 +328,7 @@ def build_prospective_acquisition_plan(
                 window_start=canonical_utc_request(cursor),
                 window_end=canonical_utc_request(window_end),
                 start_param=canonical_utc_request(cursor),
-                end_param=canonical_utc_request(window_end),
+                end_param=canonical_utc_request(window_end - _DAY),
                 expected_bucket_count=span_days,
                 raw_filename=require_safe_json_filename("raw_filename", filename),
             )
