@@ -630,3 +630,99 @@ def _build_m3d_staged_cohort(
 def m3d_staged_cohort() -> Callable[..., Path]:
     """Factory for a synthetic committed repo carrying a staged M3D genesis cohort."""
     return _build_m3d_staged_cohort
+
+
+# --- Synthetic M3E prospective update runner ---------------------------------
+
+# A default synthetic ETH-USD price/volume series is a deterministic function of a
+# candle's UTC open day-number, so two independent runners generating the same
+# window produce byte-identical raw bodies (the canonical-equality happy path); a
+# ``mutate`` hook lets a test perturb one runner to exercise the mismatch path.
+
+
+def _m3e_descending_candles(window_start: str, window_end: str) -> list[list[float | int]]:
+    """Coinbase-order [time, low, high, open, close, volume] rows, newest-first.
+
+    Covers the half-open [window_start, window_end): opens run from
+    ``window_end - 1 day`` down to ``window_start`` (the descending order Coinbase
+    returns and the strict adapter reverses). All values are finite and satisfy the
+    OHLC bracket the adapter enforces.
+    """
+    day = pd.Timedelta(days=1)
+    start = pd.Timestamp(window_start)
+    cursor = pd.Timestamp(window_end) - day
+    rows: list[list[float | int]] = []
+    while cursor >= start:
+        n = int(cursor.timestamp()) // 86_400
+        open_ = 1700.0 + float(n % 37)
+        close = open_ + float((n % 7) - 3)
+        high = max(open_, close) + 2.0
+        low = min(open_, close) - 2.0
+        volume = 40_000.0 + float(n % 100)
+        rows.append([int(cursor.timestamp()), low, high, open_, close, volume])
+        cursor = cursor - day
+    return rows
+
+
+def write_m3e_runner(
+    raw_dir: Path,
+    update_plan: object,
+    *,
+    attempt_id: str,
+    source_commit: str,
+    workflow_run_id: str,
+    runner_identity: str,
+    client_identity: str = "synthetic offline runner (no networking)",
+    mutate: Callable[[int, list[list[float | int]]], list[list[float | int]]] | None = None,
+):
+    """Write one runner's synthetic raw bodies + a validated M3D-schema receipt.
+
+    Reuses the reviewed :class:`ProspectiveAttemptReceipt` schema (an M3E runner is
+    just a prospective attempt over the update window). Returns the parsed receipt.
+    """
+    from eth_research.m3d.receipt import ProspectiveAttemptReceipt
+
+    raw_dir = Path(raw_dir)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    responses: list[dict[str, object]] = []
+    for window in update_plan.windows:  # type: ignore[attr-defined]
+        rows = _m3e_descending_candles(str(window["window_start"]), str(window["window_end"]))
+        if mutate is not None:
+            rows = mutate(int(window["ordinal"]), rows)
+        raw = json.dumps(rows).encode("ascii")
+        (raw_dir / str(window["raw_filename"])).write_bytes(raw)
+        responses.append(
+            {
+                "ordinal": int(window["ordinal"]),
+                "raw_filename": str(window["raw_filename"]),
+                "start_param": str(window["start_param"]),
+                "end_param": str(window["end_param"]),
+                "http_status": 200,
+                "content_type": "application/json",
+                "response_byte_length": len(raw),
+                "response_sha256": sha256_bytes(raw),
+                "retrieved_at": "2026-07-22T02:17:05Z",
+            }
+        )
+    document = {
+        "schema_version": 1,
+        "kind": "prospective_attempt_receipt",
+        "package_version": eth_research.__version__,
+        "attempt_id": attempt_id,
+        "plan_sha256": update_plan.plan_sha256,  # type: ignore[attr-defined]
+        "endpoint": update_plan.document["endpoint"],  # type: ignore[attr-defined]
+        "user_agent": update_plan.document["user_agent"],  # type: ignore[attr-defined]
+        "source_commit": source_commit,
+        "workflow_run_id": workflow_run_id,
+        "runner_identity": runner_identity,
+        "client_identity": client_identity,
+        "created_at_utc": "2026-07-22T02:17:06Z",
+        "responses": responses,
+    }
+    return ProspectiveAttemptReceipt.from_mapping(document)
+
+
+@pytest.fixture
+def m3e_write_runner() -> Callable[..., object]:
+    """Factory to stage one synthetic M3E update runner (raws + receipt)."""
+    return write_m3e_runner
