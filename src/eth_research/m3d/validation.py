@@ -42,9 +42,11 @@ __all__ = [
     "M3DValidationError",
     "StrictJSONError",
     "canonical_json_bytes",
+    "canonical_jsonl_line",
     "canonical_sha256",
     "domain_sha256",
     "epoch_nanoseconds",
+    "jsonl_line_sha256",
     "load_canonical_json",
     "load_canonical_json_bytes",
     "require_aware_timestamp",
@@ -94,6 +96,24 @@ def canonical_json_bytes(payload: Any) -> bytes:
 def canonical_sha256(payload: Any) -> str:
     """Bare lowercase-hex SHA-256 of the canonical serialization of ``payload``."""
     return sha256_bytes(canonical_json_bytes(payload))
+
+
+def canonical_jsonl_line(payload: Any) -> bytes:
+    """Compact canonical JSON for one append-only ledger line (no trailing newline).
+
+    Sorted keys, no whitespace, NaN/Inf-rejecting — the on-the-wire form for a
+    hash-chained JSONL record. The line's SHA-256 (of exactly these bytes) is what
+    the next record commits to via ``previous_line_sha256``.
+    """
+    text = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
+    return text.encode("utf-8")
+
+
+def jsonl_line_sha256(payload: Any) -> str:
+    """Bare lowercase-hex SHA-256 of one compact canonical ledger line."""
+    return sha256_bytes(canonical_jsonl_line(payload))
 
 
 def domain_sha256(domain: str, payload: Any) -> str:
