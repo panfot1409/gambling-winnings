@@ -1,0 +1,45 @@
+{
+  "allowed_operations": [
+    "byte_for_byte_replay",
+    "independent_audit_of_published_claims",
+    "nonfinancial_infrastructure_test",
+    "provenance_verification",
+    "regression_test_expected_output",
+    "schema_verification"
+  ],
+  "bound_hashes": {
+    "data_use_ledger": "0f061a11c832a369f226ea8d3845652ed7c67b7878cfca908db0da54b7ab62e4",
+    "m3a_registry": "14bec91772a70f89c1316f0c6b3b3ec4ccb4c6c82b6f1315ce797e5f15410a0a",
+    "m3b_registry": "204e66d21e41d0ca5af6620fd71af89ce561085a21b59a3e4786238bfa1e3eb9",
+    "m3c_decision": "f1b76101f2bb137036fd7b78c9d7ef2ad7a085b0e605ba0552bff939a9bdbc55",
+    "m3c_registry": "d31ceff78e7901095634a39ee3d2a45ea5d05070fcb92354172f3915916d46eb",
+    "multiplicity_ledger": "29c39c7898fb9d430ed9bce7841fc26f67352d2dbe17decb3b72943b2283890f",
+    "program_snapshot": "b2f8d978a3d9e15d612231beb39db114bef13688c75332f5670873680b39feb4",
+    "specification_catalog": "e7c9cacb181857180c0e6005e596f1b72be7b2df2de9fd86039010d189d69d72"
+  },
+  "classification": "exhausted_for_new_candidate_research",
+  "forbidden_operations": [
+    "change_strategy_from_research_output",
+    "create_m3a_run_004",
+    "create_m3b_run_002",
+    "create_m3c_run_002",
+    "new_bootstrap",
+    "new_candidate_generation",
+    "new_parameter_selection",
+    "new_performance_comparison",
+    "new_statistical_inference",
+    "new_strategy_ranking",
+    "relabel_specification_to_evade",
+    "select_candidate_for_development_gate"
+  ],
+  "kind": "research_train_exhaustion_decision",
+  "m3c_outcome": "rejected_for_development_gate_promotion",
+  "package_version": "0.7.0",
+  "research_train": {
+    "content_fingerprint": "sha256:60aa988e9db786db5723c925abc794463c23ff701791173b745196c7a8b12033",
+    "first_open": "2016-05-23T00:00:00+00:00",
+    "last_open": "2022-06-21T00:00:00+00:00",
+    "row_count": 2221
+  },
+  "schema_version": 1
+}
