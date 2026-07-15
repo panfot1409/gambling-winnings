@@ -1,0 +1,32 @@
+{
+  "attempt_id": "coinbase-eth-usd-prospective-genesis-001",
+  "docs_recheck": {
+    "access_date": "2026-07-15",
+    "accessible": false,
+    "http_status": 403,
+    "source_of_truth": "m2b_verified_adapter_contract"
+  },
+  "documentation_url": "https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles",
+  "endpoint": "https://api.exchange.coinbase.com/products/ETH-USD/candles",
+  "expected_total_buckets": 3,
+  "granularity_seconds": 86400,
+  "kind": "prospective_acquisition_plan",
+  "max_buckets_per_request": 299,
+  "overall_end": "2026-07-15T00:00:00Z",
+  "overall_start": "2026-07-12T00:00:00Z",
+  "package_version": "0.7.0",
+  "plan_sha256": "c5b0ab64cef58b0d982db1de14dc054618b5b3877c3ef9151603d702980350d7",
+  "schema_version": 1,
+  "user_agent": "eth-research-m3d-prospective-acquisition/1 (offline research; public candles)",
+  "windows": [
+    {
+      "end_param": "2026-07-15T00:00:00Z",
+      "expected_bucket_count": 3,
+      "ordinal": 0,
+      "raw_filename": "coinbase-eth-usd-1d_0000_20260712_20260715.json",
+      "start_param": "2026-07-12T00:00:00Z",
+      "window_end": "2026-07-15T00:00:00Z",
+      "window_start": "2026-07-12T00:00:00Z"
+    }
+  ]
+}
