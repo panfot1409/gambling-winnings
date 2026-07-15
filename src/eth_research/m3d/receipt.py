@@ -49,9 +49,7 @@ _RESPONSE_KEYS = {
     "content_type",
     "response_byte_length",
     "response_sha256",
-    "retrieval_started_utc",
-    "retrieval_completed_utc",
-    "attempt_count",
+    "retrieved_at",
 }
 
 
@@ -77,8 +75,6 @@ class ProspectiveResponseReceipt:
         mapping = require_mapping("response_receipt", doc)
         if set(mapping) != _RESPONSE_KEYS:
             raise M3DValidationError(f"response receipt keys must be {sorted(_RESPONSE_KEYS)}")
-        started = _require_utc("retrieval_started_utc", mapping["retrieval_started_utc"])
-        completed = _require_utc("retrieval_completed_utc", mapping["retrieval_completed_utc"])
         document = {
             "ordinal": require_nonnegative_int("ordinal", mapping["ordinal"]),
             "raw_filename": require_safe_json_filename("raw_filename", mapping["raw_filename"]),
@@ -94,9 +90,7 @@ class ProspectiveResponseReceipt:
                 "response_byte_length", mapping["response_byte_length"]
             ),
             "response_sha256": require_sha256_hex("response_sha256", mapping["response_sha256"]),
-            "retrieval_started_utc": started,
-            "retrieval_completed_utc": completed,
-            "attempt_count": require_positive_int("attempt_count", mapping["attempt_count"]),
+            "retrieved_at": _require_utc("retrieved_at", mapping["retrieved_at"]),
         }
         return cls(document=document)
 

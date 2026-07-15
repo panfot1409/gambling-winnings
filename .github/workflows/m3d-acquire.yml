@@ -1,9 +1,12 @@
 # Temporary, one-shot M3D prospective acquisition workflow.
 #
 # This is the ONLY workflow permitted `contents: write` or Coinbase network
-# access, and only for the single `acquire` job. It is retired (deleted) once the
-# primary and independent acquisitions are committed and verified (Milestone 3D
-# section 25); after that no workflow contacts Coinbase or can write to the repo.
+# access, and only for the single `acquire` job. The network boundary is a
+# hardened `curl` step (TLS-only, no cross-host redirect, fail-on-error, bounded
+# body size); the Python runner never opens a socket — it emits the request
+# parameters and then validates the downloaded bodies strictly offline. The
+# workflow is retired (deleted) once the primary and independent acquisitions are
+# committed and verified (Milestone 3D section 25).
 name: M3D Acquire
 
 on:
@@ -22,7 +25,6 @@ permissions:
 
 jobs:
   acquire:
-    # Exact repository + stacked-branch guard: nothing else may run this.
     if: >-
       github.repository == 'panfot1409/gambling-winnings' &&
       github.ref == 'refs/heads/claude/m3d-prospective-evidence-governance'
@@ -44,35 +46,74 @@ jobs:
         run: uv sync --locked --all-extras --python 3.12.3
       - name: Record remote head before acquisition
         run: echo "REMOTE_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-      - name: One-shot acquisition (offline-validated; body hashes only)
+      - name: Emit the offline-computed curl request plan
         env:
           ATTEMPT_ID: ${{ github.event.inputs.attempt_id }}
         run: |
           set -euo pipefail
           RAW_DIR="research/m3d/raw/coinbase/${ATTEMPT_ID}"
-          PLAN="${RAW_DIR}/acquisition_plan.json"
-          test -f "$PLAN"
-          CLIENT="python-urllib/$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
-          uv run --no-sync python -m eth_research.m3d.acquire_runner \
-            --plan "$PLAN" \
-            --raw-dir "$RAW_DIR" \
-            --source-commit "$(git rev-parse HEAD)" \
+          test -f "${RAW_DIR}/acquisition_plan.json"
+          uv run --no-sync python -m eth_research.m3d.acquire_runner emit-plan \
+            --plan "${RAW_DIR}/acquisition_plan.json" \
+            --out "${RAW_DIR}/_curl_plan.json"
+      - name: Fetch each window with hardened curl (TLS, no redirect, size cap)
+        env:
+          ATTEMPT_ID: ${{ github.event.inputs.attempt_id }}
+        run: |
+          set -euo pipefail
+          RAW_DIR="research/m3d/raw/coinbase/${ATTEMPT_ID}"
+          PLAN="${RAW_DIR}/_curl_plan.json"
+          UA="$(jq -r .user_agent "$PLAN")"
+          ENDPOINT="$(jq -r .endpoint "$PLAN")"
+          GRAN="$(jq -r .granularity_seconds "$PLAN")"
+          : > "${RAW_DIR}/_responses.jsonl"
+          COUNT="$(jq '.windows | length' "$PLAN")"
+          for i in $(seq 0 $((COUNT - 1))); do
+            ORD="$(jq -r ".windows[$i].ordinal" "$PLAN")"
+            START="$(jq -r ".windows[$i].start_param" "$PLAN")"
+            END="$(jq -r ".windows[$i].end_param" "$PLAN")"
+            FN="$(jq -r ".windows[$i].filename" "$PLAN")"
+            URL="${ENDPOINT}?start=${START}&end=${END}&granularity=${GRAN}"
+            META="$(curl -sS --proto '=https' --tlsv1.2 --max-redirs 0 --fail \
+              --max-filesize 2097152 -H "User-Agent: ${UA}" \
+              -w '%{http_code}\t%{content_type}' \
+              -o "${RAW_DIR}/${FN}" "$URL")"
+            CODE="$(printf '%s' "$META" | cut -f1)"
+            CT="$(printf '%s' "$META" | cut -f2)"
+            NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf '{"content_type":"%s","filename":"%s","http_code":%s,"ordinal":%s,"retrieved_at":"%s"}\n' \
+              "$CT" "$FN" "$CODE" "$ORD" "$NOW" >> "${RAW_DIR}/_responses.jsonl"
+          done
+      - name: Validate every response offline and write the receipt
+        env:
+          ATTEMPT_ID: ${{ github.event.inputs.attempt_id }}
+        run: |
+          set -euo pipefail
+          RAW_DIR="research/m3d/raw/coinbase/${ATTEMPT_ID}"
+          RAW_CLIENT_BANNER="$(curl --version)"
+          CLIENT_TOKEN="$(printf '%s' "$RAW_CLIENT_BANNER" | head -1 | awk '{print $1"/"$2}')"
+          uv run --no-sync python -m eth_research.m3d.acquire_runner verify \
+            --plan "${RAW_DIR}/acquisition_plan.json" \
+            --staging "${RAW_DIR}" \
+            --receipt-out "${RAW_DIR}/acquisition_receipt.json" \
+            --attempt-id "${ATTEMPT_ID}" \
             --workflow-run-id "${GITHUB_RUN_ID}" \
+            --source-commit "$(git rev-parse HEAD)" \
+            --client-identity "${CLIENT_TOKEN}" \
             --runner-identity "$(uname -srm)" \
-            --client-identity "$CLIENT" \
-            --receipt-out "${RAW_DIR}/acquisition_receipt.json"
+            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Staging-only files are never committed.
+          rm -f "${RAW_DIR}/_curl_plan.json" "${RAW_DIR}/_responses.jsonl"
       - name: Verify bot-commit scope, remote head, and fast-forward push
         env:
           ATTEMPT_ID: ${{ github.event.inputs.attempt_id }}
         run: |
           set -euo pipefail
           RAW_DIR="research/m3d/raw/coinbase/${ATTEMPT_ID}"
-          # Only the allowlisted raw directory may have changed.
           if git status --porcelain | grep -vE "(^|[?M ]) *${RAW_DIR}/" ; then
             echo "refusing: changes outside ${RAW_DIR}"
             exit 1
           fi
-          # Refuse if the remote branch head moved since checkout.
           git fetch origin claude/m3d-prospective-evidence-governance
           REMOTE_NOW="$(git rev-parse origin/claude/m3d-prospective-evidence-governance)"
           if [ "$REMOTE_NOW" != "$REMOTE_HEAD" ]; then
@@ -83,5 +124,4 @@ jobs:
           git config user.email "m3d-acquire-bot@users.noreply.github.com"
           git add "${RAW_DIR}"
           git commit -m "M3D: bot prospective acquisition ${ATTEMPT_ID} (raw bytes + receipt)"
-          # Fast-forward only; never a force push.
           git push origin HEAD:claude/m3d-prospective-evidence-governance

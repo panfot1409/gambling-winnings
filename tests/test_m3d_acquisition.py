@@ -1,7 +1,7 @@
-"""Tests for the M3D acquisition plan, receipt models, and hardened runner.
+"""Tests for the M3D acquisition plan, receipt models, and offline runner.
 
-The runner's network client is injected, so its offline validation path is
-exercised with synthetic Coinbase responses (no network).
+The network boundary is the workflow's curl step; these tests exercise the
+runner's offline validation by staging synthetic bodies + a status sidecar.
 """
 
 from __future__ import annotations
@@ -13,9 +13,10 @@ import pandas as pd
 import pytest
 
 from eth_research.m3d.acquire_runner import (
+    RESPONSES_SIDECAR,
     AcquisitionRunnerError,
-    FetchResult,
-    run_acquisition,
+    emit_curl_plan,
+    verify_responses_and_write_receipt,
     window_url,
 )
 from eth_research.m3d.acquisition_plan import (
@@ -46,7 +47,6 @@ def _epoch(day: str) -> int:
 
 
 def _synthetic_body() -> bytes:
-    # Newest-first [time, low, high, open, close, volume] for 07-14, 07-13, 07-12.
     rows = [
         [_epoch("2026-07-14T00:00:00Z"), 2900.0, 3100.0, 3000.0, 3050.0, 1234.5],
         [_epoch("2026-07-13T00:00:00Z"), 2850.0, 3050.0, 2950.0, 3000.0, 1111.0],
@@ -55,17 +55,56 @@ def _synthetic_body() -> bytes:
     return json.dumps(rows).encode("utf-8")
 
 
-def _fetcher_ok(url: str) -> FetchResult:
-    return FetchResult(
-        status=200,
-        content_type="application/json; charset=utf-8",
-        body=_synthetic_body(),
-        attempt_count=1,
+def _stage(
+    tmp_path: Path,
+    plan: ProspectiveAcquisitionPlan,
+    *,
+    body: bytes | None = None,
+    http_code: int = 200,
+    content_type: str = "application/json; charset=utf-8",
+    extra_file: str | None = None,
+) -> Path:
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "acquisition_plan.json").write_bytes(plan.to_json_bytes())
+    lines = []
+    for window in plan.windows:
+        fn = str(window["raw_filename"])
+        (raw_dir / fn).write_bytes(_synthetic_body() if body is None else body)
+        lines.append(
+            json.dumps(
+                {
+                    "content_type": content_type,
+                    "filename": fn,
+                    "http_code": http_code,
+                    "ordinal": int(window["ordinal"]),
+                    "retrieved_at": "2026-07-15T12:00:00Z",
+                },
+                sort_keys=True,
+            )
+        )
+    (raw_dir / RESPONSES_SIDECAR).write_text("\n".join(lines) + "\n")
+    if extra_file:
+        (raw_dir / extra_file).write_bytes(b"x")
+    return raw_dir
+
+
+def _verify(raw_dir: Path, plan: ProspectiveAcquisitionPlan) -> ProspectiveAttemptReceipt:
+    return verify_responses_and_write_receipt(
+        raw_dir / "acquisition_plan.json",
+        raw_dir,
+        raw_dir / "acquisition_receipt.json",
+        attempt_id=plan.attempt_id,
+        workflow_run_id="123",
+        source_commit="a" * 40,
+        client_identity="curl/8.0",
+        runner_identity="ubuntu-x64",
+        created_at_utc="2026-07-15T12:00:05Z",
     )
 
 
 # --------------------------------------------------------------------------- #
-# plan                                                                         #
+# plan                                                                        #
 # --------------------------------------------------------------------------- #
 def test_plan_tiles_contiguously_and_hashes() -> None:
     plan = _plan()
@@ -84,8 +123,7 @@ def test_plan_rejects_tampered_hash() -> None:
 
 
 def test_plan_window_never_exceeds_bucket_cap() -> None:
-    plan = _plan()
-    assert all(w["expected_bucket_count"] <= MAX_BUCKETS_PER_REQUEST for w in plan.windows)
+    assert all(w["expected_bucket_count"] <= MAX_BUCKETS_PER_REQUEST for w in _plan().windows)
 
 
 def test_window_url_is_pinned_host_with_no_secrets() -> None:
@@ -96,128 +134,80 @@ def test_window_url_is_pinned_host_with_no_secrets() -> None:
     assert "token" not in url.lower()
 
 
-# --------------------------------------------------------------------------- #
-# runner (offline validation with injected fetcher)                           #
-# --------------------------------------------------------------------------- #
-def _write_plan(tmp_path: Path, plan: ProspectiveAcquisitionPlan) -> Path:
-    path = tmp_path / "plan.json"
-    path.write_bytes(plan.to_json_bytes())
-    return path
-
-
-def test_runner_happy_path_writes_raw_and_valid_receipt(tmp_path: Path) -> None:
+def test_emit_curl_plan_writes_request_params(tmp_path: Path) -> None:
     plan = _plan()
-    plan_path = _write_plan(tmp_path, plan)
-    raw_dir = tmp_path / "raw"
-    receipt = run_acquisition(
-        ".",
-        plan_path,
-        raw_dir,
-        source_commit="a" * 40,
-        workflow_run_id="123456",
-        runner_identity="ubuntu-x64",
-        client_identity="python-urllib/3.12",
-        fetcher=_fetcher_ok,
-        clock=lambda: "2026-07-15T12:00:00Z",
-    )
-    assert isinstance(receipt, ProspectiveAttemptReceipt)
+    plan_path = tmp_path / "acquisition_plan.json"
+    plan_path.write_bytes(plan.to_json_bytes())
+    out = tmp_path / "_curl_plan.json"
+    emit_curl_plan(plan_path, out)
+    doc = json.loads(out.read_bytes())
+    assert doc["endpoint"] == "https://api.exchange.coinbase.com/products/ETH-USD/candles"
+    assert doc["granularity_seconds"] == 86400
+    assert len(doc["windows"]) == len(plan.windows)
+    assert "curl" not in json.dumps(doc)  # no free-form command string
+
+
+# --------------------------------------------------------------------------- #
+# offline verification                                                        #
+# --------------------------------------------------------------------------- #
+def test_verify_happy_path_writes_valid_receipt(tmp_path: Path) -> None:
+    plan = _plan()
+    raw_dir = _stage(tmp_path, plan)
+    receipt = _verify(raw_dir, plan)
     assert receipt.attempt_id == GENESIS_ATTEMPT_ID
     assert receipt.plan_sha256 == plan.plan_sha256
-    response = receipt.responses[0]
-    raw_bytes = (raw_dir / response["raw_filename"]).read_bytes()
     from eth_research.m3d.validation import sha256_bytes
 
-    assert response["response_sha256"] == sha256_bytes(raw_bytes)
-    # Re-parse the committed receipt bytes strictly.
+    response = receipt.responses[0]
+    assert response["response_sha256"] == sha256_bytes(
+        (raw_dir / response["raw_filename"]).read_bytes()
+    )
     ProspectiveAttemptReceipt.from_mapping(json.loads(receipt.to_json_bytes()))
 
 
-def test_runner_rejects_non_json_content_type(tmp_path: Path) -> None:
-    def fetch(url: str) -> FetchResult:
-        return FetchResult(
-            status=200, content_type="text/html", body=_synthetic_body(), attempt_count=1
-        )
+def test_verify_rejects_non_200(tmp_path: Path) -> None:
+    plan = _plan()
+    raw_dir = _stage(tmp_path, plan, http_code=204)
+    with pytest.raises(AcquisitionRunnerError, match="not 200"):
+        _verify(raw_dir, plan)
 
+
+def test_verify_rejects_non_json_content_type(tmp_path: Path) -> None:
+    plan = _plan()
+    raw_dir = _stage(tmp_path, plan, content_type="text/html")
     with pytest.raises(AcquisitionRunnerError, match="content-type"):
-        run_acquisition(
-            ".",
-            _write_plan(tmp_path, _plan()),
-            tmp_path / "raw",
-            source_commit="a" * 40,
-            workflow_run_id="1",
-            runner_identity="r",
-            client_identity="c",
-            fetcher=fetch,
-            clock=lambda: "2026-07-15T12:00:00Z",
-        )
+        _verify(raw_dir, plan)
 
 
-def test_runner_rejects_non_200(tmp_path: Path) -> None:
-    def fetch(url: str) -> FetchResult:
-        return FetchResult(status=204, content_type="application/json", body=b"[]", attempt_count=1)
-
-    with pytest.raises(AcquisitionRunnerError, match="HTTP 204"):
-        run_acquisition(
-            ".",
-            _write_plan(tmp_path, _plan()),
-            tmp_path / "raw",
-            source_commit="a" * 40,
-            workflow_run_id="1",
-            runner_identity="r",
-            client_identity="c",
-            fetcher=fetch,
-            clock=lambda: "2026-07-15T12:00:00Z",
-        )
-
-
-def test_runner_rejects_empty_candle_body(tmp_path: Path) -> None:
-    def fetch(url: str) -> FetchResult:
-        return FetchResult(status=200, content_type="application/json", body=b"[]", attempt_count=1)
-
+def test_verify_rejects_empty_candle_body(tmp_path: Path) -> None:
+    plan = _plan()
+    raw_dir = _stage(tmp_path, plan, body=b"[]")
     with pytest.raises(AcquisitionRunnerError, match="no candles"):
-        run_acquisition(
-            ".",
-            _write_plan(tmp_path, _plan()),
-            tmp_path / "raw",
-            source_commit="a" * 40,
-            workflow_run_id="1",
-            runner_identity="r",
-            client_identity="c",
-            fetcher=fetch,
-            clock=lambda: "2026-07-15T12:00:00Z",
-        )
+        _verify(raw_dir, plan)
 
 
-def test_runner_rejects_out_of_window_row(tmp_path: Path) -> None:
-    def fetch(url: str) -> FetchResult:
-        rows = [
-            [_epoch("2026-07-15T00:00:00Z"), 1.0, 2.0, 1.5, 1.8, 1.0]
-        ]  # at window end (forming)
-        return FetchResult(
-            status=200,
-            content_type="application/json",
-            body=json.dumps(rows).encode(),
-            attempt_count=1,
-        )
-
+def test_verify_rejects_out_of_window_row(tmp_path: Path) -> None:
+    plan = _plan()
+    rows = [
+        [_epoch("2026-07-15T00:00:00Z"), 1.0, 2.0, 1.5, 1.8, 1.0]
+    ]  # forming candle at window end
+    raw_dir = _stage(tmp_path, plan, body=json.dumps(rows).encode())
     with pytest.raises(AcquisitionRunnerError):
-        run_acquisition(
-            ".",
-            _write_plan(tmp_path, _plan()),
-            tmp_path / "raw",
-            source_commit="a" * 40,
-            workflow_run_id="1",
-            runner_identity="r",
-            client_identity="c",
-            fetcher=fetch,
-            clock=lambda: "2026-07-15T12:00:00Z",
-        )
+        _verify(raw_dir, plan)
 
 
-def test_hardened_fetch_refuses_non_pinned_url() -> None:
-    from eth_research.m3d.acquire_runner import hardened_urllib_fetch
+def test_verify_rejects_unexpected_staged_file(tmp_path: Path) -> None:
+    plan = _plan()
+    raw_dir = _stage(tmp_path, plan, extra_file="sneaky.json")
+    with pytest.raises(AcquisitionRunnerError, match="unexpected staged files"):
+        _verify(raw_dir, plan)
 
-    with pytest.raises(AcquisitionRunnerError, match="non-pinned URL"):
-        hardened_urllib_fetch("https://evil.example.com/candles")
-    with pytest.raises(AcquisitionRunnerError, match="non-pinned URL"):
-        hardened_urllib_fetch("http://api.exchange.coinbase.com/products/ETH-USD/candles")
+
+def test_verify_rejects_duplicate_sidecar_ordinal(tmp_path: Path) -> None:
+    plan = _plan()
+    raw_dir = _stage(tmp_path, plan)
+    sidecar = raw_dir / RESPONSES_SIDECAR
+    line = sidecar.read_text().splitlines()[0]
+    sidecar.write_text(line + "\n" + line + "\n")
+    with pytest.raises(AcquisitionRunnerError, match="duplicate ordinal"):
+        _verify(raw_dir, plan)
