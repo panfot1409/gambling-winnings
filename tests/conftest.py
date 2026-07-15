@@ -719,10 +719,15 @@ def write_m3e_runner(
         "created_at_utc": "2026-07-22T02:17:06Z",
         "responses": responses,
     }
-    return ProspectiveAttemptReceipt.from_mapping(document)
+    receipt = ProspectiveAttemptReceipt.from_mapping(document)
+    # Write the complete runner artifact directory (plan + receipt + raws) so the
+    # workflow-artifact boundary can re-derive everything from committed bytes.
+    (raw_dir / "update_plan.json").write_bytes(update_plan.to_json_bytes())  # type: ignore[attr-defined]
+    (raw_dir / "acquisition_receipt.json").write_bytes(receipt.to_json_bytes())
+    return receipt
 
 
 @pytest.fixture
 def m3e_write_runner() -> Callable[..., object]:
-    """Factory to stage one synthetic M3E update runner (raws + receipt)."""
+    """Factory to stage one synthetic M3E update runner (raws + plan + receipt)."""
     return write_m3e_runner
