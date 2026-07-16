@@ -21,11 +21,12 @@ from eth_research.m3f.validation import M3FValidationError
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 
-# The three governance checks that never depend on a committed M3F artifact.
+# The checks that never depend on a committed M3F artifact.
 _ALWAYS_AVAILABLE = (
     "01_honest_state_invariants",
     "02_governance_state_legal",
     "03_workflow_supply_chain",
+    "08_semantic_oracles",
 )
 
 

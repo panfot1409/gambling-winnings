@@ -22,6 +22,7 @@ from eth_research.m3f.honest_state import (
     derive_honest_state,
     verify_honest_state,
 )
+from eth_research.m3f.oracle import run_oracles
 from eth_research.m3f.state_machine import verify_state
 from eth_research.m3f.validation import M3FValidationError
 from eth_research.m3f.workflow_inventory import INVENTORY_RELPATH as WF_RELPATH
@@ -115,6 +116,13 @@ def verify_repository_freeze(repo_root: str | Path) -> FreezeResult:
             result._fail("07_workflow_inventory", str(exc))
     else:
         result._fail("07_workflow_inventory", "workflow_inventory.json is not committed")
+
+    # 8. Semantic oracles over the accepted stack (always available).
+    oracle_report = run_oracles(root)
+    if oracle_report.failures:
+        result._fail("08_semantic_oracles", "; ".join(oracle_report.failures[:5]))
+    else:
+        result._ok("08_semantic_oracles")
 
     return result
 
