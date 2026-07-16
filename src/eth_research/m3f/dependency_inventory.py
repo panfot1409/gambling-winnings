@@ -81,6 +81,16 @@ def build_inventory(repo_root: str | Path) -> dict[str, Any]:
             raise M3FValidationError(
                 f"package {pkg['name']} has a non-reproducible source: {pkg['source_kind']}"
             )
+        # B2: a "registry" source is only hash-pinned if it actually carries a wheel or
+        # sdist hash; a registry entry with neither has no verifiable artifact identity.
+        if (
+            pkg["source_kind"] == "registry"
+            and pkg["wheel_entries"] == 0
+            and not pkg["has_sdist_hash"]
+        ):
+            raise M3FValidationError(
+                f"package {pkg['name']} has a registry source with no wheel or sdist hash"
+            )
 
     return {
         "schema_version": 1,

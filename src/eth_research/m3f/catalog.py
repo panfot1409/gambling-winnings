@@ -48,6 +48,47 @@ GOVERNED_ROOT = "research"
 M3F_LAYER_PREFIX = "research/m3f/"
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
+# The accepted stack this catalog freezes: the six frozen M2B-M3E evidence roots. The
+# catalog and its anti-orphan enumeration cover exactly these; every *later* governed
+# layer (the self-verifying ``research/m3f/`` layer, and any subsequent release-candidate
+# root such as ``research/m4a/``) is out of scope here and verified by its own milestone.
+# Scoping positively to the accepted stack — rather than excluding one hard-coded later
+# prefix — keeps this frozen catalog correct on any branch that stacks a new layer on top.
+ACCEPTED_STACK_PREFIXES: tuple[str, ...] = (
+    "research/m2b/",
+    "research/m3a/",
+    "research/m3b/",
+    "research/m3c/",
+    "research/m3d/",
+    "research/m3e/",
+)
+# The exact set of tracked files that constitute the self-verifying M3F layer. The layer
+# is excluded from the catalog (E-vs-R circularity), but its completeness is asserted so
+# no arbitrary uncatalogued file can hide under the governed ``research/m3f/`` root.
+KNOWN_M3F_LAYER_FILES: frozenset[str] = frozenset(
+    {
+        "research/m3f/HONEST_STATE.md",
+        "research/m3f/README.md",
+        "research/m3f/RECOVERY_CAPSULE_NOTICE.md",
+        "research/m3f/dependency_inventory.json",
+        "research/m3f/freeze_catalog.json",
+        "research/m3f/honest_state.json",
+        "research/m3f/recovery_capsule_manifest.json",
+        "research/m3f/recovery_drill.json",
+        "research/m3f/workflow_inventory.json",
+    }
+)
+# The accepted M2B-M3E merge commit on ``main``. Pinned in source (not read from the
+# mutable catalog) so the catalog's ``accepted_main_sha`` cannot be silently repointed to
+# an attacker-chosen commit, and so the accepted evidence can be anchored to immutable
+# history rather than only to the committed (mutable) catalog bytes.
+EXPECTED_ACCEPTED_MAIN_SHA = "7b75a9813d0658d8d30f8337f7a419d1bf7338f7"
+
+
+def _is_accepted_stack(relpath: str) -> bool:
+    return relpath.startswith(ACCEPTED_STACK_PREFIXES)
+
+
 # Milestone ownership by committed path prefix (exact vocabulary).
 _MILESTONE_PREFIXES: tuple[tuple[str, str], ...] = (
     ("research/m2b/", "m2b"),
@@ -174,10 +215,11 @@ def build_catalog(
 
     artifacts: list[dict[str, Any]] = []
     for relpath in _tracked_governed_files(root):
-        # The whole M3F verification layer is excluded (see M3F_LAYER_PREFIX): it is
-        # created at registration and self-verifying, and the catalog is bound by
-        # self-hash rather than as one of its own catalogued artifacts.
-        if relpath.startswith(M3F_LAYER_PREFIX):
+        # Catalogue exactly the accepted M2B-M3E stack. The self-verifying M3F layer and
+        # any later release-candidate layer (e.g. research/m4a/) are excluded: they are
+        # created after the source-freeze commit this catalog binds and are each verified
+        # by their own milestone, so cataloguing them here would be an E-vs-R circularity.
+        if not _is_accepted_stack(relpath):
             continue
         normalize_relpath(relpath, "artifact.path")
         raw = _blob_bytes(root, freeze, relpath)
@@ -296,16 +338,25 @@ def verify_catalog(repo_root: str | Path) -> CatalogResult:
             acc.fail("03_artifact_hash", f"{rel}: sha256 mismatch")
         if len(raw) != require_int(rec.get("byte_length"), "artifact.byte_length"):
             acc.fail("04_artifact_length", f"{rel}: byte_length mismatch")
-        if require_str(rec.get("milestone"), "artifact.milestone") not in MILESTONE_VOCAB:
-            acc.fail("05_milestone_vocab", f"{rel}: bad milestone")
-        if require_str(rec.get("role"), "artifact.role") not in ROLE_VOCAB:
-            acc.fail("06_role_vocab", f"{rel}: bad role")
+        # A5: labels are recomputed from the path, not merely checked for vocab
+        # membership, so a relabelled artifact (e.g. m2b evidence forged as m3f) is caught.
+        try:
+            want_milestone = _milestone_of(rel)
+            want_role = _role_of(rel)
+        except CatalogError as exc:
+            acc.fail("05_milestone_matches_path", f"{rel}: {exc}")
+        else:
+            if require_str(rec.get("milestone"), "artifact.milestone") != want_milestone:
+                acc.fail("05_milestone_matches_path", f"{rel}: milestone not from path")
+            if require_str(rec.get("role"), "artifact.role") != want_role:
+                acc.fail("06_role_matches_path", f"{rel}: role not from path")
     acc.ok("07_all_catalogued_artifacts_hash_correctly", str(len(artifacts)))
 
     # Anti-orphan: every tracked governed file outside the M3F verification layer is
     # catalogued (the M3F layer is excluded per M3F_LAYER_PREFIX; it self-verifies).
     try:
-        tracked = {p for p in _tracked_governed_files(root) if not p.startswith(M3F_LAYER_PREFIX)}
+        all_tracked = _tracked_governed_files(root)
+        tracked = {p for p in all_tracked if _is_accepted_stack(p)}
         orphans = sorted(tracked - catalogued)
         stale = sorted(catalogued - tracked)
         if orphans:
@@ -314,6 +365,17 @@ def verify_catalog(repo_root: str | Path) -> CatalogResult:
             acc.fail("09_no_stale_catalog_entries", f"missing on disk: {stale[:5]}")
         else:
             acc.ok("08_anti_orphan_enumeration", f"{len(tracked)} governed files all catalogued")
+        # A1: the self-verifying M3F layer is excluded from the catalog above, but its
+        # exact file set is pinned so no arbitrary uncatalogued file can hide under the
+        # governed research/m3f/ root (later layers such as research/m4a/ are out of scope).
+        m3f_layer = {p for p in all_tracked if p.startswith(M3F_LAYER_PREFIX)}
+        unexpected = sorted(m3f_layer - set(KNOWN_M3F_LAYER_FILES))
+        if unexpected:
+            acc.fail(
+                "08b_m3f_layer_allowlist", f"unexpected research/m3f/ file(s): {unexpected[:5]}"
+            )
+        else:
+            acc.ok("08b_m3f_layer_allowlist")
     except subprocess.CalledProcessError as exc:
         acc.fail("08_anti_orphan_enumeration", f"git ls-files failed: {exc}")
 
@@ -372,6 +434,55 @@ def _verify_git_provenance(root: Path, catalog: dict[str, Any], acc: _Accum) -> 
             acc.ok("13_source_tree_fingerprint")
     except (subprocess.CalledProcessError, M3FValidationError) as exc:
         acc.fail("13_source_tree_fingerprint", f"cannot recompute source fingerprint: {exc}")
+
+    # A3: anchor the working-tree accepted M2B-M3E evidence to the immutable, *source-pinned*
+    # accepted-main commit — deliberately NOT the mutable catalog ``accepted_main_sha`` field.
+    # A coordinated forgery that rewrites an accepted artifact together with its catalog entry,
+    # the capsule, the drill, *and* the accepted_main_sha field still fails here, because the
+    # working tree must match the pinned accepted-main commit byte-for-byte over the accepted
+    # paths — an anchor rooted in the package source, outside every mutable committed file.
+    # The anchor applies wherever the pinned accepted-main commit is reachable — the real
+    # repository and any full clone/CI checkout, where it is an immutable ancestor that cannot
+    # be made unreachable without a (blocked) history rewrite. In a synthetic or shallow context
+    # that legitimately lacks that lineage there is no "real accepted stack" to anchor, and the
+    # catalog's own accepted_main provenance (checks 12/13) governs reachability instead.
+    reachable = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            f"{EXPECTED_ACCEPTED_MAIN_SHA}^{{commit}}",
+        ],
+        capture_output=True,
+    )
+    if reachable.returncode != 0:
+        acc.ok(
+            "14_accepted_stack_anchored", "pinned accepted-main not present; anchor not applicable"
+        )
+    else:
+        diff = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "diff",
+                "--quiet",
+                EXPECTED_ACCEPTED_MAIN_SHA,
+                "--",
+                *ACCEPTED_STACK_PREFIXES,
+            ],
+            capture_output=True,
+        )
+        if diff.returncode == 0:
+            acc.ok("14_accepted_stack_anchored")
+        else:
+            acc.fail(
+                "14_accepted_stack_anchored",
+                "accepted M2B-M3E evidence differs from the pinned accepted-main commit",
+            )
 
 
 def _verify_expected_state(root: Path, catalog: dict[str, Any], acc: _Accum) -> None:

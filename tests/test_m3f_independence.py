@@ -38,20 +38,6 @@ M3F_PACKAGE_DIR = Path(eth_research.__file__).resolve().parent / "m3f"
 # The complete allowlist of non-m3f eth_research modules the m3f package may import.
 _ALLOWED_ETH_RESEARCH = frozenset({"eth_research._json"})
 
-# No m3f module — directly or transitively — may load the judged strategy/eval logic.
-_FORBIDDEN_SUBSTRINGS = (
-    "backtest",
-    "evaluation",
-    "strateg",
-    "metric",
-    "develop",
-    "experiment",
-    "fractional",
-    "liquidity",
-    "bootstrap",
-    "cost",
-)
-
 
 def _resolve_relative(package: str | None, level: int, module: str | None) -> str:
     """Resolve a relative import (level>0) to an absolute module name."""
@@ -190,15 +176,19 @@ def test_m3f_package_loads_no_strategy_or_third_party_at_runtime() -> None:
     ).stdout
     loaded = out.split()
     third_party = [m for m in loaded if m in {"pandas", "numpy", "pyarrow", "scipy"}]
+    # C1: structural backstop — any loaded eth_research module outside the allowlist
+    # {eth_research, eth_research._json, eth_research.m3f.*} is a breach, independent of any
+    # substring blocklist (so a future eth_research.<name> with no "judged" token is caught).
+    allowed = {"eth_research", "eth_research._json"}
     forbidden = [
         m
         for m in loaded
-        if m.startswith("eth_research.")
+        if m.startswith("eth_research")
+        and m not in allowed
         and not m.startswith("eth_research.m3f")
-        and any(s in m for s in _FORBIDDEN_SUBSTRINGS)
     ]
     assert third_party == [], f"m3f loaded third-party packages: {third_party}"
-    assert forbidden == [], f"m3f loaded judged strategy/eval modules: {forbidden}"
+    assert forbidden == [], f"m3f loaded non-allowlisted eth_research modules: {forbidden}"
 
 
 # --------------------------------------------------------------------------- #

@@ -34,6 +34,7 @@ from eth_research.m3f.validation import (
     require_int,
     require_mapping,
     require_str,
+    safe_repo_path,
     sha256_bytes,
 )
 
@@ -43,6 +44,17 @@ CAPSULE_SCHEMA_VERSION = 1
 CAPSULE_ALGORITHM = "sha256-over-sorted-path-sha256-length-lines-v1"
 GOVERNED_ROOT = "research"
 M3F_LAYER_PREFIX = "research/m3f/"
+# The capsule carries exactly the accepted M2B-M3E stack (the self-verifying M3F layer
+# and any later release-candidate layer such as research/m4a/ are excluded), so it stays
+# byte-stable as new verification layers stack on top.
+ACCEPTED_STACK_PREFIXES = (
+    "research/m2b/",
+    "research/m3a/",
+    "research/m3b/",
+    "research/m3c/",
+    "research/m3d/",
+    "research/m3e/",
+)
 SEALED_LEDGERS = (
     "research/m2b/test_evaluations.jsonl",
     "research/m3a/development_gate_access.jsonl",
@@ -69,7 +81,7 @@ def capsule_files(repo_root: str | Path) -> list[str]:
     """The sorted set of tracked governed files carried by the capsule."""
     root = Path(repo_root)
     out = _git(root, "ls-files", "-z", "--", GOVERNED_ROOT + "/")
-    files = [p for p in out.split("\0") if p and not p.startswith(M3F_LAYER_PREFIX)]
+    files = [p for p in out.split("\0") if p and p.startswith(ACCEPTED_STACK_PREFIXES)]
     return sorted(set(files))
 
 
@@ -84,7 +96,13 @@ def build_manifest(repo_root: str | Path) -> dict[str, Any]:
     files: list[dict[str, Any]] = []
     sealed_present = 0
     for rel in capsule_files(root):
-        raw = (root / rel).read_bytes()
+        # Read through a symlink-and-escape guard so a tracked symlink under research/
+        # cannot smuggle bytes from outside the repo (or crash the manifest with a dangling
+        # target); a bad path fails closed as a CapsuleError, not an uncaught OSError.
+        try:
+            raw = safe_repo_path(root, rel, "capsule file").read_bytes()
+        except (OSError, M3FValidationError) as exc:
+            raise CapsuleError(f"cannot read capsule file {rel}: {exc}") from exc
         digest = sha256_bytes(raw)
         if rel in SEALED_LEDGERS:
             sealed_present += 1

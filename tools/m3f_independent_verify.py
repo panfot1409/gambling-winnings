@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -101,17 +102,35 @@ def _reject_constant(token: str) -> Any:
     raise IndependentVerifyError(f"non-finite JSON constant: {token}")
 
 
+def _checked_float(token: str) -> float:
+    # A2: reject exponent-overflow non-finite numbers (e.g. ``1e999`` -> inf) that the
+    # package verifier rejects, so the two independent code paths reach the same verdict.
+    value = float(token)
+    if not math.isfinite(value):
+        raise IndependentVerifyError(f"non-finite JSON number: {token}")
+    return value
+
+
 def _loads(text: str) -> Any:
     try:
         return json.loads(
-            text, object_pairs_hook=_reject_duplicate_keys, parse_constant=_reject_constant
+            text,
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_constant,
+            parse_float=_checked_float,
         )
     except json.JSONDecodeError as exc:
         raise IndependentVerifyError(f"invalid JSON: {exc}") from exc
 
 
 def _read_bytes(root: Path, relpath: str) -> bytes:
+    # A4: refuse to read through a symlink or any path that escapes the repository root,
+    # mirroring the package's safe_repo_path guard so the independent backstop cannot be
+    # steered to bytes outside the repo.
     path = root / relpath
+    resolved = path.resolve()
+    if path.is_symlink() or not resolved.is_relative_to(root.resolve()):
+        raise IndependentVerifyError(f"{relpath}: unsafe path (symlink or escapes the repository)")
     raw = path.read_bytes()
     if len(raw) > MAX_ARTIFACT_BYTES:
         raise IndependentVerifyError(f"{relpath}: exceeds the parse ceiling")

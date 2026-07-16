@@ -52,8 +52,8 @@ _SHA_PIN = re.compile(r"@[0-9a-f]{40}$")
 # Live market-data hosts — a workflow that fetches any of these violates "all data
 # frozen". Not exhaustive; the residual (arbitrary egress) is noted in the docstring.
 _MARKET_HOST = re.compile(
-    r"\b(?:coinbase\.(?:com|pro)|(?:api|www)\.(?:binance\.com|kraken\.com|coingecko\.com"
-    r"|coinmarketcap\.com|bitfinex\.com|kucoin\.com))\b",
+    r"\b(?:[a-z0-9-]+\.)*(?:coinbase\.(?:com|pro)|binance\.com|kraken\.com|coingecko\.com"
+    r"|coinmarketcap\.com|bitfinex\.com|kucoin\.com)\b",
     re.IGNORECASE,
 )
 # A remote script executed via a pipe (``curl … | sh``) OR process substitution
@@ -63,13 +63,18 @@ _PIPED_INSTALLER = re.compile(
     r"|<\(\s*(?:sudo\s+)?(?:curl|wget)\b",
     re.IGNORECASE,
 )
-_PUSH = re.compile(r"git\s+push\b", re.IGNORECASE)
+# ``git push`` — tolerant of interposed ``-c <key>=<value>`` config tokens (quoted values
+# included), the exact form used to push with an injected credential
+# (``git -c http.extraheader="AUTHORIZATION: bearer <token>" push``).
+_GIT_CONFIG_TOKENS = r"(?:-c\s+[^\s=]+(?:=(?:'[^']*'|\"[^\"]*\"|\S*))?\s+)*"
+_PUSH = re.compile(rf"\bgit\s+{_GIT_CONFIG_TOKENS}push\b", re.IGNORECASE)
 # Any verb that lands, tags, releases, moves a ref, or arms auto-merge — including the
-# REST/GraphQL ref-mutation and auto-merge spellings the CLI forms alone would miss.
+# REST/GraphQL ref-mutation and auto-merge spellings the CLI forms alone would miss, and
+# tolerant of interposed ``git -c`` tokens and ``gh pr`` flags (e.g. ``--repo o/r``).
 _MERGE_VERBS = re.compile(
-    r"gh\s+pr\s+(?:merge|ready|edit)\b"
+    r"gh\s+pr\s+(?:--?[A-Za-z0-9][\w-]*(?:[= ]\S+)?\s+)*(?:merge|ready|edit)\b"
     r"|gh\s+release\s+create\b"
-    r"|git\s+tag\b"
+    rf"|git\s+{_GIT_CONFIG_TOKENS}tag\b"
     r"|pulls/\d+/merge\b"
     r"|git/(?:refs|tags)\b|refs/tags/"
     r"|mergepullrequest\b|markpullrequestreadyforreview\b"
