@@ -69,6 +69,16 @@ CATALOG_RELPATH = "research/m3f/freeze_catalog.json"
 HONEST_STATE_RELPATH = "research/m3f/honest_state.json"
 REJECTED_VERDICT = "rejected_for_development_gate_promotion"
 WORKFLOW_DIR = ".github/workflows"
+# Any of these existing means the repository is registered, so the catalog + honest
+# state must also exist — a deletion of either is a failure, not a skipped check.
+_REGISTRATION_MARKERS = (
+    CATALOG_RELPATH,
+    HONEST_STATE_RELPATH,
+    "research/m3f/dependency_inventory.json",
+    "research/m3f/workflow_inventory.json",
+    "research/m3f/recovery_capsule_manifest.json",
+    "research/m3f/recovery_drill.json",
+)
 
 
 class IndependentVerifyError(Exception):
@@ -260,11 +270,25 @@ def verify(repo_root: str | Path) -> dict[str, Any]:
     report.guard("05_m3e_zero_proposals", check_m3e)
     report.guard("06_workflows_read_only", check_workflows)
 
-    # Post-registration cross-checks (only when the artifacts are committed).
-    if (root / CATALOG_RELPATH).is_file():
-        report.guard("07_freeze_catalog_rehash", lambda: _check_catalog(root, facts))
-    if (root / HONEST_STATE_RELPATH).is_file():
-        report.guard("08_honest_state_crosscheck", lambda: _check_honest_state(root, facts))
+    # If any M3F registration artifact is present, the repo is registered and BOTH the
+    # catalog and honest state must be present — a deletion of either is a failure, not
+    # a silently-skipped cross-check. Pre-registration, nothing is cross-checked.
+    registered = any((root / rel).is_file() for rel in _REGISTRATION_MARKERS)
+
+    def check_catalog() -> None:
+        if not (root / CATALOG_RELPATH).is_file():
+            _require(not registered, "registered repository is missing freeze_catalog.json")
+            return
+        _check_catalog(root, facts)
+
+    def check_honest_state() -> None:
+        if not (root / HONEST_STATE_RELPATH).is_file():
+            _require(not registered, "registered repository is missing honest_state.json")
+            return
+        _check_honest_state(root, facts)
+
+    report.guard("07_freeze_catalog_rehash", check_catalog)
+    report.guard("08_honest_state_crosscheck", check_honest_state)
 
     return _payload(report, facts)
 

@@ -210,6 +210,28 @@ def test_independent_verifier_passes_on_real_repo() -> None:
     assert payload["ok"], payload["failures"]
     assert payload["facts"]["m3c_verdict"] == "rejected_for_development_gate_promotion"
     assert payload["facts"]["m3e_production_proposal_count"] == 0
+
+
+def test_independent_verifier_fails_on_registered_repo_missing_catalog(tmp_path: Path) -> None:
+    # A4: deleting the catalog from an otherwise-registered repo must fail, not be
+    # silently skipped while the tool still reports ok.
+    from eth_research.m3f.catalog import CATALOG_RELPATH
+    from eth_research.m3f.register import write_registration_artifacts
+
+    clone = tmp_path / "clone"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True
+    )
+    freeze = subprocess.run(
+        ["git", "-C", str(clone), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    write_registration_artifacts(clone, source_freeze_sha=freeze, accepted_main_sha=freeze)
+    tool = _load_independent_tool()
+    assert tool.verify(clone)["ok"] is True
+    (clone / CATALOG_RELPATH).unlink()
+    payload = tool.verify(clone)
+    assert payload["ok"] is False
+    assert any("missing freeze_catalog" in f for f in payload["failures"])
     for name in (
         "01_governance_facts_derivable",
         "02_sealed_ledgers_byte_empty",
