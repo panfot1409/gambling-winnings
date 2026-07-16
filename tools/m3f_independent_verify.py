@@ -39,9 +39,19 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
+
+# Write-permission detection mirroring the packaged hardened scanner — kept as an
+# independent copy here (stdlib only) so a multi-space / tab / trailing-comment / flow
+# / anchor grant is caught by the independent verifier too, not just the package.
+_BLOCK_WRITE_RE = re.compile(
+    r"^\s*[A-Za-z_-]+\s*:\s*['\"]?write(?:-all)?['\"]?\s*(?:#.*)?$", re.MULTILINE
+)
+_FLOW_WRITE_RE = re.compile(r"permissions\s*:\s*\{[^}]*\bwrite(?:-all)?\b", re.IGNORECASE)
+_ANCHOR_WRITE_RE = re.compile(r"&[\w-]+\s+['\"]?write(?:-all)?\b", re.IGNORECASE)
 
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 MATURITY_THRESHOLD = 365
@@ -167,14 +177,12 @@ def _workflow_paths(root: Path) -> list[Path]:
 
 
 def _workflow_grants_write(text: str) -> bool:
-    lowered = text.lower()
-    if "write-all" in lowered or "contents: write" in lowered or "contents:write" in lowered:
-        return True
-    # inline permissions mapping, e.g. `permissions: { contents: write }`
-    for line in lowered.splitlines():
-        if "permissions" in line and "{" in line and "write" in line:
-            return True
-    return False
+    return bool(
+        "write-all" in text
+        or _BLOCK_WRITE_RE.search(text)
+        or _FLOW_WRITE_RE.search(text)
+        or _ANCHOR_WRITE_RE.search(text)
+    )
 
 
 # --------------------------------------------------------------------------- #

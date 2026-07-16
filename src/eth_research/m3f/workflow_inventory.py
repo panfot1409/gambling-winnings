@@ -4,10 +4,19 @@ Scans every ``.github/workflows/*.yml`` and ``*.yaml`` and binds path/hash/name/
 triggers/permission facts + whether each can write contents, references secrets,
 contacts a market host, uploads artifacts, is scheduled, or can publish/merge, plus
 every pinned action ``uses:`` target. Fails closed on: any ``contents: write`` /
-``write-all`` (block or flow or comment-decoy), an unpinned (not full-SHA) action ref,
-a piped installer (``curl|sh`` / ``wget|sh``), a market-data host, a plain/force push,
-a tag/release/PR-merge/undraft/retarget verb, or a ``.yaml`` that would escape a
-``.yml``-only scanner. The M3E standing probe may remain scheduled but read-only.
+``write-all`` written as a block scalar (whitespace/tab/trailing-comment tolerant),
+a flow mapping, or a YAML anchor; an unpinned (not full-SHA) action ref; a piped
+installer (``curl|sh`` / ``wget|sh``) *or* a process substitution (``bash <(curl …)``);
+a market-data host; a plain/force push; and a tag/release/PR-merge/undraft/retarget
+or auto-merge verb, including the REST/GraphQL ref-mutation and auto-merge spellings
+(``git/refs``, ``git/tags``, ``enablePullRequestAutoMerge``). The write and verb
+detectors mirror the hardened M3E ``verify_m3e_program`` scanner. The M3E standing
+probe may remain scheduled but read-only.
+
+Residual (documented, not silently ignored): a regex scan cannot fully parse
+arbitrary YAML or resolve a remote reusable workflow, and the market-host list names
+known exchange hosts rather than proving no live egress — both are backstopped by the
+``contents: read`` default token, branch protection, and mandatory human review.
 """
 
 from __future__ import annotations
@@ -25,30 +34,65 @@ from eth_research.m3f.validation import (
 
 INVENTORY_RELPATH = "research/m3f/workflow_inventory.json"
 
+# A write permission as a block scalar — any scope, any surrounding whitespace/tabs,
+# quoted or not, with an optional trailing YAML comment (``contents: write # …``).
+# The ``(?:#.*)?$`` clause and ``\s*`` spacing mirror the hardened M3E scanner so a
+# multi-space / tab / trailing-comment grant cannot slip past.
+_BLOCK_WRITE = re.compile(
+    r"^\s*[A-Za-z_-]+\s*:\s*['\"]?write(?:-all)?['\"]?\s*(?:#.*)?$", re.MULTILINE
+)
+# A write permission as a YAML *flow* mapping — ``permissions: { contents: write }``.
 _FLOW_WRITE = re.compile(r"permissions\s*:\s*\{[^}]*\bwrite(?:-all)?\b", re.IGNORECASE)
-_BLOCK_WRITE = re.compile(r"^\s*[A-Za-z_-]+\s*:\s*['\"]?write(?:-all)?['\"]?\s*$", re.MULTILINE)
+# A YAML anchor bound to a write value (``&w write``), aliased later to dodge the
+# literal ``: write`` match.
+_ANCHOR_WRITE = re.compile(r"&[\w-]+\s+['\"]?write(?:-all)?\b", re.IGNORECASE)
 _REAL_PERMS = re.compile(r"^\s*permissions\s*:", re.MULTILINE)
 _USES = re.compile(r"^\s*-?\s*uses:\s*(\S+)", re.MULTILINE)
 _SHA_PIN = re.compile(r"@[0-9a-f]{40}$")
-_MARKET_HOST = re.compile(r"coinbase\.(?:com|pro)\b", re.IGNORECASE)
-_PIPED_INSTALLER = re.compile(r"(?:curl|wget)\b[^\n|]*\|\s*(?:sudo\s+)?(?:ba)?sh", re.IGNORECASE)
-_PUSH = re.compile(r"git\s+push\b", re.IGNORECASE)
-_MERGE_VERBS = re.compile(
-    r"gh\s+pr\s+(?:merge|ready|edit)\b|gh\s+release\s+create\b|git\s+tag\b|pulls/\d+/merge\b",
+# Live market-data hosts — a workflow that fetches any of these violates "all data
+# frozen". Not exhaustive; the residual (arbitrary egress) is noted in the docstring.
+_MARKET_HOST = re.compile(
+    r"\b(?:coinbase\.(?:com|pro)|(?:api|www)\.(?:binance\.com|kraken\.com|coingecko\.com"
+    r"|coinmarketcap\.com|bitfinex\.com|kucoin\.com))\b",
     re.IGNORECASE,
 )
+# A remote script executed via a pipe (``curl … | sh``) OR process substitution
+# (``bash <(curl …)``) — both run a downloaded script.
+_PIPED_INSTALLER = re.compile(
+    r"(?:curl|wget)\b[^\n|]*\|\s*(?:sudo\s+)?(?:ba)?sh"
+    r"|<\(\s*(?:sudo\s+)?(?:curl|wget)\b",
+    re.IGNORECASE,
+)
+_PUSH = re.compile(r"git\s+push\b", re.IGNORECASE)
+# Any verb that lands, tags, releases, moves a ref, or arms auto-merge — including the
+# REST/GraphQL ref-mutation and auto-merge spellings the CLI forms alone would miss.
+_MERGE_VERBS = re.compile(
+    r"gh\s+pr\s+(?:merge|ready|edit)\b"
+    r"|gh\s+release\s+create\b"
+    r"|git\s+tag\b"
+    r"|pulls/\d+/merge\b"
+    r"|git/(?:refs|tags)\b|refs/tags/"
+    r"|mergepullrequest\b|markpullrequestreadyforreview\b"
+    r"|enablepullrequestautomerge|enable-pull-request-automerge|enable_pr_auto_merge|--auto\b",
+    re.IGNORECASE,
+)
+
+
+def workflow_grants_write(text: str) -> bool:
+    """True if the workflow text grants a ``contents``/``write-all`` permission in any
+    block, flow, or anchored YAML form (whitespace/comment/tab tolerant)."""
+    return bool(
+        "write-all" in text
+        or _FLOW_WRITE.search(text)
+        or _BLOCK_WRITE.search(text)
+        or _ANCHOR_WRITE.search(text)
+    )
 
 
 def _scan_one(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
     name_m = re.search(r"^name:\s*(.+)$", text, re.MULTILINE)
-    can_write = bool(
-        "write-all" in text
-        or "contents: write" in text
-        or "contents:write" in text
-        or _FLOW_WRITE.search(text)
-        or _BLOCK_WRITE.search(text)
-    )
+    can_write = workflow_grants_write(text)
     uses = _USES.findall(text)
     return {
         "path": path.relative_to(path.parents[2]).as_posix(),

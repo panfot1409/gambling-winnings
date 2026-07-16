@@ -17,10 +17,12 @@ from eth_research.m3f.validation import (
     canonical_json_bytes,
     count_created_proposals,
     load_canonical_json,
+    require_bool,
     require_int,
     require_str,
     sha256_bytes,
 )
+from eth_research.m3f.workflow_inventory import workflow_grants_write
 
 HONEST_STATE_RELPATH = "research/m3f/honest_state.json"
 HONEST_STATE_MD_RELPATH = "research/m3f/HONEST_STATE.md"
@@ -57,7 +59,7 @@ def derive_honest_state(repo_root: str | Path) -> dict[str, Any]:
 
     workflows_write = _any_workflow_writes(root)
     rows = require_int(base["row_count"], "m3d_cohort_rows")
-    authorized = bool(base["evaluation_authorized"])
+    authorized = require_bool(base["evaluation_authorized"], "m3d_evaluation_authorized")
 
     state = {
         "schema_version": 1,
@@ -97,18 +99,19 @@ def derive_honest_state(repo_root: str | Path) -> dict[str, Any]:
 
 
 def _any_workflow_writes(root: Path) -> bool:
+    """True if any committed workflow grants write contents (any YAML form).
+
+    Delegates to the hardened, whitespace/comment/anchor-tolerant detector shared with
+    the workflow inventory, so the forever-invariant cannot fail open on a
+    ``contents:   write  # comment`` / tab / anchored grant.
+    """
     wf = root / ".github/workflows"
     if not wf.is_dir():
         return False
-    for path in sorted([*wf.glob("*.yml"), *wf.glob("*.yaml")]):
-        text = path.read_text(encoding="utf-8")
-        if "write-all" in text or "contents: write" in text or "contents:write" in text:
-            return True
-        if "permissions:" in text and "{" in text:
-            for line in text.splitlines():
-                if "permissions" in line and "{" in line and "write" in line:
-                    return True
-    return False
+    return any(
+        workflow_grants_write(path.read_text(encoding="utf-8"))
+        for path in sorted([*wf.glob("*.yml"), *wf.glob("*.yaml")])
+    )
 
 
 def render_honest_state_md(state: dict[str, Any]) -> bytes:
