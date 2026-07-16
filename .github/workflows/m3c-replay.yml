@@ -1,0 +1,117 @@
+name: M3C Replay
+
+# Fresh-clone reproducibility for the Milestone 3C adaptive-research-governance
+# experiment. Dual-state: green both before the one preregistered run (pristine)
+# and after it (completed — the research-train partition is reconstructed offline
+# from the committed raw Coinbase bytes and the 5x3x5 grid is re-run). Under the
+# corrected contract (eth_research.m3c.numerics): every financial/structural field
+# reproduces byte-for-byte; a structurally-exact allowlist of secondary statistical
+# scalars (the fold-seam-aware bootstrap interval, the per-fold paired log-excess,
+# the PSR) may differ only by a bounded number of representable binary64 steps
+# (MAX_REPLAY_ULPS=8) that IEEE-754 does not make cross-machine identical for the
+# log1p/erf transcendentals, and which cannot move the mechanical verdict; the
+# report reproduces byte-for-byte except its results-digest provenance line, which
+# avalanches with the results SHA. No networking. Both sealed access ledgers — the
+# development gate and the final holdout — must stay byte-empty in every state.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "research/m3c/**"
+      - "research/m3a/development_partition.json"
+      - "research/m2b/**"
+      - "src/eth_research/**"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/m3c-replay.yml"
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GATE_LEDGER: research/m3a/development_gate_access.jsonl
+  HOLDOUT_LEDGER: research/m2b/test_evaluations.jsonl
+  EMPTY_SHA: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  CANDIDATE_RESULTS: research/m3c/candidate_results.json
+
+jobs:
+  authoritative-replay:
+    # Reproduce under the exact authoritative numerical runtime (CPython 3.12.3).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Install the authoritative CPython 3.12.3
+        run: uv python install 3.12.3
+      - name: Verify uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: Numerical-contract acceptance tests must run (cannot silently skip)
+        # pytest exits 5 when zero tests are collected, so a deleted/renamed/all-skipped
+        # acceptance suite fails this step instead of passing silently.
+        run: uv run --no-sync --python 3.12.3 python -m pytest tests/test_m3c_numerics.py -q -p no:cacheprovider
+      - name: Both sealed ledgers are byte-empty before
+        run: |
+          set -euo pipefail
+          test "$(sha256sum "$GATE_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
+          test "$(sha256sum "$HOLDOUT_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
+      - name: Dual-state replay (reproduce the candidate run if present)
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.m3c.replay --repo-root . --check
+      - name: Comprehensive run-archive verification (deep, when the run is published)
+        run: |
+          set -euo pipefail
+          if [ -f "$CANDIDATE_RESULTS" ]; then
+            uv run --no-sync --python 3.12.3 python -m eth_research.m3c.verify_archive --repo-root . --deep
+          else
+            echo "pristine tree: no published run to verify"
+          fi
+      - name: No pending completion intent (recovery is a clean no-op)
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.m3c.recovery --repo-root . --status
+      - name: Both sealed ledgers are byte-empty after
+        run: |
+          set -euo pipefail
+          test "$(sha256sum "$GATE_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
+          test "$(sha256sum "$HOLDOUT_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
+
+  compat-replay:
+    # The reduction is interpreter-independent: the decision reproduces byte-for-byte,
+    # the report reproduces modulo its results-digest line, and the results reproduce
+    # financially byte-for-byte / statistically within the bounded-ULP contract on every
+    # supported interpreter (the numerical stack is locked).
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Verify uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
+      - name: Numerical-contract acceptance tests must run (cannot silently skip)
+        run: uv run --no-sync python -m pytest tests/test_m3c_numerics.py -q -p no:cacheprovider
+      - name: Both sealed ledgers are byte-empty before
+        run: |
+          set -euo pipefail
+          test "$(sha256sum "$GATE_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
+          test "$(sha256sum "$HOLDOUT_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
+      - name: Dual-state replay (reproduce the candidate run if present)
+        run: uv run --no-sync python -m eth_research.m3c.replay --repo-root . --check
+      - name: Both sealed ledgers are byte-empty after
+        run: |
+          set -euo pipefail
+          test "$(sha256sum "$GATE_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"
+          test "$(sha256sum "$HOLDOUT_LEDGER" | cut -d' ' -f1)" = "$EMPTY_SHA"

@@ -1,0 +1,16 @@
+{
+  "bundle_sha256": "b81f2a91baafd4368d1d9f83b1ad1097ce08a2fe448fc2ae9dcbd6b0282ec219",
+  "decision_path": "research/m3c/candidate_decision.json",
+  "decision_sha256": "f1b76101f2bb137036fd7b78c9d7ef2ad7a085b0e605ba0552bff939a9bdbc55",
+  "experiment_family": "m3c-dual-horizon-trend-v1",
+  "experiment_id": "m3c-dual-horizon-trend-v1-run-001",
+  "manifest_schema_version": 1,
+  "package_version": "0.6.0",
+  "promotion_status": "rejected_for_development_gate_promotion",
+  "registered_event_sha256": "2002fb899bc9c44759f347973482656f77419b00b584ffbe36676b7d007668aa",
+  "report_path": "research/m3c/candidate_report.md",
+  "report_sha256": "f0e776aecec3d91f3af5288bc54eaf9d4731c72516fd1075ffb8b5ef0d260e54",
+  "results_path": "research/m3c/candidate_results.json",
+  "results_sha256": "4db76efb923bc209e4354afabad897ea084ea2bbafb9e0f11b0a4a49961e00fc",
+  "started_event_sha256": "b2783c2604e12a23623ac206ac3f019eada05ec1bef5fa521f87b47f1ae657bd"
+}

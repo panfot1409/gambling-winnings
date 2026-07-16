@@ -1,0 +1,150 @@
+{
+  "candidate_family_count": 5,
+  "entries": [
+    {
+      "adaptive_relationship": "none; holds nothing",
+      "canonical_fingerprint": "2c303a9883197b647357adaf1c6244bea77809a73c5c64b13480f60465140424",
+      "counts_against_candidate_budget": false,
+      "family_id": "cash",
+      "first_evaluation_commit": "3fa95f78d0e49f0d548244125c1cb028362eeee8",
+      "first_evaluation_milestone": "M3A",
+      "first_experiment_id": "m3a-fixed-baseline-comparison-v1-run-001",
+      "fixed_parameters": {
+        "target": 0.0
+      },
+      "formally_promotion_tested": false,
+      "hypothesis_id": "benchmark.cash",
+      "immutable_result_path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-001/development_results.json",
+      "immutable_result_sha256": "b8616248c72e863210de131f91a7ea90e6810ff20c13440375ed385b3c8ed67a",
+      "kind": "benchmark",
+      "observed_status": "benchmark",
+      "republication_relationship": "re-evaluated verbatim in M3B and M3C as a fixed benchmark"
+    },
+    {
+      "adaptive_relationship": "none; the always-long reference",
+      "canonical_fingerprint": "634c35b06bdde0f72b8670a96864b47367aba3d6a355394f03ba5d62b474aed9",
+      "counts_against_candidate_budget": false,
+      "family_id": "buy_and_hold",
+      "first_evaluation_commit": "3fa95f78d0e49f0d548244125c1cb028362eeee8",
+      "first_evaluation_milestone": "M3A",
+      "first_experiment_id": "m3a-fixed-baseline-comparison-v1-run-001",
+      "fixed_parameters": {
+        "target": 1.0
+      },
+      "formally_promotion_tested": false,
+      "hypothesis_id": "benchmark.buy_and_hold",
+      "immutable_result_path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-001/development_results.json",
+      "immutable_result_sha256": "b8616248c72e863210de131f91a7ea90e6810ff20c13440375ed385b3c8ed67a",
+      "kind": "benchmark",
+      "observed_status": "benchmark",
+      "republication_relationship": "re-evaluated verbatim in M3B and M3C as the comparator"
+    },
+    {
+      "adaptive_relationship": "an early moving-average trend hypothesis",
+      "canonical_fingerprint": "d9be130060bb0efb7f3b344fa87d900693e97e4bc11d271898bff87c775689cf",
+      "counts_against_candidate_budget": true,
+      "family_id": "sma_20_50",
+      "first_evaluation_commit": "3fa95f78d0e49f0d548244125c1cb028362eeee8",
+      "first_evaluation_milestone": "M3A",
+      "first_experiment_id": "m3a-fixed-baseline-comparison-v1-run-001",
+      "fixed_parameters": {
+        "fast_window": 20,
+        "slow_window": 50
+      },
+      "formally_promotion_tested": true,
+      "hypothesis_id": "candidate.sma_20_50",
+      "immutable_result_path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-001/development_results.json",
+      "immutable_result_sha256": "b8616248c72e863210de131f91a7ea90e6810ff20c13440375ed385b3c8ed67a",
+      "kind": "candidate",
+      "observed_status": "observed; primary bootstrap interval straddled zero (no alpha)",
+      "republication_relationship": "corrective M3A run-002/003 republications, not new trials"
+    },
+    {
+      "adaptive_relationship": "a breakout/channel trend hypothesis",
+      "canonical_fingerprint": "2454bb4dfb81abbb967f2498b34fc845de4cb244936ae0932cfa264837ad755d",
+      "counts_against_candidate_budget": true,
+      "family_id": "donchian_55_20",
+      "first_evaluation_commit": "3fa95f78d0e49f0d548244125c1cb028362eeee8",
+      "first_evaluation_milestone": "M3A",
+      "first_experiment_id": "m3a-fixed-baseline-comparison-v1-run-001",
+      "fixed_parameters": {
+        "entry_window": 55,
+        "exit_window": 20
+      },
+      "formally_promotion_tested": true,
+      "hypothesis_id": "candidate.donchian_55_20",
+      "immutable_result_path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-001/development_results.json",
+      "immutable_result_sha256": "b8616248c72e863210de131f91a7ea90e6810ff20c13440375ed385b3c8ed67a",
+      "kind": "candidate",
+      "observed_status": "observed; primary bootstrap interval straddled zero (no alpha)",
+      "republication_relationship": "corrective M3A run-002/003; re-used as M3B/M3C benchmark"
+    },
+    {
+      "adaptive_relationship": "a volatility-managed variant of buy-and-hold",
+      "canonical_fingerprint": "dd2c37886e9c8c2ba6dd29538d8c564d4b90888be08a56560e5bb653a170621a",
+      "counts_against_candidate_budget": true,
+      "family_id": "vol_target_buy_and_hold_30d_50pct",
+      "first_evaluation_commit": "b00aa3babc1ba6ac2fd2a2ba77186708d5074250",
+      "first_evaluation_milestone": "M3B",
+      "first_experiment_id": "m3b-fractional-execution-risk-v1-run-001",
+      "fixed_parameters": {
+        "annual_target": 0.5,
+        "base": "buy_and_hold",
+        "vol_lookback": 30
+      },
+      "formally_promotion_tested": false,
+      "hypothesis_id": "candidate.vol_target_buy_and_hold_30d_50pct",
+      "immutable_result_path": "research/m3b/fractional_results.json",
+      "immutable_result_sha256": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc",
+      "kind": "candidate",
+      "observed_status": "observed (M3B measurement cell); no promotion decision made",
+      "republication_relationship": "single M3B run-001 evaluation; not republished"
+    },
+    {
+      "adaptive_relationship": "vol-managed trend variant motivating the M3C consensus rule",
+      "canonical_fingerprint": "af83636aac66fc26f8f92da0c0e81420e97f992531ea24cf743cb0c795bc0383",
+      "counts_against_candidate_budget": true,
+      "family_id": "vol_target_donchian_55_20_30d_50pct",
+      "first_evaluation_commit": "b00aa3babc1ba6ac2fd2a2ba77186708d5074250",
+      "first_evaluation_milestone": "M3B",
+      "first_experiment_id": "m3b-fractional-execution-risk-v1-run-001",
+      "fixed_parameters": {
+        "annual_target": 0.5,
+        "base": "donchian_55_20",
+        "vol_lookback": 30
+      },
+      "formally_promotion_tested": false,
+      "hypothesis_id": "candidate.vol_target_donchian_55_20_30d_50pct",
+      "immutable_result_path": "research/m3b/fractional_results.json",
+      "immutable_result_sha256": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc",
+      "kind": "candidate",
+      "observed_status": "observed (M3B cell); re-used as an M3C benchmark",
+      "republication_relationship": "single M3B run-001 evaluation; not republished"
+    },
+    {
+      "adaptive_relationship": "ADAPTIVELY MOTIVATED by the earlier SMA/Donchian/vol-target trend evidence above; so M3C results are research-train exploratory evidence, not out-of-sample alpha",
+      "canonical_fingerprint": "d45d3bdf7a3dca7003e8382995e5a350d0c9e61edf47e87e294d151070f4cae6",
+      "counts_against_candidate_budget": true,
+      "family_id": "dual_horizon_trend_63_252_vol_target_30d_50pct",
+      "first_evaluation_commit": "0000000000000000000000000000000000000000",
+      "first_evaluation_milestone": "M3C",
+      "first_experiment_id": "m3c-dual-horizon-trend-v1-run-001",
+      "fixed_parameters": {
+        "annual_target": 0.5,
+        "long_horizon": 252,
+        "medium_horizon": 63,
+        "vol_lookback": 30
+      },
+      "formally_promotion_tested": true,
+      "hypothesis_id": "candidate.dual_horizon_trend_63_252_vol_target_30d_50pct",
+      "immutable_result_path": "research/m3c/candidate_results.json",
+      "immutable_result_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "candidate",
+      "observed_status": "not yet evaluated at lineage-commit time (M3C run-001 evaluates once)",
+      "republication_relationship": "none; first and only evaluation"
+    }
+  ],
+  "lineage_schema_version": 1,
+  "new_candidate_family_id": "dual_horizon_trend_63_252_vol_target_30d_50pct",
+  "new_candidate_fingerprint": "d45d3bdf7a3dca7003e8382995e5a350d0c9e61edf47e87e294d151070f4cae6"
+}
