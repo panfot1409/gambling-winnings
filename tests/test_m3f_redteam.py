@@ -205,9 +205,7 @@ def _register_clone(tmp_path: Path) -> Path:
     from eth_research.m3f.register import write_registration_artifacts
 
     clone = tmp_path / "clone"
-    subprocess.run(
-        ["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True
-    )
+    subprocess.run(["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True)
     subprocess.run(["git", "-C", str(clone), "config", "user.email", "a@b.c"], check=True)
     subprocess.run(["git", "-C", str(clone), "config", "user.name", "T"], check=True)
     freeze = subprocess.run(

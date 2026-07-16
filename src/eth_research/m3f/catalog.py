@@ -1,11 +1,12 @@
 """Repository-wide freeze catalog for Milestone 3F.
 
 ``research/m3f/freeze_catalog.json`` is one deterministic, strictly-verified catalog
-of every committed artifact under the governed ``research/`` root (all accepted
-M2B-M3E evidence plus the M3F verification artifacts), bound to the accepted git
-state. It is an *acceptance aid*: it re-binds facts the per-milestone verifiers own
-(it never invents a competing provenance truth) and adds one anti-orphan enumeration
-so no governed file escapes verification and no catalogued path is missing on disk.
+of every committed artifact under the governed ``research/`` root — the accepted
+M2B-M3E evidence — bound to the accepted git state. The self-verifying M3F layer
+itself is excluded (see ``M3F_LAYER_PREFIX``). It is an *acceptance aid*: it re-binds
+facts the per-milestone verifiers own (it never invents a competing provenance truth)
+and adds one anti-orphan enumeration so no governed file escapes verification and no
+catalogued path is missing on disk.
 
 The generator derives every hash from the committed git blob bytes (never the dirty
 working tree) and refuses to overwrite by default; the verifier re-hashes the working
@@ -304,9 +305,7 @@ def verify_catalog(repo_root: str | Path) -> CatalogResult:
     # Anti-orphan: every tracked governed file outside the M3F verification layer is
     # catalogued (the M3F layer is excluded per M3F_LAYER_PREFIX; it self-verifies).
     try:
-        tracked = {
-            p for p in _tracked_governed_files(root) if not p.startswith(M3F_LAYER_PREFIX)
-        }
+        tracked = {p for p in _tracked_governed_files(root) if not p.startswith(M3F_LAYER_PREFIX)}
         orphans = sorted(tracked - catalogued)
         stale = sorted(catalogued - tracked)
         if orphans:

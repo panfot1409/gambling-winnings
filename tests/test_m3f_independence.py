@@ -219,9 +219,7 @@ def test_independent_verifier_fails_on_registered_repo_missing_catalog(tmp_path:
     from eth_research.m3f.register import write_registration_artifacts
 
     clone = tmp_path / "clone"
-    subprocess.run(
-        ["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True
-    )
+    subprocess.run(["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True)
     freeze = subprocess.run(
         ["git", "-C", str(clone), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
     ).stdout.strip()
