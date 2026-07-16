@@ -116,6 +116,40 @@ def render_manifest_bytes(manifest: dict[str, Any]) -> bytes:
     return canonical_json_bytes(manifest)
 
 
+def render_capsule_notice() -> bytes:
+    """Deterministic prose notice that accompanies the committed capsule manifest."""
+    lines = [
+        "# Recovery capsule notice (Milestone 3F)",
+        "",
+        "The recovery capsule is a private, deterministic reconstruction bundle: the",
+        "minimal set of tracked governed artifacts needed to rebuild and replay the",
+        "accepted M2B-M3E research state without the git history. Its **bytes are never",
+        "committed** as a data publication — only the manifest",
+        "(`recovery_capsule_manifest.json`) that pins every file's path, SHA-256, and",
+        "length together with a single `capsule_digest`. From that manifest the capsule",
+        "rebuilds from the working tree and verifies byte-for-byte, and the",
+        "disposable-clone drill confirms the reconstruction re-derives the honest",
+        "governance state.",
+        "",
+        "## What the capsule excludes",
+        "",
+        "- The M3F verification layer (`research/m3f/`) — it is self-verifying and would",
+        "  introduce a catalog-of-itself circularity.",
+        "- Generated data and reports (`data/`, `reports/`) and workflows (`.github/`).",
+        "",
+        "## What the capsule guarantees it does *not* contain",
+        "",
+        "- Sealed-partition contents: the three access ledgers are byte-empty and the",
+        "  manifest refuses to bundle a non-empty one.",
+        "- Secrets or network credentials of any kind.",
+        "",
+        "The capsule is a break-glass reconstruction aid and tamper-evidence bundle, not",
+        "a cryptographic signature or a remote attestation.",
+        "",
+    ]
+    return ("\n".join(lines)).encode("utf-8")
+
+
 def verify_materialized(manifest: dict[str, Any], root: str | Path) -> list[str]:
     """Re-hash every manifest file under ``root`` and re-derive the capsule digest.
 
@@ -157,6 +191,9 @@ def verify_manifest(repo_root: str | Path) -> None:
     fresh = build_manifest(root)
     if canonical_json_bytes(committed) != canonical_json_bytes(fresh):
         raise CapsuleError("recovery capsule manifest drifted from the working tree")
+    committed_notice = (root / CAPSULE_NOTICE_RELPATH).read_bytes()
+    if committed_notice != render_capsule_notice():
+        raise CapsuleError("RECOVERY_CAPSULE_NOTICE.md does not reproduce from bytes")
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wrapper
