@@ -79,3 +79,78 @@ attestation is an offline integrity/reproducibility control, not a cryptographic
 authenticity attestation against an outside source; the two genuinely-isolated runners
 (distinct identities) are the strongest offline authenticity signal, and their recorded
 identities are the external-audit hook. Documented, not hidden.
+
+## Independent stacked-acceptance audit — §17 findings (post-development)
+
+An independent three-PR stacked-acceptance audit (see
+`docs/M3C_M3E_STACK_ACCEPTANCE_AUDIT.md`) commissioned three read-only auditors
+(A: git/history/merge; B: M3E security/operations; C: scientific firewall/provenance).
+Every finding was reproduced against the actual source before acceptance. **No auditor
+found an active Class A (financial/scientific), Class B (accepted-branch write), or
+Class D (sealed access) breach** — every workflow at HEAD is `permissions: contents:
+read` and pushes/merges nothing, the three ledgers are byte-empty, and the M3C
+candidate stays rejected. The findings below are **defense-in-depth hardening** of the
+review-only controls, exploitable only by a hypothetical *future* hostile edit and
+already backstopped by branch protection, the repository default-read token, and
+mandatory human review. Each fix is append-only on
+`claude/m3e-review-only-prospective-updates` and evaluates no strategy, mutates no
+accepted data, and appends no ledger.
+
+### A1 — workflow scanner missed a flow-style write / decoy permissions comment (fixed, commit 92e722c + 15e1197)
+The line-anchored block scanner did not see a YAML *flow* mapping
+`permissions: { contents: write }` (any inner spacing/tab), and the presence gate
+`"permissions:" in text` was satisfied by a lone `# permissions:` decoy comment. Fix:
+added `_FLOW_WRITE_PERM_RE`; the presence gate now requires a real, non-comment
+`^\s*permissions:` line; and (commit 92e722c) a `&anchor write` scalar is rejected. All
+9 real workflows still pass; >20 evasion fixtures now fail closed.
+
+### A2 — write-verb denylist missed plain push / merge / undraft / retarget (fixed, commit 15e1197)
+`_FORCE_PUSH_RE`/`_AUTO_MERGE_RE` caught only force-push and `--auto`. A plain
+`git push` to the default or an accepted milestone branch, an immediate `gh pr merge`,
+`gh pr ready` (undraft), `gh pr edit --base` (retarget), and the REST `pulls/N/merge`
+all slipped past. Fix: `_PROTECTED_PUSH_RE` + `_MERGE_UNDRAFT_RETARGET_RE`.
+
+### A3 — runner directory was not a closed file-set (fixed, commit d8a13f5)
+`load_and_verify_runner` re-derived only the declared files and ignored any extra, so an
+innocuously named `runner_a/aux.json` (no strategy marker) rode in unverified at
+verify time. Fix: the boundary now enforces the exact
+{`update_plan.json`, `acquisition_receipt.json`, declared raws} set and rejects any
+other entry, subdirectory, or symlink.
+
+### A4 — proposals root was not a closed set (fixed, commit d8a13f5)
+The PR-check filtered to manifest-bearing directories, so a manifest-less sibling (or a
+stray top-level file) under `research/m3e/proposals/` was silently skipped by the
+35-check verifier. Fix: `verify_proposals_root` requires every child to be a
+manifest-bearing proposal directory; the PR-check workflow now calls it first.
+
+### A5 — orchestration seam committed an arbitrary pathspec (fixed, commit d8a13f5)
+`prepare_update_proposal` staged whatever `proposal_relpath` named. Fix: it now asserts
+the pathspec resolves to exactly the proposal directory before the single git effect.
+
+### Accepted residuals (documented, not fixed — each fully backstopped)
+- **Cutoff not re-asserted at verify time (auditor B finding 5).** `verify_update_proposal`
+  is offline and clockless; a plan with a future `completed_day_exclusive_end` is not
+  re-checked against a trusted clock. Triply backstopped: a complete future/forming
+  candle cannot be fetched (row-count mismatch → fail); the immature 365-day floor
+  authorizes no evaluation regardless; and the proposal is a draft under mandatory human
+  review. The optional future hardening is: have the activated PR-check pass its own
+  runner clock and re-assert `end <= floor_to_utc_midnight(now)`.
+- **M3D import scanner ignores relative imports (auditor C F1).** `verify_m3d_program.
+  _scan_prohibited_imports` only records absolute imports. Latent: no M3D (or M3E)
+  module uses any relative import, M3D is frozen (research train exhausted), and a
+  resulting artifact would still trip the value-scanning `_scan_forbidden_fields`. Left
+  in frozen M3D code to preserve stack separation; recommended for a future M3D-scoped
+  change (mirror the M3E `_module_targets` resolver).
+- **Status guards scan keys, not string values (auditor C F2).** Backstopped: every
+  status input is a byte-rebuilt artifact whose values are hashes/ISO-dates/counts/enums,
+  the governance flags are byte-pinned to `False`, and the whole-program
+  `_scan_forbidden_fields` already scans values. A naive value-scan would false-positive
+  on the legitimate bound M3C fact `rejected_for_development_gate_promotion`, so it is
+  documented rather than changed.
+- **Exhaustion guard is a policy assertion, not a live interceptor (auditor C F3).**
+  Sound by design — M3D contains no candidate-generation runtime to intercept; no fix
+  required.
+- **Two-runner isolation** is an offline reproducibility/integrity control, not external
+  authenticity, and **a regex workflow scanner cannot fully parse arbitrary YAML or
+  recurse a remote reusable workflow** — both irreducible residuals carried by branch
+  protection + human review.
