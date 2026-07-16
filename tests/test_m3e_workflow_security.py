@@ -168,6 +168,44 @@ def test_a_clean_read_only_workflow_passes_the_scanner(tmp_path: Path) -> None:
             "    permissions: write-all\n    runs-on: ubuntu-latest\n"
             "    steps:\n      - run: echo hi\n",
         ),
+        # audit §17 (Auditor B finding 1): a write permission in YAML *flow* style,
+        # which the line-anchored block scanner does not see.
+        (
+            "flow-write-mapping",
+            "name: x\non: push\npermissions: { contents: write }\njobs:\n  j:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        ),
+        (
+            "flow-write-mapping-2-spaces",
+            "name: x\non: push\npermissions: {contents:  write}\njobs:\n  j:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        ),
+        (
+            "flow-write-mapping-tab",
+            "name: x\non: push\npermissions: {contents:\twrite}\njobs:\n  j:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        ),
+        # audit §17 (Auditor B finding 1): the presence gate must require a REAL,
+        # non-comment permissions declaration — a decoy ``# permissions:`` comment
+        # must not satisfy it (the job would inherit the default token otherwise).
+        (
+            "comment-only-permissions-no-real-block",
+            "name: x\non: push\n# permissions: contents read (decoy)\njobs:\n  j:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        ),
+        # audit §17 (Auditor B finding 2): write verbs the force/auto-merge scanner
+        # misses — a plain push to an accepted ref, a non-``--auto`` merge, undraft,
+        # a REST merge, a retarget.
+        (
+            "plain-push-to-accepted-branch",
+            _SAFE + "      - run: git push origin HEAD:claude/m3d-cohort\n",
+        ),
+        ("plain-push-to-main", _SAFE + "      - run: git push origin main\n"),
+        ("gh-pr-merge-squash-admin", _SAFE + "      - run: gh pr merge --squash --admin 1\n"),
+        ("gh-pr-merge-plain", _SAFE + "      - run: gh pr merge 1 --merge\n"),
+        ("gh-pr-ready-undraft", _SAFE + "      - run: gh pr ready 1\n"),
+        ("rest-api-merge", _SAFE + "      - run: gh api -X PUT repos/o/r/pulls/1/merge\n"),
+        ("gh-pr-edit-retarget", _SAFE + "      - run: gh pr edit 1 --base main\n"),
     ],
 )
 def test_hardened_scanner_rejects_each_evasion(label: str, body: str, tmp_path: Path) -> None:

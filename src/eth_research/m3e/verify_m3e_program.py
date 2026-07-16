@@ -130,6 +130,32 @@ _WRITE_PERM_RE = re.compile(
 # remote reusable workflow — that irreducible residual is documented in the threat model
 # and backstopped by branch protection + mandatory human review.)
 _ANCHOR_WRITE_RE = re.compile(r"&[\w-]+\s+['\"]?write(?:-all)?\b", re.IGNORECASE)
+# A write permission written as a YAML *flow* mapping — ``permissions: { contents:
+# write }`` (any inner spacing/tabs, single- or multi-line) — which the line-anchored
+# block scanner ``_WRITE_PERM_RE`` (one scalar per line) does not see.
+_FLOW_WRITE_PERM_RE = re.compile(r"permissions\s*:\s*\{[^}]*\bwrite(?:-all)?\b", re.IGNORECASE)
+# A real, non-comment permissions declaration (top-level or job-level). The presence
+# gate must not be satisfied by a lone ``# permissions: …`` comment — with no real
+# block the job silently inherits the repository's default token permissions.
+_REAL_PERMISSIONS_RE = re.compile(r"^\s*permissions\s*:", re.MULTILINE)
+# A push to a protected/accepted ref — the default branch or an accepted milestone
+# branch — force or not. A plain ``git push`` (no ``-f``/``+refspec``) to an accepted
+# branch is a direct write path that ``_FORCE_PUSH_RE`` does not cover.
+_PROTECTED_PUSH_RE = re.compile(
+    r"git\s+push\b[^\n]*?(?:\bmain\b|claude/m3[abcde]\b|refs/heads/main\b)", re.IGNORECASE
+)
+# Merge / undraft / retarget of a pull request in any spelling — the "make it land"
+# verbs (immediate merge, mark-ready, change base, REST merge) that ``_AUTO_MERGE_RE``
+# (only the ``--auto`` deferred auto-merge) does not cover.
+_MERGE_UNDRAFT_RETARGET_RE = re.compile(
+    r"gh\s+pr\s+merge\b"
+    r"|gh\s+pr\s+ready\b"
+    r"|gh\s+pr\s+edit\b[^\n]*--base\b"
+    r"|mergepullrequest\b"
+    r"|markpullrequestreadyforreview\b"
+    r"|pulls/\d+/merge\b",
+    re.IGNORECASE,
+)
 # A repository secret reference in either dotted (``secrets.X``) or index
 # (``secrets['X']``) form, or a wholesale ``secrets: inherit`` hand-off.
 _SECRETS_RE = re.compile(r"secrets\s*[.\[]|secrets\s*:\s*inherit", re.IGNORECASE)
@@ -235,13 +261,13 @@ def _no_unsafe_workflow(repo_root: str | Path) -> None:
     files = sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")])
     for path in files:
         text = path.read_text(encoding="utf-8")
-        if "permissions:" not in text:
+        if not _REAL_PERMISSIONS_RE.search(text):
             raise M3EValidationError(
                 f"{path.name} declares no explicit (read-only) permissions block"
             )
         if "write-all" in text:
             raise M3EValidationError(f"{path.name} grants write-all permissions at HEAD")
-        if _WRITE_PERM_RE.search(text):
+        if _WRITE_PERM_RE.search(text) or _FLOW_WRITE_PERM_RE.search(text):
             raise M3EValidationError(f"{path.name} grants a write permission at HEAD")
         if _ANCHOR_WRITE_RE.search(text):
             raise M3EValidationError(f"{path.name} anchors a write permission value at HEAD")
@@ -251,10 +277,14 @@ def _no_unsafe_workflow(repo_root: str | Path) -> None:
             raise M3EValidationError(f"{path.name} references a repository secret")
         if "--force" in text or "--force-with-lease" in text or _FORCE_PUSH_RE.search(text):
             raise M3EValidationError(f"{path.name} force-pushes")
+        if _PROTECTED_PUSH_RE.search(text):
+            raise M3EValidationError(f"{path.name} pushes to a protected/accepted ref at HEAD")
         if "pull_request_target" in text:
             raise M3EValidationError(f"{path.name} uses pull_request_target")
-        if _AUTO_MERGE_RE.search(text):
-            raise M3EValidationError(f"{path.name} enables auto-merge")
+        if _AUTO_MERGE_RE.search(text) or _MERGE_UNDRAFT_RETARGET_RE.search(text):
+            raise M3EValidationError(
+                f"{path.name} merges, undrafts, retargets, or auto-merges a PR"
+            )
         if "upload-artifact" in text or "upload-pages-artifact" in text:
             raise M3EValidationError(f"{path.name} uploads a workflow artifact")
 
