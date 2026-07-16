@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -195,3 +196,52 @@ def test_oracle_rejects_naive_timestamp_as_clean_failure(tmp_path: Path) -> None
     report = run_oracles(tmp_path)  # must not raise
     assert report.ok is False
     assert any(f.startswith("m3e_cohort_window") for f in report.failures)
+
+
+# --------------------------------------------------------------------------- #
+# Theme 4 — catalog git-provenance is recomputed, not trusted (A3)            #
+# --------------------------------------------------------------------------- #
+def _register_clone(tmp_path: Path) -> Path:
+    from eth_research.m3f.register import write_registration_artifacts
+
+    clone = tmp_path / "clone"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True
+    )
+    subprocess.run(["git", "-C", str(clone), "config", "user.email", "a@b.c"], check=True)
+    subprocess.run(["git", "-C", str(clone), "config", "user.name", "T"], check=True)
+    freeze = subprocess.run(
+        ["git", "-C", str(clone), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    write_registration_artifacts(clone, source_freeze_sha=freeze, accepted_main_sha=freeze)
+    return clone
+
+
+def test_forged_source_tree_fingerprint_is_detected(tmp_path: Path) -> None:
+    from eth_research.m3f.catalog import CATALOG_RELPATH, verify_catalog
+
+    clone = _register_clone(tmp_path)
+    assert verify_catalog(clone).ok is True
+    catalog_path = clone / CATALOG_RELPATH
+    forged = catalog_path.read_text(encoding="utf-8").replace(
+        '"source_tree_fingerprint": "', '"source_tree_fingerprint": "deadbeef', 1
+    )
+    catalog_path.write_text(forged, encoding="utf-8")
+    result = verify_catalog(clone)
+    assert result.ok is False
+    assert any("source_tree_fingerprint" in f for f in result.failures)
+
+
+def test_forged_package_version_is_detected(tmp_path: Path) -> None:
+    from eth_research.m3f.catalog import CATALOG_RELPATH, verify_catalog
+
+    clone = _register_clone(tmp_path)
+    catalog_path = clone / CATALOG_RELPATH
+    forged = catalog_path.read_text(encoding="utf-8").replace(
+        '"package_version": "0.9.0"', '"package_version": "9.9.9"', 1
+    )
+    assert '"package_version": "9.9.9"' in forged
+    catalog_path.write_text(forged, encoding="utf-8")
+    result = verify_catalog(clone)
+    assert result.ok is False
+    assert any("11_package_version" in f for f in result.failures)

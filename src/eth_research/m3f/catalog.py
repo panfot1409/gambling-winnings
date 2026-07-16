@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from eth_research.m3f import M3F_PACKAGE_VERSION
 from eth_research.m3f.validation import (
     M3FValidationError,
     canonical_json_bytes,
@@ -327,12 +328,51 @@ def verify_catalog(repo_root: str | Path) -> CatalogResult:
     # Expected governance state bound in the catalog matches the live artifacts.
     _verify_expected_state(root, catalog, acc)
 
+    # The catalog's git-provenance fields are recomputed from git, not trusted.
+    _verify_git_provenance(root, catalog, acc)
+
     return CatalogResult(
         ok=not acc.failures,
         checks=tuple(acc.checks),
         failures=tuple(acc.failures),
         artifact_count=len(artifacts),
     )
+
+
+def _verify_git_provenance(root: Path, catalog: dict[str, Any], acc: _Accum) -> None:
+    """Recompute the catalog's git-binding fields; they are forgeable if never checked.
+
+    Requires the accepted-main and source-freeze commits to be reachable (a full
+    checkout — the M3F replay CI fetches full history for this). A recompute that
+    cannot reach the commit fails closed rather than silently passing.
+    """
+    version = require_str(catalog.get("package_version"), "package_version")
+    if version != M3F_PACKAGE_VERSION:
+        acc.fail("11_package_version", f"catalog {version} != running {M3F_PACKAGE_VERSION}")
+    else:
+        acc.ok("11_package_version")
+
+    try:
+        accepted = require_str(catalog.get("accepted_main_sha"), "accepted_main_sha")
+        want_tree = require_str(catalog.get("accepted_main_tree_sha"), "accepted_main_tree_sha")
+        got_tree = _git(root, "rev-parse", f"{accepted}^{{tree}}").strip()
+        if got_tree != want_tree:
+            acc.fail("12_accepted_main_tree", "recorded accepted_main_tree_sha does not match git")
+        else:
+            acc.ok("12_accepted_main_tree")
+    except (subprocess.CalledProcessError, M3FValidationError) as exc:
+        acc.fail("12_accepted_main_tree", f"cannot recompute accepted-main tree: {exc}")
+
+    try:
+        freeze = require_str(catalog.get("source_freeze_sha"), "source_freeze_sha")
+        want_fp = require_str(catalog.get("source_tree_fingerprint"), "source_tree_fingerprint")
+        got_fp = sha256_bytes(_git(root, "ls-tree", "-r", freeze, "src").encode("utf-8"))
+        if got_fp != want_fp:
+            acc.fail("13_source_tree_fingerprint", "recorded source fingerprint does not match git")
+        else:
+            acc.ok("13_source_tree_fingerprint")
+    except (subprocess.CalledProcessError, M3FValidationError) as exc:
+        acc.fail("13_source_tree_fingerprint", f"cannot recompute source fingerprint: {exc}")
 
 
 def _verify_expected_state(root: Path, catalog: dict[str, Any], acc: _Accum) -> None:
