@@ -22,6 +22,7 @@ from typing import Any
 from eth_research.m3f.validation import (
     M3FValidationError,
     canonical_json_bytes,
+    count_created_proposals,
     load_canonical_json,
     normalize_relpath,
     require_int,
@@ -218,14 +219,9 @@ def _derive_expected_state(root: Path, commit: str) -> dict[str, Any]:
         _blob_bytes(root, commit, "research/m3e/accepted_base.json"),
         "m3e_accepted_base",
     )
-    reg_lines = [
-        line
-        for line in _blob_bytes(root, commit, "research/m3e/proposal_registry.jsonl")
-        .decode("utf-8")
-        .splitlines()
-        if line.strip()
-    ]
-    proposals = sum(1 for line in reg_lines if '"proposal_created": true' in line)
+    proposals = count_created_proposals(
+        _blob_bytes(root, commit, "research/m3e/proposal_registry.jsonl")
+    )
     return {
         "m3c_outcome": require_str(decision["outcome"], "m3c_outcome"),
         "m3d_cohort_rows": require_int(base["row_count"], "m3d_cohort_rows"),

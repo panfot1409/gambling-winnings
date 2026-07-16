@@ -27,6 +27,7 @@ __all__ = [
     "M3FValidationError",
     "canonical_json_bytes",
     "canonical_sha256",
+    "count_created_proposals",
     "load_canonical_json",
     "normalize_relpath",
     "require_bool",
@@ -85,6 +86,27 @@ def strict_jsonl_records(raw: bytes, label: str) -> list[Any]:
         except StrictJSONError as exc:
             raise M3FValidationError(f"{label}: line {i + 1}: {exc}") from exc
     return records
+
+
+def count_created_proposals(raw: bytes, label: str = "proposal_registry") -> int:
+    """Count M3E registry records that record a *created* proposal.
+
+    Each JSONL line is strictly parsed, so the count is whitespace-independent —
+    unlike a substring scan, it matches the M3E registry's compact
+    ``"proposal_created":true`` serialization as well as any spaced form. It is
+    fail-closed: a record whose ``proposal_created`` is present and not exactly
+    ``false`` (a smuggled truthy value, a non-bool) is counted as a proposal rather
+    than silently ignored, so the zero-proposal governance invariant can never pass
+    open on a value it failed to recognize.
+    """
+    count = 0
+    for rec in strict_jsonl_records(raw, label):
+        if not isinstance(rec, dict):
+            continue
+        created = rec.get("proposal_created")
+        if created is not None and created is not False:
+            count += 1
+    return count
 
 
 def normalize_relpath(value: object, label: str) -> str:

@@ -15,6 +15,7 @@ from typing import Any
 from eth_research.m3f.validation import (
     M3FValidationError,
     canonical_json_bytes,
+    count_created_proposals,
     load_canonical_json,
     require_int,
     require_str,
@@ -41,12 +42,9 @@ def derive_honest_state(repo_root: str | Path) -> dict[str, Any]:
     base = load_canonical_json(
         (root / "research/m3e/accepted_base.json").read_bytes(), "m3e_accepted_base"
     )
-    reg_lines = [
-        line
-        for line in (root / "research/m3e/proposal_registry.jsonl").read_text().splitlines()
-        if line.strip()
-    ]
-    proposals = sum(1 for line in reg_lines if '"proposal_created": true' in line)
+    proposals = count_created_proposals(
+        (root / "research/m3e/proposal_registry.jsonl").read_bytes()
+    )
 
     ledgers: dict[str, dict[str, Any]] = {}
     for rel in _LEDGERS:
