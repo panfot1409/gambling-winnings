@@ -1,0 +1,190 @@
+{
+  "extensions_scanned": [
+    ".yml",
+    ".yaml"
+  ],
+  "schema_version": 1,
+  "workflow_count": 10,
+  "workflows": [
+    {
+      "can_merge_or_release_or_tag": false,
+      "can_push": false,
+      "can_write_contents": false,
+      "contacts_market_host": false,
+      "has_real_permissions_block": true,
+      "name": "CI",
+      "path": ".github/workflows/ci.yml",
+      "piped_installer": false,
+      "references_secrets": false,
+      "scheduled": false,
+      "sha256": "90f9e8fc172e1b2591bab157387539653c63350d1c18166e7d60e97a0a356106",
+      "uploads_artifact": false,
+      "uses_all_sha_pinned": true,
+      "uses_targets": [
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+      ]
+    },
+    {
+      "can_merge_or_release_or_tag": false,
+      "can_push": false,
+      "can_write_contents": false,
+      "contacts_market_host": false,
+      "has_real_permissions_block": true,
+      "name": "M2B Replay",
+      "path": ".github/workflows/m2b-replay.yml",
+      "piped_installer": false,
+      "references_secrets": false,
+      "scheduled": false,
+      "sha256": "8ba4fdb10a77f56d4452d30121c9c8358121791c6980c202da7f5af8b538e8f5",
+      "uploads_artifact": false,
+      "uses_all_sha_pinned": true,
+      "uses_targets": [
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+      ]
+    },
+    {
+      "can_merge_or_release_or_tag": false,
+      "can_push": false,
+      "can_write_contents": false,
+      "contacts_market_host": false,
+      "has_real_permissions_block": true,
+      "name": "M3A Replay",
+      "path": ".github/workflows/m3a-replay.yml",
+      "piped_installer": false,
+      "references_secrets": false,
+      "scheduled": false,
+      "sha256": "c958b09ba564d0056fb38c6e7c8f7c8323d2e7aaafbdfab025f06d9796579687",
+      "uploads_artifact": false,
+      "uses_all_sha_pinned": true,
+      "uses_targets": [
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+      ]
+    },
+    {
+      "can_merge_or_release_or_tag": false,
+      "can_push": false,
+      "can_write_contents": false,
+      "contacts_market_host": false,
+      "has_real_permissions_block": true,
+      "name": "M3B Replay",
+      "path": ".github/workflows/m3b-replay.yml",
+      "piped_installer": false,
+      "references_secrets": false,
+      "scheduled": false,
+      "sha256": "624b146fe3fd30b62e1ea9f01283464f674ea515cd2de0fc1a0a4e61328ad97e",
+      "uploads_artifact": false,
+      "uses_all_sha_pinned": true,
+      "uses_targets": [
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+      ]
+    },
+    {
+      "can_merge_or_release_or_tag": false,
+      "can_push": false,
+      "can_write_contents": false,
+      "contacts_market_host": false,
+      "has_real_permissions_block": true,
+      "name": "M3C Replay",
+      "path": ".github/workflows/m3c-replay.yml",
+      "piped_installer": false,
+      "references_secrets": false,
+      "scheduled": false,
+      "sha256": "62343e82ac7fd938525b37378190c4d0a9c9d0080704baad81c088048626a9cb",
+      "uploads_artifact": false,
+      "uses_all_sha_pinned": true,
+      "uses_targets": [
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+      ]
+    },
+    {
+      "can_merge_or_release_or_tag": false,
+      "can_push": false,
+      "can_write_contents": false,
+      "contacts_market_host": false,
+      "has_real_permissions_block": true,
+      "name": "M3D Replay",
+      "path": ".github/workflows/m3d-replay.yml",
+      "piped_installer": false,
+      "references_secrets": false,
+      "scheduled": false,
+      "sha256": "918a3a2fc744587bf172b3d516eca6abc9d6ad912ccbbcfc2f29ef8a848e5f2b",
+      "uploads_artifact": false,
+      "uses_all_sha_pinned": true,
+      "uses_targets": [
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+      ]
+    },
+    {
+      "can_merge_or_release_or_tag": false,
+      "can_push": false,
+      "can_write_contents": false,
+      "contacts_market_host": false,
+      "has_real_permissions_block": true,
+      "name": "M3E Prospective Update Probe",
+      "path": ".github/workflows/m3e-prospective-update.yml",
+      "piped_installer": false,
+      "references_secrets": false,
+      "scheduled": true,
+      "sha256": "3d250a0c951bd6cca85096c822ec15c47525b1e2dad8e524cb77d5c536e63c3f",
+      "uploads_artifact": false,
+      "uses_all_sha_pinned": true,
+      "uses_targets": [
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+      ]
+    },
+    {
+      "can_merge_or_release_or_tag": false,
+      "can_push": false,
+      "can_write_contents": false,
+      "contacts_market_host": false,
+      "has_real_permissions_block": true,
+      "name": "M3E Replay",
+      "path": ".github/workflows/m3e-replay.yml",
+      "piped_installer": false,
+      "references_secrets": false,
+      "scheduled": false,
+      "sha256": "e76088816113a3e084b131c4c1f9809c6c4002a562a5968c4fa5bad4d97e1325",
+      "uploads_artifact": false,
+      "uses_all_sha_pinned": true,
+      "uses_targets": [
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+      ]
+    },
+    {
+      "can_merge_or_release_or_tag": false,
+      "can_push": false,
+      "can_write_contents": false,
+      "contacts_market_host": false,
+      "has_real_permissions_block": true,
+      "name": "M3E Update PR Check",
+      "path": ".github/workflows/m3e-update-pr-check.yml",
+      "piped_installer": false,
+      "references_secrets": false,
+      "scheduled": false,
+      "sha256": "b8ed8a77fe2b1e71a8d1d56aed42cfc456063adb99bfff52b5b7d1c512b4009b",
+      "uploads_artifact": false,
+      "uses_all_sha_pinned": true,
+      "uses_targets": [
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+      ]
+    },
+    {
+      "can_merge_or_release_or_tag": false,
+      "can_push": false,
+      "can_write_contents": false,
+      "contacts_market_host": false,
+      "has_real_permissions_block": true,
+      "name": "M3F Replay",
+      "path": ".github/workflows/m3f-replay.yml",
+      "piped_installer": false,
+      "references_secrets": false,
+      "scheduled": false,
+      "sha256": "84596bc089337108a47d8fc1b38786864ef50d8971bc26a089758fcc94217c87",
+      "uploads_artifact": false,
+      "uses_all_sha_pinned": true,
+      "uses_targets": [
+        "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+      ]
+    }
+  ]
+}

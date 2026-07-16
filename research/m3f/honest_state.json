@@ -1,0 +1,45 @@
+{
+  "accepted_stack": "m2b_m3a_m3b_m3c_m3d_m3e_merged_to_main",
+  "any_gate_or_holdout_evaluated": false,
+  "hash_binding_is": "operational_tamper_evidence_not_cryptographic_signature",
+  "known_tag_debt_not_retried": [
+    "v0.6.0",
+    "v0.7.0",
+    "v0.8.0"
+  ],
+  "ledgers": {
+    "research/m2b/test_evaluations.jsonl": {
+      "byte_count": 0,
+      "event_count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "research/m3a/development_gate_access.jsonl": {
+      "byte_count": 0,
+      "event_count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "research/m3d/prospective_evaluations.jsonl": {
+      "byte_count": 0,
+      "event_count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "m2b_dataset_identity": "coinbase_eth_usd_daily_frozen_dossier",
+  "m3a_state": "completed_research_only",
+  "m3b_state": "completed_research_only",
+  "m3c_candidate_verdict": "rejected_for_development_gate_promotion",
+  "m3d_cohort_row_count": 3,
+  "m3d_evaluation_authorized": false,
+  "m3d_maturity_state": "immature",
+  "m3d_maturity_threshold": 365,
+  "m3e_active": false,
+  "m3e_production_proposal_count": 0,
+  "m3e_readiness": "ready",
+  "network_capable_publisher_deployed": false,
+  "new_strategy_evaluation_authorized": false,
+  "release_tags_remotely_published": [
+    "v0.1.0"
+  ],
+  "schema_version": 1,
+  "standing_workflow_can_write_contents": false
+}

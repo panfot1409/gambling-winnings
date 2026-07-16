@@ -1,0 +1,615 @@
+{
+  "capsule_algorithm": "sha256-over-sorted-path-sha256-length-lines-v1",
+  "capsule_digest": "d59b2592fd570d86e53ab48985f00a3e51dbeb312cd55477cc788ec381c82a7c",
+  "contains_sealed_partition_contents": false,
+  "contains_secrets_or_credentials": false,
+  "excludes": [
+    "research/m3f/",
+    "data/",
+    "reports/",
+    ".github/"
+  ],
+  "file_count": 118,
+  "files": [
+    {
+      "byte_length": 2027,
+      "path": "research/m2b/EARLIEST_CONTINUOUS_DECISION.md",
+      "sha256": "4ee249fbba8ac2c0cbbe5c5ac7e298cfddb54f0aa5f80166418573504be8d1af"
+    },
+    {
+      "byte_length": 8856,
+      "path": "research/m2b/README.md",
+      "sha256": "9f645b954ae19b5abeff443e8c9f67bc6ff2169dbfab29f4757bb9884c955476"
+    },
+    {
+      "byte_length": 7300,
+      "path": "research/m2b/acquisition_evidence.json",
+      "sha256": "27ba6a6013fab67c02361bc3e2b43a761fa5ac0310556d7557859bdcbbbd2d0b"
+    },
+    {
+      "byte_length": 4774,
+      "path": "research/m2b/acquisition_request_plan.json",
+      "sha256": "f8f77ddbd226287e3561cd169de0b4fada090d66bd6a09d70e045f6b786ebf83"
+    },
+    {
+      "byte_length": 817,
+      "path": "research/m2b/dataset_lock.json",
+      "sha256": "6ccd3698f71b25b9cfbab758caeeb4150b2ca257df4f4acedd985da249462a4d"
+    },
+    {
+      "byte_length": 1135,
+      "path": "research/m2b/dataset_manifest.json",
+      "sha256": "58ec9cb9940f76c991db92696e0a72df3365fa2b5d31305fa25f15468ac7b4fd"
+    },
+    {
+      "byte_length": 825,
+      "path": "research/m2b/discovery_decision.json",
+      "sha256": "29e60e851b1dcf6d73b47081d5d656b429433e962bc648b5c97cb573b033dc14"
+    },
+    {
+      "byte_length": 1207,
+      "path": "research/m2b/discovery_plan.json",
+      "sha256": "13a6805db273f82c8ef59ba0ca5f8a4932e750b47b47b0cd91a0a390bb35d9d3"
+    },
+    {
+      "byte_length": 3043,
+      "path": "research/m2b/frozen_dossier.json",
+      "sha256": "20ce9be93d955189244c3b57c932dafbbe54a2babde4d4860275ca1d624d432e"
+    },
+    {
+      "byte_length": 693,
+      "path": "research/m2b/holdout_identity.json",
+      "sha256": "214ce4a0d8a927c0657074cbf1aa0182eeda85c128d33f8b7854646f5c0f2885"
+    },
+    {
+      "byte_length": 1206,
+      "path": "research/m2b/protocol.json",
+      "sha256": "a75a9cf508ead459976060ab7518c4e382ecb95e54cc0ee36ec0ff9281f26a81"
+    },
+    {
+      "byte_length": 1022,
+      "path": "research/m2b/quality_report.json",
+      "sha256": "b167df002768469bd5fb17c5a6588edc2c98e3ce910a0995187e1f68ed14f07a"
+    },
+    {
+      "byte_length": 5178,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/acquisition_receipt.json",
+      "sha256": "e78a863b45a435b0c9123cc71bdf3e57ba4775e7cf475c70b515a446625ffe6d"
+    },
+    {
+      "byte_length": 15097,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0000_20160523_20170318.json",
+      "sha256": "43f65217211a667dbc1f6298888ad201d2a86fa581674bae2d2442fc077449c3"
+    },
+    {
+      "byte_length": 16029,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0001_20170318_20180111.json",
+      "sha256": "504c65ac9cc929714d2c8600907121e77df680d275aa41bf36dda2f720185fe3"
+    },
+    {
+      "byte_length": 16163,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0002_20180111_20181106.json",
+      "sha256": "3f6ec33f8482ddebdbfe6d444de7e8710e59ef4c81f58c081e852e6f4b759c6c"
+    },
+    {
+      "byte_length": 16444,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0003_20181106_20190901.json",
+      "sha256": "d28ba4dc2a293ed8e557e6c3236134730f6a406179302d5eeef2b026bb28687f"
+    },
+    {
+      "byte_length": 16490,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0004_20190901_20200626.json",
+      "sha256": "f274559511928389ed2ff669e53a8116475d0e188562c8a452ba781fa0a28328"
+    },
+    {
+      "byte_length": 16920,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0005_20200626_20210421.json",
+      "sha256": "c7c486cfaf1de0e03732c2a8559a0c8d38c5a2e3d18c79fbc7fa4c2319d8941a"
+    },
+    {
+      "byte_length": 17626,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0006_20210421_20220214.json",
+      "sha256": "51ae02af5e44292513161095e489c57d966805f6b67967968b1c1cca405a3fd9"
+    },
+    {
+      "byte_length": 17841,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0007_20220214_20221210.json",
+      "sha256": "1ea541210b51c0daacba7b6c54f828c771a5d8ac251955eda0ac78b59942c3d2"
+    },
+    {
+      "byte_length": 17777,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0008_20221210_20231005.json",
+      "sha256": "b35868677429cdcd86cea171f0d983d738eb50ee24dd6cc86bc13a64ccfa924c"
+    },
+    {
+      "byte_length": 17754,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0009_20231005_20240730.json",
+      "sha256": "fb584af24f52e60f560ed253e4101c4cf4acc350094026690d9f00e0777c16c3"
+    },
+    {
+      "byte_length": 17749,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0010_20240730_20250525.json",
+      "sha256": "2b7c62fa8dec9c9014cc1c1c693ccd81d5fec615564facf7c7ad395bad6fa90e"
+    },
+    {
+      "byte_length": 17707,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0011_20250525_20260320.json",
+      "sha256": "f91f36cbb5bf04dad3234c2b0be604f90892a251489c5e8d898dbb5913d8bde1"
+    },
+    {
+      "byte_length": 6754,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-001/coinbase-eth-usd-1d_0012_20260320_20260712.json",
+      "sha256": "4304b18088bd969dc723bc36b72ab22fde8589b2ee978a8591576c89c6330bb7"
+    },
+    {
+      "byte_length": 5184,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/acquisition_receipt.json",
+      "sha256": "3c1192ba51d334e77326f9ae0452192d3106ca92d8403aaa1fc6204b5216be9b"
+    },
+    {
+      "byte_length": 15097,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0000_20160523_20170318.json",
+      "sha256": "43f65217211a667dbc1f6298888ad201d2a86fa581674bae2d2442fc077449c3"
+    },
+    {
+      "byte_length": 16029,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0001_20170318_20180111.json",
+      "sha256": "504c65ac9cc929714d2c8600907121e77df680d275aa41bf36dda2f720185fe3"
+    },
+    {
+      "byte_length": 16163,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0002_20180111_20181106.json",
+      "sha256": "3f6ec33f8482ddebdbfe6d444de7e8710e59ef4c81f58c081e852e6f4b759c6c"
+    },
+    {
+      "byte_length": 16444,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0003_20181106_20190901.json",
+      "sha256": "d28ba4dc2a293ed8e557e6c3236134730f6a406179302d5eeef2b026bb28687f"
+    },
+    {
+      "byte_length": 16490,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0004_20190901_20200626.json",
+      "sha256": "f274559511928389ed2ff669e53a8116475d0e188562c8a452ba781fa0a28328"
+    },
+    {
+      "byte_length": 16920,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0005_20200626_20210421.json",
+      "sha256": "c7c486cfaf1de0e03732c2a8559a0c8d38c5a2e3d18c79fbc7fa4c2319d8941a"
+    },
+    {
+      "byte_length": 17626,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0006_20210421_20220214.json",
+      "sha256": "51ae02af5e44292513161095e489c57d966805f6b67967968b1c1cca405a3fd9"
+    },
+    {
+      "byte_length": 17841,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0007_20220214_20221210.json",
+      "sha256": "1ea541210b51c0daacba7b6c54f828c771a5d8ac251955eda0ac78b59942c3d2"
+    },
+    {
+      "byte_length": 17777,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0008_20221210_20231005.json",
+      "sha256": "b35868677429cdcd86cea171f0d983d738eb50ee24dd6cc86bc13a64ccfa924c"
+    },
+    {
+      "byte_length": 17754,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0009_20231005_20240730.json",
+      "sha256": "fb584af24f52e60f560ed253e4101c4cf4acc350094026690d9f00e0777c16c3"
+    },
+    {
+      "byte_length": 17749,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0010_20240730_20250525.json",
+      "sha256": "2b7c62fa8dec9c9014cc1c1c693ccd81d5fec615564facf7c7ad395bad6fa90e"
+    },
+    {
+      "byte_length": 17707,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0011_20250525_20260320.json",
+      "sha256": "f91f36cbb5bf04dad3234c2b0be604f90892a251489c5e8d898dbb5913d8bde1"
+    },
+    {
+      "byte_length": 6754,
+      "path": "research/m2b/raw/coinbase/coinbase-eth-usd-audit-002/coinbase-eth-usd-1d_0012_20260320_20260712.json",
+      "sha256": "4304b18088bd969dc723bc36b72ab22fde8589b2ee978a8591576c89c6330bb7"
+    },
+    {
+      "byte_length": 1005,
+      "path": "research/m2b/raw/coinbase/discovery-001/acquisition_receipt.json",
+      "sha256": "7fd2f239182903ac490c55a7f40aea6bf2453b768dc80738f62ae11e5d4c814a"
+    },
+    {
+      "byte_length": 12900,
+      "path": "research/m2b/raw/coinbase/discovery-001/coinbase-eth-usd-1d_0000_20160501_20170201.json",
+      "sha256": "d13f1f4df537d6002ab0f7bea7fc8a74fe00317921d7a85406106375335380df"
+    },
+    {
+      "byte_length": 1669,
+      "path": "research/m2b/reacquisition_audit.json",
+      "sha256": "643004e56d65fe1b3ad3ae53e83a92b18dca0d7d27401c37b238e935ca1b3501"
+    },
+    {
+      "byte_length": 539,
+      "path": "research/m2b/runtime_contract.json",
+      "sha256": "ea9d6fabed37e533496688be16f384ab0b1e1cb5c9e6e8d407d64f40c7e4e9bd"
+    },
+    {
+      "byte_length": 0,
+      "path": "research/m2b/test_evaluations.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "byte_length": 5484,
+      "path": "research/m2b/train_validation_report.md",
+      "sha256": "5593c69ebf1517344d750b1bd709d839e65923e187a73c0d71e3f0e48bce147b"
+    },
+    {
+      "byte_length": 4791,
+      "path": "research/m2b/train_validation_results.json",
+      "sha256": "79ae1fc7bc86c9336d1d5b817a027f8b1bc2f761fc8f2713465963509dc4384e"
+    },
+    {
+      "byte_length": 1217,
+      "path": "research/m2b/validation_decision.json",
+      "sha256": "962f931f84c650298cab5228e1185d05a724be5d7bccf90ab40253d6a6f764b3"
+    },
+    {
+      "byte_length": 1490,
+      "path": "research/m2b/validation_decision.md",
+      "sha256": "250f693abde0668eeb02b14bfffa6f770b4e5e9339f9027b6801310fa252c8b0"
+    },
+    {
+      "byte_length": 10501,
+      "path": "research/m3a/README.md",
+      "sha256": "110a0ced559d97ae97c82000efa9c0d48c5883e90605a0111707b223240e92a2"
+    },
+    {
+      "byte_length": 790,
+      "path": "research/m3a/artifact_errata.jsonl",
+      "sha256": "afa78abdf9d92deccaa6146e520a25234614f425e3648e45dc611c0b91f29ced"
+    },
+    {
+      "byte_length": 0,
+      "path": "research/m3a/development_gate_access.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "byte_length": 1345,
+      "path": "research/m3a/development_partition.json",
+      "sha256": "14d61c9ad36a20b70b3f830e8470dc416319ef4accf36b90c5d2b4094ead7ac2"
+    },
+    {
+      "byte_length": 4026,
+      "path": "research/m3a/development_report.md",
+      "sha256": "d6e920760fd4217cbac00cf6126b0da2afc1f0a9e673aacfc9aee5fc6baa3bfd"
+    },
+    {
+      "byte_length": 92266,
+      "path": "research/m3a/development_results.json",
+      "sha256": "5f6377b6eb0eb8c2a5ba126c37b29de5095670f7ed27c064f44e18c9c91ea8ae"
+    },
+    {
+      "byte_length": 2571,
+      "path": "research/m3a/errata/m3a-run003-report-zero-inclusion-v1.json",
+      "sha256": "f7a027cc503b1049776598e4f1f38e89c5381f3c11cf7561ea6ea3c98e984f27"
+    },
+    {
+      "byte_length": 2283,
+      "path": "research/m3a/errata/m3a-run003-report-zero-inclusion-v1.md",
+      "sha256": "35f2242dfdaee5d6d17a6510b740950a43839348e253312c06f9ff472d6a70a8"
+    },
+    {
+      "byte_length": 14198,
+      "path": "research/m3a/experiment_registry.jsonl",
+      "sha256": "14bec91772a70f89c1316f0c6b3b3ec4ccb4c6c82b6f1315ce797e5f15410a0a"
+    },
+    {
+      "byte_length": 1769,
+      "path": "research/m3a/experiments/experiment_index.json",
+      "sha256": "ea1624408d06000ddd46eab0d67c86c14e10a0e6ad751ce89037751814c659c2"
+    },
+    {
+      "byte_length": 992,
+      "path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-001/artifact_manifest.json",
+      "sha256": "58ab32f704214272cc17f80376cb0889aa51c1178ca1afb4f2916254644f10bf"
+    },
+    {
+      "byte_length": 13452,
+      "path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-001/development_report.md",
+      "sha256": "9362c631ccd37a5ea2dcd8d7bc2c54a8212311363153287fc1a3e3be77b116bf"
+    },
+    {
+      "byte_length": 83133,
+      "path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-001/development_results.json",
+      "sha256": "b8616248c72e863210de131f91a7ea90e6810ff20c13440375ed385b3c8ed67a"
+    },
+    {
+      "byte_length": 988,
+      "path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-002/artifact_manifest.json",
+      "sha256": "257a67eb3e0aa9e734e52f7109a7c67678e7afb7172a2f9b8d30d1b4994f5196"
+    },
+    {
+      "byte_length": 14069,
+      "path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-002/development_report.md",
+      "sha256": "34baa74cbdeabf66b713f6d802291a176a92027e330dd4eea781590e9b1d8d58"
+    },
+    {
+      "byte_length": 83133,
+      "path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v1-run-002/development_results.json",
+      "sha256": "dc4564fe84205ff1e3e60fc359182683e8fde12be879bd5834f72319dcfa1128"
+    },
+    {
+      "byte_length": 1134,
+      "path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v2-run-003/artifact_manifest.json",
+      "sha256": "1ea0ade8ed291762a6571c352550b24697137235305163579dda6a76739f4e24"
+    },
+    {
+      "byte_length": 4026,
+      "path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v2-run-003/development_report.md",
+      "sha256": "d6e920760fd4217cbac00cf6126b0da2afc1f0a9e673aacfc9aee5fc6baa3bfd"
+    },
+    {
+      "byte_length": 92266,
+      "path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v2-run-003/development_results.json",
+      "sha256": "5f6377b6eb0eb8c2a5ba126c37b29de5095670f7ed27c064f44e18c9c91ea8ae"
+    },
+    {
+      "byte_length": 203659,
+      "path": "research/m3a/experiments/m3a-fixed-baseline-comparison-v2-run-003/return_evidence.json",
+      "sha256": "b593a03cbdd4edd4ceb09b035312713df555cd71a5662c757dd8f0e13b1c6f71"
+    },
+    {
+      "byte_length": 2322,
+      "path": "research/m3a/walk_forward_protocol.json",
+      "sha256": "61b32d4ee18e252552c92619c8464cd20b306e313393b0c86cbbbb2093a1c160"
+    },
+    {
+      "byte_length": 2024,
+      "path": "research/m3a/walk_forward_protocol_v2.json",
+      "sha256": "2483380bd606691181c15b8bfcecd5329e76ab1774c89404180fe8a5bb3627a8"
+    },
+    {
+      "byte_length": 2629,
+      "path": "research/m3b/README.md",
+      "sha256": "ef9c88ad812ca2dc83c6943a2d03943ae9908b52530b7b6b13c8a9d92502a608"
+    },
+    {
+      "byte_length": 1943,
+      "path": "research/m3b/artifact_annotations.jsonl",
+      "sha256": "cf96cfb064fa33265059f379a9902d6e8040335e37e81f36ed059d9231bcdaba"
+    },
+    {
+      "byte_length": 741,
+      "path": "research/m3b/artifact_errata.jsonl",
+      "sha256": "2e3d18f9b5a34440adfbaf08a8979b793be2b69f3ac49200278e395c6d8bd3b8"
+    },
+    {
+      "byte_length": 2064,
+      "path": "research/m3b/errata/m3b-run001-report-cost-monotonicity-v1.json",
+      "sha256": "1493996ca0dd7b2b4e182696ed2a6c78da772c1d2d40d14086db4b990eae2989"
+    },
+    {
+      "byte_length": 2064,
+      "path": "research/m3b/errata/m3b-run001-report-cost-monotonicity-v1.md",
+      "sha256": "7e1f4ba86b79127300e0297f43395ea0303d41aca84a651cd4af4866abd6396e"
+    },
+    {
+      "byte_length": 20207,
+      "path": "research/m3b/execution_trace_commitments.json",
+      "sha256": "be1d295c137c20e57efc56a388d6faedb3044972502e302a43fd3bca0ac8672c"
+    },
+    {
+      "byte_length": 5594,
+      "path": "research/m3b/experiment_registry.jsonl",
+      "sha256": "204e66d21e41d0ca5af6620fd71af89ce561085a21b59a3e4786238bfa1e3eb9"
+    },
+    {
+      "byte_length": 1068,
+      "path": "research/m3b/experiments/run-001/immutable-v2/archive_v2.json",
+      "sha256": "b9f8100cf699886a399247b5922a76e667474eb9171b7fcd40d5bafdaab1bd52"
+    },
+    {
+      "byte_length": 7070,
+      "path": "research/m3b/experiments/run-001/immutable-v2/fractional_report.md",
+      "sha256": "68501639e7ba0660c7114c5b502861996b25bc0dff7e136500f4aca28260ae96"
+    },
+    {
+      "byte_length": 82041,
+      "path": "research/m3b/experiments/run-001/immutable-v2/fractional_results.json",
+      "sha256": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc"
+    },
+    {
+      "byte_length": 752,
+      "path": "research/m3b/experiments/run-001/manifest.json",
+      "sha256": "d91ac46e58b8650da8e15fad19ec83520de0ada1989f0c5b16268e91fe82ca36"
+    },
+    {
+      "byte_length": 2499,
+      "path": "research/m3b/fractional_protocol.json",
+      "sha256": "9c1e00eca5e8e58ce88e05d0b4ccdb71b34f798afe72cda3e9c88dee5641d4b6"
+    },
+    {
+      "byte_length": 7070,
+      "path": "research/m3b/fractional_report.md",
+      "sha256": "68501639e7ba0660c7114c5b502861996b25bc0dff7e136500f4aca28260ae96"
+    },
+    {
+      "byte_length": 82041,
+      "path": "research/m3b/fractional_results.json",
+      "sha256": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc"
+    },
+    {
+      "byte_length": 1113,
+      "path": "research/m3b/run001_legacy_completion_audit.json",
+      "sha256": "3ee1965ad57e9aff59937cd49cf56f8cd209ac49b3a2dbf7b1fda2cc9731e475"
+    },
+    {
+      "byte_length": 4521,
+      "path": "research/m3c/README.md",
+      "sha256": "530327650f68262a14cb772da09caf132906715326f7fb9688100e9753e81a69"
+    },
+    {
+      "byte_length": 5623,
+      "path": "research/m3c/candidate_decision.json",
+      "sha256": "f1b76101f2bb137036fd7b78c9d7ef2ad7a085b0e605ba0552bff939a9bdbc55"
+    },
+    {
+      "byte_length": 10240,
+      "path": "research/m3c/candidate_report.md",
+      "sha256": "f0e776aecec3d91f3af5288bc54eaf9d4731c72516fd1075ffb8b5ef0d260e54"
+    },
+    {
+      "byte_length": 106964,
+      "path": "research/m3c/candidate_results.json",
+      "sha256": "4db76efb923bc209e4354afabad897ea084ea2bbafb9e0f11b0a4a49961e00fc"
+    },
+    {
+      "byte_length": 8285,
+      "path": "research/m3c/experiment_registry.jsonl",
+      "sha256": "d31ceff78e7901095634a39ee3d2a45ea5d05070fcb92354172f3915916d46eb"
+    },
+    {
+      "byte_length": 949,
+      "path": "research/m3c/experiments/run-001/manifest.json",
+      "sha256": "1fdf1f779732f48218aed8a9e851c8b1aa49bf73cb32b0e3233fe3d4dd4e7d47"
+    },
+    {
+      "byte_length": 2082,
+      "path": "research/m3c/protocol.json",
+      "sha256": "86f2245cc3621bac85c80fa9b87ab3e0b87cc3d8ef7ff2dd00b4188b01c86be9"
+    },
+    {
+      "byte_length": 628,
+      "path": "research/m3c/research_budget.json",
+      "sha256": "81706025850427f35aee70fcc1d135faa7ef68a9b4b48ee481ace5b7b47405af"
+    },
+    {
+      "byte_length": 7827,
+      "path": "research/m3c/research_lineage.json",
+      "sha256": "57cfd3a3aa180ab5c3b68b0da0cd11f0fcc99b3ea46f3c31b829e81f5e919f40"
+    },
+    {
+      "byte_length": 2688,
+      "path": "research/m3d/README.md",
+      "sha256": "b11bfec68aabd408caf81859a739b41d569914b66d6162c7336d509c9a6b6283"
+    },
+    {
+      "byte_length": 0,
+      "path": "research/m3d/prospective_evaluations.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "byte_length": 3723,
+      "path": "research/m3d/prospective_manifest.json",
+      "sha256": "24457fb92a300b28cf5343283be9d39772cd599ec16e641235fd9cc0bc1be4b4"
+    },
+    {
+      "byte_length": 2060,
+      "path": "research/m3d/prospective_protocol.json",
+      "sha256": "cb08396babb1d8c8c454b5eae12210ff0a0edf17ebafb55688de341d280094a5"
+    },
+    {
+      "byte_length": 1616,
+      "path": "research/m3d/prospective_quality.json",
+      "sha256": "f39929484784db99af4ec314f25cfc7cf6e5eef73d9cc43834b47e2f32e7c0eb"
+    },
+    {
+      "byte_length": 1101,
+      "path": "research/m3d/prospective_segments.jsonl",
+      "sha256": "05cd7b84c06aac9b02f2843dd3ae04d6a9a03f87e23ed432ed0e3497e53aef20"
+    },
+    {
+      "byte_length": 850,
+      "path": "research/m3d/publication_manifest.json",
+      "sha256": "aea4c96b9d6e90e2faf96d0bea52f8775306816a1ec18d5f0158b7d703ad1f65"
+    },
+    {
+      "byte_length": 1214,
+      "path": "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-audit-002/acquisition_plan.json",
+      "sha256": "0ebce837f7b1c998c15c08bb344980e2c38c0458ae3ceec297498231620f01dd"
+    },
+    {
+      "byte_length": 1117,
+      "path": "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-audit-002/acquisition_receipt.json",
+      "sha256": "22ac66312a74a8ccb3cfd5312bf821d7c1dc2351135caf1df18479f2cbdf8cc0"
+    },
+    {
+      "byte_length": 183,
+      "path": "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-audit-002/coinbase-eth-usd-1d_0000_20260712_20260715.json",
+      "sha256": "866e7b5d77ecd2ec5baf05493e7048b869a88b202bbc6185c70d5af8702355ae"
+    },
+    {
+      "byte_length": 1216,
+      "path": "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-genesis-001/acquisition_plan.json",
+      "sha256": "afc04259f7fb758b76683fa5f63ca93d654d7348829a330028d606ebd93d88b4"
+    },
+    {
+      "byte_length": 1119,
+      "path": "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-genesis-001/acquisition_receipt.json",
+      "sha256": "966808bb14f9b1059773fa4cc2f6b2389cce498e5bb0ce2fb7c7967511679536"
+    },
+    {
+      "byte_length": 183,
+      "path": "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-genesis-001/coinbase-eth-usd-1d_0000_20260712_20260715.json",
+      "sha256": "866e7b5d77ecd2ec5baf05493e7048b869a88b202bbc6185c70d5af8702355ae"
+    },
+    {
+      "byte_length": 1185,
+      "path": "research/m3d/reacquisition_audit.json",
+      "sha256": "d4ff04a86d755c1c6dcd132ce26265169d232e22d962c22bb162ed7ec7fb4d42"
+    },
+    {
+      "byte_length": 5731,
+      "path": "research/m3d/research_data_use.jsonl",
+      "sha256": "0f061a11c832a369f226ea8d3845652ed7c67b7878cfca908db0da54b7ab62e4"
+    },
+    {
+      "byte_length": 14439,
+      "path": "research/m3d/research_multiplicity.jsonl",
+      "sha256": "29c39c7898fb9d430ed9bce7841fc26f67352d2dbe17decb3b72943b2283890f"
+    },
+    {
+      "byte_length": 6644,
+      "path": "research/m3d/research_program_snapshot.json",
+      "sha256": "b2f8d978a3d9e15d612231beb39db114bef13688c75332f5670873680b39feb4"
+    },
+    {
+      "byte_length": 7014,
+      "path": "research/m3d/research_specification_catalog.json",
+      "sha256": "e7c9cacb181857180c0e6005e596f1b72be7b2df2de9fd86039010d189d69d72"
+    },
+    {
+      "byte_length": 1875,
+      "path": "research/m3d/research_train_exhaustion.json",
+      "sha256": "693800379aed38067d4732ebd6c89557b3dcee2cbbc67d28dda5b9be435a7db5"
+    },
+    {
+      "byte_length": 2774,
+      "path": "research/m3e/AUDIT_MODE_EVIDENCE.md",
+      "sha256": "53b783a4d0a56bdc7593702ca6a224e1eea135603ba2b4a7b6a2bbf0531084f5"
+    },
+    {
+      "byte_length": 1828,
+      "path": "research/m3e/README.md",
+      "sha256": "8d1703570d1156b07d8258f864a317b5cc46df35100744a41846c47abb2045b9"
+    },
+    {
+      "byte_length": 1769,
+      "path": "research/m3e/accepted_base.json",
+      "sha256": "ff6c382ffd9b823c7ff0feff33ca6c56828f5aeaeb43336cfe2b2459bba28990"
+    },
+    {
+      "byte_length": 529,
+      "path": "research/m3e/proposal_registry.jsonl",
+      "sha256": "18ab31d0b3534189ad8c9687040612b8c7cb42c873a44656c20e77f672584181"
+    }
+  ],
+  "governed_root": "research",
+  "package_version": "0.9.0",
+  "reconstruction_note": "private break-glass bundle; rebuild from these bytes and re-run the M3F verifiers — carries no sealed-partition contents, secret, or credential",
+  "schema_version": 1,
+  "sealed_ledger_count": 3,
+  "sealed_ledgers_included_empty": [
+    "research/m2b/test_evaluations.jsonl",
+    "research/m3a/development_gate_access.jsonl",
+    "research/m3d/prospective_evaluations.jsonl"
+  ]
+}
