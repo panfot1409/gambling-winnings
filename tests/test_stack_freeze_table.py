@@ -1,11 +1,16 @@
 """Immutable freeze-table verifier for the M3C-M3E stacked-acceptance audit.
 
 ``docs/M3C_M3E_STACK_FREEZE_TABLE.json`` snapshots the byte hash, length, mode, and
-classification of every committed ``research/**`` artifact at the stacked head. This
-test re-derives those hashes from the working tree and proves the table still binds —
-a drift-detection **acceptance aid**, not a replacement for the canonical per-milestone
-verifiers named in each row's ``verifier_authority`` (``verify_m3d_program``,
+classification of every committed ``research/**`` artifact of the accepted M2B-M3E
+stack. This test re-derives those hashes from the working tree and proves the table
+still binds — a drift-detection **acceptance aid**, not a replacement for the canonical
+per-milestone verifiers named in each row's ``verifier_authority`` (``verify_m3d_program``,
 ``m3c.verify_archive``, ``fractional.replay``, etc.), which remain the authorities.
+
+The strictly-later ``research/m3f/`` verification/recovery layer is out of scope here:
+it sits *above* the accepted stack and self-verifies through its own freeze catalog and
+the ``eth_research.m3f.audit`` / ``tools/m3f_independent_verify.py`` verifiers — mirroring
+the ``M3F_LAYER_PREFIX`` exclusion the M3F catalog itself applies (``m3f/catalog.py``).
 """
 
 from __future__ import annotations
@@ -34,6 +39,12 @@ def test_freeze_table_covers_every_research_file() -> None:
             ["git", "-C", str(REPO_ROOT), "ls-files", "research"], text=True
         ).split()
     )
+    # The strictly-later M3F verification/recovery layer is out of scope for this accepted
+    # M2B-M3E stack snapshot: it self-verifies through its own freeze catalog and the
+    # eth_research.m3f.audit / tools/m3f_independent_verify.py verifiers. This mirrors the
+    # M3F_LAYER_PREFIX exclusion the M3F catalog applies to the accepted stack it verifies
+    # (src/eth_research/m3f/catalog.py).
+    tracked = {p for p in tracked if not p.startswith("research/m3f/")}
     listed = {row["path"] for row in _table()["files"]}
     assert listed == tracked, f"table drift: missing={tracked - listed}, extra={listed - tracked}"
 
