@@ -74,7 +74,8 @@ jobs:
             tests/test_cli.py tests/test_docs_examples.py \
             tests/test_m4a_snapshots.py tests/test_m4a_security.py \
             tests/test_m4a_misuse.py tests/test_m4a_performance.py \
-            tests/test_m4a_redteam_hardening.py tests/test_m4a_release.py \
+            tests/test_m4a_redteam_hardening.py tests/test_m4a_acceptance_hardening.py \
+            tests/test_m4a_release.py \
             tests/test_packaging.py tests/test_consumer_e2e.py
       - name: Verification mutated no tracked file
         run: |

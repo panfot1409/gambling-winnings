@@ -32,8 +32,8 @@
     },
     {
       "path": "eth_research/api/config.py",
-      "sha256": "f2f773475cd9534519113b01357b00756799c2dbad83b69b16407b0412677c8b",
-      "size": 14686
+      "sha256": "a15b120e1fe74b5d66e31a5b0cf5dda8712f93bd60d5fdb07c7df028f5e72010",
+      "size": 16201
     },
     {
       "path": "eth_research/api/dataset.py",
@@ -52,8 +52,8 @@
     },
     {
       "path": "eth_research/api/orchestrate.py",
-      "sha256": "f654f6fff5a8551f0d42e49b587c443a30e090c022464c0475c15c619a0ae4a2",
-      "size": 8456
+      "sha256": "db62aff62b947dd7856fb2623d71b665222c62bea3868f08d2242a305a92e8fe",
+      "size": 9233
     },
     {
       "path": "eth_research/api/publish.py",
@@ -107,8 +107,8 @@
     },
     {
       "path": "eth_research/cli/app.py",
-      "sha256": "02c408dd0a8507ce81d11d74c8dd6d8598a31d6e526194f22c46f00b4e66e811",
-      "size": 19372
+      "sha256": "695f37ed972013323a426005800b1d354afe40cf7a88d3aa1ade03996ab4e468",
+      "size": 19872
     },
     {
       "path": "eth_research/costs.py",
@@ -913,7 +913,7 @@
   ],
   "member_count": 181,
   "package": "eth-research",
-  "package_tree_sha256": "6b7435fd2cf350645fa0072f6cc99ae0e6d2c1dbc3dfa15611c44aa069a6c89d",
+  "package_tree_sha256": "e4ac2230742d7255daafb23f01708af072ae4acf98cea33608c2696d8a141de2",
   "release_schema_version": 1,
   "sdist_extra_members": [
     ".gitignore",

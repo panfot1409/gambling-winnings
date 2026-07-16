@@ -65,6 +65,39 @@ _FORBIDDEN_IMPORTS = frozenset(
         "pickle",
         "marshal",
         "ctypes",
+        "runpy",
+        "selenium",
+        "playwright",
+        "keyring",
+    }
+)
+# The subset that is specifically a network / exchange / wallet CLIENT (a capability that could
+# reach a network or a venue). ``subprocess``/``runpy``/``pickle``/… are dynamic-execution /
+# serialization risks, not network clients, so they are excluded here: the offline-import-closure
+# guarantee (below) is about *reaching the network*, and the accepted git-provenance helper's
+# ``subprocess`` use is git tooling, not a network client.
+_NETWORK_CLIENT_IMPORTS = frozenset(
+    {
+        "socket",
+        "ssl",
+        "http",
+        "urllib",
+        "ftplib",
+        "smtplib",
+        "telnetlib",
+        "requests",
+        "httpx",
+        "aiohttp",
+        "websocket",
+        "websockets",
+        "web3",
+        "eth_account",
+        "ccxt",
+        "binance",
+        "coinbase",
+        "kraken",
+        "boto3",
+        "paramiko",
         "selenium",
         "playwright",
         "keyring",
@@ -77,7 +110,19 @@ _FORBIDDEN_ATTR_CALLS = frozenset(
     {
         "os.system",
         "os.popen",
+        "os.execv",
+        "os.execve",
+        "os.execvp",
+        "os.execvpe",
+        "os.spawnv",
+        "os.spawnve",
+        "os.spawnl",
+        "os.spawnlp",
         "importlib.import_module",
+        "importlib.util.spec_from_file_location",
+        "runpy.run_path",
+        "runpy.run_module",
+        "builtins.__import__",
         "subprocess.run",
         "subprocess.Popen",
         "subprocess.call",
@@ -92,7 +137,12 @@ _FORBIDDEN_FROM_IMPORTS = frozenset(
     {
         ("os", "system"),
         ("os", "popen"),
+        ("os", "execv"),
+        ("os", "execvp"),
         ("importlib", "import_module"),
+        ("importlib.util", "spec_from_file_location"),
+        ("runpy", "run_path"),
+        ("runpy", "run_module"),
         ("subprocess", "run"),
         ("subprocess", "Popen"),
         ("subprocess", "call"),
@@ -192,3 +242,61 @@ def test_api_import_closure_is_offline_and_dependency_bounded() -> None:
         if top.startswith("_"):  # C accelerators such as _hashlib
             continue
         raise AssertionError(f"unexpected import pulled in by eth_research.api: {name}")
+
+
+def _network_client_imports(path: Path) -> list[str]:
+    """Every network/exchange/wallet-client import statement in one source file."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    findings: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".")[0] in _NETWORK_CLIENT_IMPORTS:
+                    findings.append(f"{path.name}: network-client import {alias.name}")
+        elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in (
+            _NETWORK_CLIENT_IMPORTS
+        ):
+            findings.append(f"{path.name}: network-client import-from {node.module}")
+    return findings
+
+
+def test_full_import_closure_first_party_reaches_no_network_client() -> None:
+    """No first-party module reachable from importing the public API + CLI imports a network /
+    exchange / wallet client.
+
+    This covers the *entire* transitive first-party closure — including accepted governance
+    modules pulled in indirectly (e.g. ``eth_research.gitcheck``, ``eth_research.ledger``), which
+    the hand-listed source scan above does not visit. Those accepted modules legitimately use
+    ``subprocess`` to invoke *git* (not the network) and are exempt from the subprocess ban only;
+    they must still never import a network client, which is what this test proves for the whole
+    reachable set. So the ``socket``/``urllib`` that appear in ``sys.modules`` after the import
+    come from pandas/pyarrow, never from an ``eth_research`` module.
+    """
+    import importlib
+
+    # Measuring a *precise* closure means clearing eth_research from sys.modules and
+    # re-importing only the public entry points. That is destructive to module identity, so
+    # snapshot the loaded eth_research modules first and restore them in the finally: without
+    # this, the freshly re-imported class objects left behind would poison a later test's
+    # ``isinstance`` checks (e.g. protocol.SegmentMetrics / dossier.IndependentAuditRecord),
+    # which run against objects built from the pre-test class identities.
+    saved = {name: mod for name, mod in sys.modules.items() if name.startswith("eth_research")}
+    try:
+        for name in list(sys.modules):
+            if name.startswith("eth_research"):
+                del sys.modules[name]
+        importlib.import_module("eth_research.api")
+        importlib.import_module("eth_research.cli.app")
+
+        findings: list[str] = []
+        for name, module in sorted(sys.modules.items()):
+            if not name.startswith("eth_research"):
+                continue
+            file = getattr(module, "__file__", None)
+            if file and file.endswith(".py"):
+                findings.extend(_network_client_imports(Path(file)))
+        assert findings == [], "\n".join(findings)
+    finally:
+        for name in [n for n in sys.modules if n.startswith("eth_research")]:
+            del sys.modules[name]
+        sys.modules.update(saved)

@@ -12,6 +12,7 @@ at the governed ``research/`` roots — the config parser already refuses such p
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -104,10 +105,30 @@ def _select_segment(
     if split.evaluate == "train":
         return splits.train, None, spec
     if split.evaluate == "validation":
-        context = splits.validation_context(split.context_bars) if split.context_bars > 0 else None
+        context = _context_for(splits.validation_context, split.context_bars, "validation")
         return splits.validation, context, spec
-    context = splits.test_context(split.context_bars) if split.context_bars > 0 else None
+    context = _context_for(splits.test_context, split.context_bars, "test")
     return splits.test, context, spec
+
+
+def _context_for(
+    build: Callable[[int], DatasetHandle], context_bars: int, segment: str
+) -> DatasetHandle | None:
+    """Build a warm-up context, translating an over-large request into the taxonomy.
+
+    ``context_bars`` greater than the available preceding rows is *caller input* (a config
+    field), so it must surface as a ``DatasetError`` — not a bare ``ValueError`` that the CLI
+    would mislabel as an internal (exit 70) crash.
+    """
+    if context_bars <= 0:
+        return None
+    try:
+        return build(context_bars)
+    except (ValueError, TypeError) as exc:
+        raise DatasetError(
+            f"split.context_bars={context_bars} exceeds the rows available before the "
+            f"{segment} segment: {exc}"
+        ) from exc
 
 
 def render_report(result: ResearchResult) -> str:

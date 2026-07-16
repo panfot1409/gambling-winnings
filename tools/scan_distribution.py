@@ -71,13 +71,19 @@ def _path_failures(name: str) -> list[str]:
 
 
 def _case_collisions(names: Iterable[str]) -> list[str]:
-    seen: dict[str, str] = {}
+    seen_lower: dict[str, str] = {}
+    seen_exact: set[str] = set()
     failures: list[str] = []
     for name in names:
+        # An exact-duplicate member name is a zip/tar-confusion / supply-chain-ambiguity hazard
+        # even when both copies are otherwise allowed; flag it alongside case collisions.
+        if name in seen_exact:
+            failures.append(f"duplicate member path: {name!r}")
+        seen_exact.add(name)
         key = name.lower()
-        if key in seen and seen[key] != name:
-            failures.append(f"case-colliding paths: {seen[key]!r} vs {name!r}")
-        seen.setdefault(key, name)
+        if key in seen_lower and seen_lower[key] != name:
+            failures.append(f"case-colliding paths: {seen_lower[key]!r} vs {name!r}")
+        seen_lower.setdefault(key, name)
     return failures
 
 
@@ -92,9 +98,15 @@ def _is_pure_python_package_file(name: str) -> bool:
     return basename in _PACKAGE_FILE_BASENAMES or name.endswith(_PACKAGE_FILE_SUFFIXES)
 
 
+# The metadata files a pure-Python wheel's ``.dist-info/`` legitimately carries. Admitting the
+# whole directory unconditionally would let a metadata hook / ``license-files`` glob smuggle a
+# data file into ``dist-info/licenses/…``; only these exact basenames are metadata.
+_DIST_INFO_BASENAMES = frozenset({"METADATA", "WHEEL", "RECORD", "entry_points.txt"})
+
+
 def _wheel_member_allowed(name: str) -> bool:
     if name.startswith("eth_research-") and ".dist-info/" in name:
-        return True
+        return name.rsplit("/", 1)[-1] in _DIST_INFO_BASENAMES
     if name.startswith("eth_research/"):
         return _is_pure_python_package_file(name)
     return False

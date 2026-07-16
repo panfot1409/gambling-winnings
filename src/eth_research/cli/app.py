@@ -113,7 +113,10 @@ def _reject_governed_output(output: Path) -> None:
     resolved = output.resolve()
     if any(part.casefold() == ".git" for part in resolved.parts):
         raise OutputCollisionError("refusing to write into a .git directory")
-    for root in _governed_output_roots(Path.cwd()):
+    # Anchor the governed-root search to the *resolved output*, not the process working
+    # directory: a run launched from outside the repository (cwd elsewhere) must still be
+    # refused when its output lands inside this repository's governed ``research/`` tree.
+    for root in _governed_output_roots(resolved):
         if resolved.is_relative_to(root):
             raise OutputCollisionError(
                 f"refusing to write into the governed path {root.name}/ "
@@ -259,6 +262,7 @@ def cmd_dataset_validate(args: argparse.Namespace) -> int:
 
 
 def cmd_dataset_build(args: argparse.Namespace) -> int:
+    _reject_governed_output(Path(args.output))
     artifacts = build_canonical_dataset(
         args.input,
         args.output,
@@ -349,9 +353,12 @@ def cmd_result_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_receipt_verify(args: argparse.Namespace) -> int:
-    receipt = RunReceipt.from_json_bytes(
-        _read_bytes(args.receipt, ReceiptVerificationError, "receipt")
-    )
+    receipt_raw = _read_bytes(args.receipt, ReceiptVerificationError, "receipt")
+    receipt = RunReceipt.from_json_bytes(receipt_raw)
+    if receipt.to_json_bytes() != receipt_raw:
+        raise ReceiptVerificationError(
+            "receipt is not in canonical form (re-serialization differs)"
+        )
     result_bytes = _read_bytes(args.result, ReceiptVerificationError, "result")
     report_bytes = (
         _read_bytes(args.report, ReceiptVerificationError, "report") if args.report else None

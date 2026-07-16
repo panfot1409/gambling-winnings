@@ -156,11 +156,14 @@ class FileDatasetConfig:
         _exact_keys(
             data, {"path", "interval_seconds", "assume_utc", "allow_extra_columns"}, "dataset.file"
         )
+        interval_seconds = require_int(
+            data.get("interval_seconds"), "dataset.file.interval_seconds"
+        )
+        if interval_seconds <= 0:
+            raise CanonicalError("dataset.file.interval_seconds: must be a positive integer")
         return cls(
             path=_safe_rel_path(data.get("path"), "dataset.file.path"),
-            interval_seconds=require_int(
-                data.get("interval_seconds"), "dataset.file.interval_seconds"
-            ),
+            interval_seconds=interval_seconds,
             assume_utc=require_bool(data.get("assume_utc", False), "dataset.file.assume_utc"),
             allow_extra_columns=require_bool(
                 data.get("allow_extra_columns", False), "dataset.file.allow_extra_columns"
@@ -217,12 +220,27 @@ class SplitConfig:
         context_bars = require_int(data.get("context_bars", 0), "split.context_bars")
         if context_bars < 0:
             raise CanonicalError("split.context_bars: must be non-negative")
+        train_fraction = _require_number(data.get("train_fraction", 0.6), "split.train_fraction")
+        validation_fraction = _require_number(
+            data.get("validation_fraction", 0.2), "split.validation_fraction"
+        )
+        # Range-validate here (a taxonomy ConfigurationError) rather than letting the later
+        # ChronologicalSplitSpec construction leak a raw CanonicalError as an internal error.
+        for label, fraction in (
+            ("train_fraction", train_fraction),
+            ("validation_fraction", validation_fraction),
+        ):
+            if not 0.0 < fraction < 1.0:
+                raise CanonicalError(f"split.{label}: must be strictly between 0 and 1")
+        if train_fraction + validation_fraction >= 1.0:
+            raise CanonicalError(
+                "split.train_fraction + split.validation_fraction must be < 1 "
+                "(test is the remainder)"
+            )
         return cls(
             enabled=require_bool(data.get("enabled", False), "split.enabled"),
-            train_fraction=_require_number(data.get("train_fraction", 0.6), "split.train_fraction"),
-            validation_fraction=_require_number(
-                data.get("validation_fraction", 0.2), "split.validation_fraction"
-            ),
+            train_fraction=train_fraction,
+            validation_fraction=validation_fraction,
             evaluate=evaluate,
             context_bars=context_bars,
         )
@@ -302,6 +320,17 @@ class RunConfig:
         engine = require_str(data.get("engine"), "config.engine")
         if engine not in ENGINES:
             raise CanonicalError(f"config.engine: expected one of {ENGINES}")
+        # Enforce exact keys on the strategy and costs objects too (the other blocks already do):
+        # otherwise an unknown key such as a plausible ``costs.fee_rate`` override is silently
+        # dropped while the receipt's config_sha256 still attests to the bytes that contain it.
+        _exact_keys(
+            require_mapping(data.get("strategy"), "config.strategy"),
+            {"kind", "params"},
+            "config.strategy",
+        )
+        _exact_keys(
+            require_mapping(data.get("costs"), "config.costs"), {"scenario"}, "config.costs"
+        )
         strategy = StrategySpec.from_dict(data.get("strategy"))
         costs = CostSpec.from_dict(data.get("costs"))
         valid_scenarios = BINARY_COST_SCENARIOS if engine == "binary" else FRACTIONAL_COST_SCENARIOS
