@@ -1,0 +1,33 @@
+{
+  "all_failure_drills_detected": true,
+  "capsule_digest": "d59b2592fd570d86e53ab48985f00a3e51dbeb312cd55477cc788ec381c82a7c",
+  "capsule_file_count": 118,
+  "failure_drills": [
+    {
+      "detected": true,
+      "name": "broken_registry_chain"
+    },
+    {
+      "detected": true,
+      "name": "dropped_file"
+    },
+    {
+      "detected": true,
+      "name": "flipped_byte"
+    },
+    {
+      "detected": true,
+      "name": "injected_proposal"
+    },
+    {
+      "detected": true,
+      "name": "nonempty_sealed_ledger"
+    }
+  ],
+  "package_version": "0.9.0",
+  "reconstruction_byte_reproduced": true,
+  "reconstruction_honest_state_derived": true,
+  "reconstruction_ok": true,
+  "reconstruction_oracles_ok": true,
+  "schema_version": 1
+}
