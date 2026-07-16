@@ -122,6 +122,14 @@ _COINBASE_HOST_RE = re.compile(r"(?:https?://[^\s\"']*)?coinbase\.(?:com|pro)\b"
 _WRITE_PERM_RE = re.compile(
     r"^\s*[A-Za-z_-]+\s*:\s*['\"]?write(?:-all)?['\"]?\s*(?:#.*)?$", re.MULTILINE
 )
+# A YAML anchor bound directly to a write value (``&w write``) — aliased later
+# (``contents: *w``) to dodge the literal ``: write`` match. A read-only workflow has
+# no legitimate reason to anchor a write scalar. (A block-level anchor still exposes a
+# literal ``contents: write`` line, which ``_WRITE_PERM_RE`` catches; this closes the
+# scalar-alias vector. A regex scan cannot fully parse arbitrary YAML or recurse into a
+# remote reusable workflow — that irreducible residual is documented in the threat model
+# and backstopped by branch protection + mandatory human review.)
+_ANCHOR_WRITE_RE = re.compile(r"&[\w-]+\s+['\"]?write(?:-all)?\b", re.IGNORECASE)
 # A repository secret reference in either dotted (``secrets.X``) or index
 # (``secrets['X']``) form, or a wholesale ``secrets: inherit`` hand-off.
 _SECRETS_RE = re.compile(r"secrets\s*[.\[]|secrets\s*:\s*inherit", re.IGNORECASE)
@@ -235,6 +243,8 @@ def _no_unsafe_workflow(repo_root: str | Path) -> None:
             raise M3EValidationError(f"{path.name} grants write-all permissions at HEAD")
         if _WRITE_PERM_RE.search(text):
             raise M3EValidationError(f"{path.name} grants a write permission at HEAD")
+        if _ANCHOR_WRITE_RE.search(text):
+            raise M3EValidationError(f"{path.name} anchors a write permission value at HEAD")
         if _COINBASE_HOST_RE.search(text):
             raise M3EValidationError(f"{path.name} contacts a Coinbase host at HEAD")
         if _SECRETS_RE.search(text):

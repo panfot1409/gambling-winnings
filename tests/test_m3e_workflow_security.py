@@ -138,11 +138,53 @@ def test_a_clean_read_only_workflow_passes_the_scanner(tmp_path: Path) -> None:
             "name: x\non: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n"
             "    steps:\n      - run: echo hi\n",
         ),
+        (
+            "anchor-alias-write",
+            "name: x\non: push\n_w: &w write\npermissions:\n  contents: *w\njobs:\n  j:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        ),
+        (
+            "anchor-alias-write-all",
+            "name: x\non: push\n_w: &w write-all\npermissions: *w\njobs:\n  j:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        ),
+        (
+            "block-anchor-literal-write",
+            "name: x\non: push\n_p: &p\n  contents: write\npermissions: *p\njobs:\n  j:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        ),
+        ("pull-requests-write", _SAFE + "permissions:\n  pull-requests: write\n"),
+        ("id-token-write", _SAFE + "permissions:\n  id-token: write\n"),
+        ("packages-write", _SAFE + "permissions:\n  packages: write\n"),
+        ("deployments-write", _SAFE + "permissions:\n  deployments: write\n"),
+        ("checks-write", _SAFE + "permissions:\n  checks: write\n"),
+        (
+            "multiline-run-force-push",
+            _SAFE + "      - run: |\n          set -e\n          git push -f origin main\n",
+        ),
+        (
+            "job-level-write-all",
+            "name: x\non: push\npermissions:\n  contents: read\njobs:\n  j:\n"
+            "    permissions: write-all\n    runs-on: ubuntu-latest\n"
+            "    steps:\n      - run: echo hi\n",
+        ),
     ],
 )
 def test_hardened_scanner_rejects_each_evasion(label: str, body: str, tmp_path: Path) -> None:
     with pytest.raises(M3EValidationError):
         _scan_body(tmp_path, body)
+
+
+def test_scanner_covers_the_yaml_extension_too(tmp_path: Path) -> None:
+    # A hostile workflow using the .yaml (not .yml) extension is still scanned.
+    wf = tmp_path / ".github/workflows"
+    wf.mkdir(parents=True)
+    (wf / "hostile.yaml").write_text(
+        "name: x\non: push\npermissions:\n  contents: write\njobs:\n  j:\n"
+        "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n"
+    )
+    with pytest.raises(M3EValidationError):
+        _no_unsafe_workflow(tmp_path)
 
 
 @pytest.mark.parametrize(

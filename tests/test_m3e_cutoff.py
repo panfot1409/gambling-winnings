@@ -71,3 +71,43 @@ def test_the_window_end_never_includes_the_forming_candle(base: AcceptedProspect
     decision = plan_update_window(base, "2026-07-16T12:00:00Z")
     assert decision.window_end == "2026-07-16T00:00:00Z"
     assert decision.expected_new_buckets == 1  # only 07-15 is completed
+
+
+# --------------------------------------------------------------------------- #
+# audit §12 — clock/cutoff boundary adversarial matrix                        #
+# --------------------------------------------------------------------------- #
+def test_cutoff_is_exact_floor_to_utc_midnight_at_boundaries(base: AcceptedProspectiveBase) -> None:
+    # The completed-day exclusive end is floor_to_utc_midnight(as_of) exactly — the
+    # forming candle (the as_of day, whenever after its own midnight) is always excluded.
+    cases = {
+        "2026-07-16T00:00:00Z": "2026-07-16T00:00:00Z",  # exact midnight
+        "2026-07-16T00:00:00.000001Z": "2026-07-16T00:00:00Z",  # 1us after midnight
+        "2026-07-16T23:59:59.999999Z": "2026-07-16T00:00:00Z",  # 1us before next midnight
+        "2027-01-01T00:00:01Z": "2027-01-01T00:00:00Z",  # year transition
+        "2028-02-29T12:00:00Z": "2028-02-29T00:00:00Z",  # leap day
+    }
+    for as_of, expected_end in cases.items():
+        decision = plan_update_window(base, as_of)
+        assert decision.completed_day_exclusive_end == expected_end, as_of
+
+
+def test_one_microsecond_before_the_first_due_midnight_is_a_noop(
+    base: AcceptedProspectiveBase,
+) -> None:
+    # 2026-07-15 completes at 2026-07-16T00:00:00Z; one microsecond before is still a NO-OP.
+    decision = plan_update_window(base, "2026-07-15T23:59:59.999999Z")
+    assert decision.is_noop is True
+
+
+def test_one_microsecond_after_the_first_due_midnight_is_due(
+    base: AcceptedProspectiveBase,
+) -> None:
+    decision = plan_update_window(base, "2026-07-16T00:00:00.000001Z")
+    assert decision.is_noop is False
+    assert decision.completed_day_exclusive_end == "2026-07-16T00:00:00Z"
+
+
+def test_a_malformed_as_of_is_rejected(base: AcceptedProspectiveBase) -> None:
+    for bad in ("not-a-timestamp", "2026-13-01T00:00:00Z", "2026-07-16T24:00:00Z", ""):
+        with pytest.raises((M3EValidationError, ValueError)):
+            plan_update_window(base, bad)
