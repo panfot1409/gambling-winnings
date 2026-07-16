@@ -81,8 +81,9 @@ def test_stray_file_under_research_m3f_is_caught(registered_clone: Path) -> None
 
 
 def test_later_layer_research_m4a_is_not_orphaned(registered_clone: Path) -> None:
-    # A later release-candidate layer must not trip the accepted-stack anti-orphan.
-    (registered_clone / "research/m4a").mkdir()
+    # A later release-candidate layer must not trip the accepted-stack anti-orphan. The
+    # M4A layer now genuinely ships research/m4a/, so tolerate the pre-existing directory.
+    (registered_clone / "research/m4a").mkdir(parents=True, exist_ok=True)
     (registered_clone / "research/m4a/state.json").write_text("{}\n", encoding="utf-8")
     _git(registered_clone, "add", "-A")
     _git(registered_clone, "commit", "-q", "-m", "m4a layer")

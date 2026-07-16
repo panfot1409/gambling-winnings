@@ -29,6 +29,8 @@ from eth_research.api import (
     CostSpec,
     DatasetSpec,
     EthResearchError,
+    OutputCollisionError,
+    ReceiptVerificationError,
     ResearchResult,
     ResultValidationError,
     RunReceipt,
@@ -36,17 +38,87 @@ from eth_research.api import (
     build_canonical_dataset,
     generate_synthetic_dataset,
     load_canonical_dataset,
-    load_config_file,
     publish_bundle,
     run_binary_backtest,
     validate_dataset,
     verify_run_receipt,
 )
+from eth_research.api.config import load_config_source
 from eth_research.api.orchestrate import execute_config
 from eth_research.api.serialization import sha256_hex
 from eth_research.data.builder import read_raw_ohlcv
 
 _INTERNAL_EXIT = 70
+
+# Third-party network / exchange / wallet clients. The offline platform must import none of
+# them; stdlib socket/ssl/urllib pulled in transitively by numpy/pandas/pyarrow are not
+# clients and are intentionally excluded from this set.
+_NETWORK_CLIENTS = frozenset(
+    {
+        "requests",
+        "httpx",
+        "aiohttp",
+        "websocket",
+        "websockets",
+        "urllib3",
+        "ccxt",
+        "web3",
+        "eth_account",
+        "coinbase",
+        "binance",
+        "kraken",
+        "boto3",
+        "paramiko",
+        "keyring",
+        "selenium",
+        "playwright",
+    }
+)
+
+
+def _offline_capability_status() -> tuple[bool, str]:
+    """Real offline self-check: no network/exchange/wallet client is imported in-process.
+
+    Inspects the live ``sys.modules`` after the public surface (and its numeric stack) have
+    been imported. It is a genuine check — it flips to ``False`` the moment the package pulls
+    in any client that could reach a network or an exchange — not a hardcoded assertion.
+    """
+    imported = {name.split(".")[0] for name in sys.modules}
+    present = sorted(_NETWORK_CLIENTS & imported)
+    if present:
+        return False, f"network/exchange/wallet client(s) imported: {', '.join(present)}"
+    return True, "no network/exchange/wallet client is imported"
+
+
+def _governed_output_roots(start: Path) -> list[Path]:
+    """The governed roots (``research/`` and ``.git``) of the repository containing ``start``.
+
+    Empty when ``start`` is not inside a repository checkout (e.g. an installed consumer with
+    no governed research tree), so the guard never constrains an ordinary consumer directory.
+    """
+    resolved = start.resolve()
+    for base in (resolved, *resolved.parents):
+        if (base / ".git").exists():
+            return [(base / "research").resolve(), (base / ".git").resolve()]
+    return []
+
+
+def _reject_governed_output(output: Path) -> None:
+    """Refuse an operator ``--output`` that would write into governed accepted artifacts.
+
+    The config parser guards *config* paths; an operator ``--output`` override bypasses that,
+    so mirror the guard here: never write into a ``.git`` directory or into the repository's
+    governed ``research/`` tree (which holds accepted, immutable research artifacts).
+    """
+    resolved = output.resolve()
+    if any(part.casefold() == ".git" for part in resolved.parts):
+        raise OutputCollisionError("refusing to write into a .git directory")
+    for root in _governed_output_roots(Path.cwd()):
+        if resolved.is_relative_to(root):
+            raise OutputCollisionError(
+                f"refusing to write into the governed path {root.name}/ "
+                "(accepted research artifacts are immutable)"
+            )
 
 
 def _dependency_version(name: str) -> str:
@@ -99,7 +171,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         ok_pipeline = False
         detail = f"{type(exc).__name__}: {exc}"
     check("synthetic_pipeline", ok_pipeline, detail)
-    check("offline", True, "no network client is imported by the package")
+    offline_ok, offline_detail = _offline_capability_status()
+    check("offline", offline_ok, offline_detail)
 
     payload = {
         "package_version": PACKAGE_VERSION,
@@ -124,6 +197,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def cmd_demo_generate(args: argparse.Namespace) -> int:
+    _reject_governed_output(Path(args.output))
     dataset = generate_synthetic_dataset(n_periods=args.periods, seed=args.seed)
     csv_bytes = dataset.frame.reset_index().to_csv(index=False).encode("utf-8")
     config = {
@@ -228,9 +302,12 @@ def cmd_dataset_inspect(args: argparse.Namespace) -> int:
 
 def cmd_backtest_run(args: argparse.Namespace) -> int:
     config_path = Path(args.config)
-    config = load_config_file(config_path)
-    config_bytes = config_path.read_bytes()
+    # Read the config bytes exactly once, so the receipt attests to precisely the bytes that
+    # were validated (no re-read window in which the file could change).
+    config, config_bytes = load_config_source(config_path)
     output_override = Path(args.output) if args.output is not None else None
+    if output_override is not None:
+        _reject_governed_output(output_override)
     overwrite_override = True if args.overwrite else None
     outcome = execute_config(
         config,
@@ -255,7 +332,7 @@ def cmd_backtest_run(args: argparse.Namespace) -> int:
 
 
 def cmd_result_verify(args: argparse.Namespace) -> int:
-    raw = _read_bytes(args.result, EthResearchError, "result")
+    raw = _read_bytes(args.result, ResultValidationError, "result")
     result = ResearchResult.from_json_bytes(raw)
     if result.to_json_bytes() != raw:
         raise ResultValidationError("result is not in canonical form (re-serialization differs)")
@@ -272,10 +349,16 @@ def cmd_result_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_receipt_verify(args: argparse.Namespace) -> int:
-    receipt = RunReceipt.from_json_bytes(_read_bytes(args.receipt, EthResearchError, "receipt"))
-    result_bytes = _read_bytes(args.result, EthResearchError, "result")
-    report_bytes = _read_bytes(args.report, EthResearchError, "report") if args.report else None
-    config_bytes = _read_bytes(args.config, EthResearchError, "config") if args.config else None
+    receipt = RunReceipt.from_json_bytes(
+        _read_bytes(args.receipt, ReceiptVerificationError, "receipt")
+    )
+    result_bytes = _read_bytes(args.result, ReceiptVerificationError, "result")
+    report_bytes = (
+        _read_bytes(args.report, ReceiptVerificationError, "report") if args.report else None
+    )
+    config_bytes = (
+        _read_bytes(args.config, ReceiptVerificationError, "config") if args.config else None
+    )
     verify_run_receipt(
         receipt, result_bytes=result_bytes, report_bytes=report_bytes, config_bytes=config_bytes
     )

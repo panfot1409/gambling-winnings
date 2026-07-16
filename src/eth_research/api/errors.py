@@ -130,7 +130,13 @@ class AccountingError(BacktestError):
 
 
 class CausalityError(BacktestError):
-    """A backtest detected look-ahead: a decision depended on unavailable information."""
+    """A backtest detected look-ahead: a decision depended on unavailable information.
+
+    Reserved and exported so a caller can catch it: the accepted engines enforce causality
+    *structurally* (a decision at bar *t* can only see data through *t*), so this is not
+    raised on the built-in paths, but it remains part of the stable taxonomy for an
+    engine-detected look-ahead violation.
+    """
 
     code = "causality_error"
     exit_code = 6

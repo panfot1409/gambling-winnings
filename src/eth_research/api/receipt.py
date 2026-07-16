@@ -2,10 +2,22 @@
 
 A :class:`RunReceipt` is generated *after* the result bytes are finalized and read back. It
 binds the schema/package/API versions, the immutable research inputs (engine, dataset
-fingerprint, strategy identity + fixed params, cost scenario, run parameters), the SHA-256 of
-each produced artifact (result, and optionally report / config / dataset manifest), the
-running Python and numeric-dependency versions, and a deterministic ``run_id`` derived from
-the immutable inputs alone (so the same research inputs yield the same id on any machine).
+fingerprint, strategy identity + fixed params, cost scenario, split, run parameters, and the
+warm-up context fingerprint), the SHA-256 of each produced artifact (result, and optionally
+report / config / dataset manifest), the running Python and numeric-dependency versions, and a
+deterministic ``run_id``. The ``run_id`` is the SHA-256 of the *entire* recorded run
+specification together with the dataset content fingerprint and the dataset manifest digest, so
+the same research inputs yield the same id on any machine and any change to a bound input — the
+split fractions, the context content, or the manifest digest included — changes the id.
+
+Two boundaries are documented, not hidden: a **custom** (non-built-in) strategy passed through
+the Python API is recorded as ``custom:<name>`` and bound *by name only* — its behaviour is
+trusted caller code and is not captured by the identity, so reproducing a custom-strategy run
+requires re-supplying identical strategy code (the CLI / config path only ever uses built-in
+strategies, whose kind + parameters are fully bound). And the ``run_id`` is a self-describing
+digest: it makes a partially-tampered receipt inconsistent, but tamper-evidence against a
+fully-rewritten receipt rests on the artifact digests (``result_sha256`` et al.) checked
+against the real bytes.
 
 It deliberately records **no** credential, wallet, key, absolute path, hostname, username, IP,
 wall-clock time, environment dump, or command string.
@@ -20,7 +32,7 @@ from typing import Any
 
 from eth_research import __version__ as PACKAGE_VERSION
 from eth_research.api.errors import ReceiptVerificationError
-from eth_research.api.models import API_VERSION, StrategySpec
+from eth_research.api.models import API_VERSION, ResearchRunSpec, StrategySpec
 from eth_research.api.results import ResearchResult
 from eth_research.api.serialization import (
     CanonicalError,
@@ -48,23 +60,23 @@ def _dependency_version(name: str) -> str:
 
 def _run_id(
     *,
-    engine: str,
+    run_spec: ResearchRunSpec,
     dataset_fingerprint: str,
-    strategy: StrategySpec,
-    cost_scenario: str,
-    initial_cash: float,
-    context_bars: int,
-    risk_free_rate: float,
+    dataset_manifest_sha256: str | None,
 ) -> str:
+    """Deterministic id over the *entire* recorded run identity.
+
+    Binds every field of the run specification (engine, dataset interpretation, strategy,
+    cost scenario, split, numeric parameters, ``context_bars`` and the context fingerprint),
+    the dataset content fingerprint, and the dataset manifest digest — so any change to a
+    bound input yields a different id, and none of them can be altered in the receipt without
+    the ``run_id`` failing to recompute.
+    """
     identity = {
-        "run_identity_v1": {
-            "engine": engine,
+        "run_identity_v2": {
+            "run_spec": run_spec.to_dict(),
             "dataset_fingerprint": dataset_fingerprint,
-            "strategy": strategy.to_dict(),
-            "cost_scenario": cost_scenario,
-            "initial_cash": initial_cash,
-            "context_bars": context_bars,
-            "risk_free_rate": risk_free_rate,
+            "dataset_manifest_sha256": dataset_manifest_sha256,
         }
     }
     return sha256_hex(canonical_json_bytes(identity))
@@ -208,13 +220,9 @@ def build_receipt(
         package_version=PACKAGE_VERSION,
         api_version=API_VERSION,
         run_id=_run_id(
-            engine=spec.engine,
+            run_spec=spec,
             dataset_fingerprint=result.dataset_fingerprint,
-            strategy=spec.strategy,
-            cost_scenario=spec.cost.scenario,
-            initial_cash=spec.initial_cash,
-            context_bars=spec.context_bars,
-            risk_free_rate=spec.risk_free_rate,
+            dataset_manifest_sha256=dataset_manifest_sha256,
         ),
         engine=spec.engine,
         strategy=spec.strategy,
@@ -275,12 +283,8 @@ def verify_run_receipt(
     _require_match("dataset fingerprint", receipt.dataset_fingerprint, result.dataset_fingerprint)
 
     recomputed = _run_id(
-        engine=receipt.engine,
+        run_spec=spec,
         dataset_fingerprint=receipt.dataset_fingerprint,
-        strategy=receipt.strategy,
-        cost_scenario=receipt.cost_scenario,
-        initial_cash=receipt.initial_cash,
-        context_bars=receipt.context_bars,
-        risk_free_rate=receipt.risk_free_rate,
+        dataset_manifest_sha256=receipt.dataset_manifest_sha256,
     )
     _require_match("run id", receipt.run_id, recomputed)

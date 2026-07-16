@@ -107,6 +107,10 @@ def _context_bars(context: DatasetHandle | None) -> int:
     return context.row_count if context is not None else 0
 
 
+def _context_fingerprint(context: DatasetHandle | None) -> str | None:
+    return context.fingerprint if context is not None else None
+
+
 # --------------------------------------------------------------------------- #
 # metric extraction (pure delegation + type coercion to plain scalars)        #
 # --------------------------------------------------------------------------- #
@@ -183,11 +187,11 @@ def _run_binary(
             initial_cash=initial_cash,
             context=_context_frame(context),
         )
+        summary = summarize(result, risk_free_rate=risk_free_rate)
     except _InternalAccountingError as exc:
         raise AccountingError(f"backtest accounting invariant failed: {exc}") from exc
     except (ValueError, TypeError) as exc:
         raise BacktestError(f"binary backtest failed: {exc}") from exc
-    summary = summarize(result, risk_free_rate=risk_free_rate)
     return result, summary, spec
 
 
@@ -210,12 +214,14 @@ def _run_fractional(
             initial_cash=initial_cash,
             context=_context_frame(context),
         )
+        ppy = periods_per_year_from_interval(pd.Timedelta(seconds=dataset.interval_seconds))
+        metrics = compute_fractional_metrics(
+            result, periods_per_year=ppy, risk_free_rate=risk_free_rate
+        )
     except _FractionalEngineError as exc:
         raise BacktestError(f"fractional backtest failed: {exc}") from exc
-    ppy = periods_per_year_from_interval(pd.Timedelta(seconds=dataset.interval_seconds))
-    metrics = compute_fractional_metrics(
-        result, periods_per_year=ppy, risk_free_rate=risk_free_rate
-    )
+    except (ValueError, TypeError) as exc:
+        raise BacktestError(f"fractional backtest failed: {exc}") from exc
     return result, metrics, spec
 
 
@@ -241,6 +247,7 @@ def _assemble(
         context_bars=_context_bars(context),
         risk_free_rate=float(risk_free_rate),
         split=split,
+        context_fingerprint=_context_fingerprint(context),
     )
     return build_research_result(
         run_spec=run_spec,

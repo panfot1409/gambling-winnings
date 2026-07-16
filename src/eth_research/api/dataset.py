@@ -53,6 +53,19 @@ __all__ = [
 ]
 
 
+def _safe_frame_interval(frame: pd.DataFrame) -> pd.Timedelta:
+    """Determine the bar interval, translating the internal ``ValueError`` into the taxonomy.
+
+    ``frame_interval`` raises a bare ``ValueError`` for a frame that is too short to have an
+    interval; a caller can provoke that with a one-row dataset, so it must surface as the
+    public :class:`DatasetError` rather than an untyped built-in.
+    """
+    try:
+        return frame_interval(frame)
+    except (ValueError, TypeError) as exc:
+        raise DatasetError(f"could not determine the dataset interval: {exc}") from exc
+
+
 def _to_validation_report(report: QualityReport) -> ValidationReport:
     findings = tuple(
         ValidationFinding(
@@ -79,7 +92,7 @@ def _build_validated(
     if len(canonical) == 0:
         raise DatasetError("dataset is empty")
     if interval is None:
-        interval = frame_interval(canonical)
+        interval = _safe_frame_interval(canonical)
     quality = audit_frame(canonical, expected_interval=interval)
     report = _to_validation_report(quality)
     if require_clean and report.error_count > 0:
@@ -184,7 +197,7 @@ def chronological_split(dataset: DatasetHandle, spec: ChronologicalSplitSpec) ->
     re-wrapped as a validated handle (quality findings are recorded, not fatal).
     """
     frame = dataset.frame
-    interval = frame_interval(frame)
+    interval = _safe_frame_interval(frame)
     try:
         splits = _internal_split(
             frame,

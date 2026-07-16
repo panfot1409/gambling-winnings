@@ -53,6 +53,12 @@ loader, no dynamic import from a path, and no `eval`/`exec` — but equally, the
 is no isolation. Never run a strategy object from an untrusted source
 (see [SECURITY_MODEL.md](SECURITY_MODEL.md)).
 
+A run **receipt** for a custom strategy records it as `custom:<name>` and binds
+it **by name only** — the `run_id` cannot capture arbitrary caller code, so
+reproducing a custom-strategy run depends on re-supplying identical strategy
+code. The CLI and the run config never accept a custom strategy, so their
+receipts always bind a fully specified built-in (kind + fixed parameters).
+
 ## Single-process
 
 Execution is single-process and in-memory. There is no built-in parallelism,

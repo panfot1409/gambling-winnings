@@ -48,6 +48,26 @@ def _fsync_dir(path: Path) -> None:
         os.close(fd)
 
 
+def _require_no_symlinked_output(out: Path) -> None:
+    """Refuse a symlinked output directory or a symlinked nearest-existing parent.
+
+    ``Path.mkdir(parents=True)`` silently follows a symlinked parent component, which would
+    let the bundle be written outside the intended directory. Refusing the output leaf and the
+    directory ``mkdir`` would create *into* closes the obvious escape; callers that need a
+    stronger guarantee (the config-driven CLI) additionally confine the resolved output within
+    the configuration directory before calling here.
+    """
+    if out.is_symlink():
+        raise OutputCollisionError(f"output directory is a symlink: {out}")
+    for ancestor in out.parents:
+        if ancestor.exists():
+            if ancestor.is_symlink():
+                raise OutputCollisionError(
+                    f"refusing to write through a symlinked parent: {ancestor}"
+                )
+            break
+
+
 def publish_bundle(
     output_dir: str | Path,
     files: Mapping[str, bytes],
@@ -64,8 +84,7 @@ def publish_bundle(
         raise OutputCollisionError("nothing to publish: the bundle is empty")
 
     out = Path(output_dir)
-    if out.is_symlink():
-        raise OutputCollisionError(f"output directory is a symlink: {out}")
+    _require_no_symlinked_output(out)
     out.mkdir(parents=True, exist_ok=True)
     if not out.is_dir():
         raise OutputCollisionError(f"output path is not a directory: {out}")
@@ -82,6 +101,8 @@ def publish_bundle(
         path = out / name
         if path.is_symlink():
             raise OutputCollisionError(f"refusing to write through a symlink: {name}")
+        if path.exists() and not path.is_file():
+            raise OutputCollisionError(f"output path exists and is not a regular file: {name}")
         if path.exists() and not overwrite:
             raise OutputCollisionError(f"output file already exists: {name}")
         targets.append((name, path, files[name]))

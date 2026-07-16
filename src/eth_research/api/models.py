@@ -338,6 +338,9 @@ class StrategySpec:
             if name in seen:
                 raise CanonicalError(f"strategy.params.{name}: duplicated")
             seen.add(name)
+        # Canonicalize parameter order so the spec is an object-level fixed point:
+        # ``x == StrategySpec.from_dict(x.to_dict())`` for any construction order.
+        object.__setattr__(self, "params", tuple(sorted(self.params)))
 
     @classmethod
     def create(cls, kind: str, **params: int) -> StrategySpec:
@@ -475,11 +478,17 @@ class ResearchRunSpec:
     context_bars: int
     risk_free_rate: float
     split: ChronologicalSplitSpec | None = None
+    #: Content fingerprint of the warm-up context, when one was supplied. Bound alongside
+    #: ``context_bars`` so two runs with equal-length but different context content are
+    #: distinguishable in the run identity (``None`` when no context was used).
+    context_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         if self.engine not in ENGINES:
             raise CanonicalError(f"engine: expected one of {ENGINES}, got {self.engine!r}")
         _validate_run_params(self.initial_cash, self.context_bars, self.risk_free_rate)
+        if self.context_fingerprint is not None:
+            require_str(self.context_fingerprint, "research_run_spec.context_fingerprint")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -489,6 +498,7 @@ class ResearchRunSpec:
             "cost": self.cost.to_dict(),
             "initial_cash": self.initial_cash,
             "context_bars": self.context_bars,
+            "context_fingerprint": self.context_fingerprint,
             "risk_free_rate": self.risk_free_rate,
             "split": self.split.to_dict() if self.split is not None else None,
         }
@@ -497,6 +507,12 @@ class ResearchRunSpec:
     def from_dict(cls, payload: Any) -> ResearchRunSpec:
         data = require_mapping(payload, "research_run_spec")
         split_raw = data.get("split")
+        raw_context_fp = data.get("context_fingerprint")
+        context_fingerprint = (
+            None
+            if raw_context_fp is None
+            else require_str(raw_context_fp, "research_run_spec.context_fingerprint")
+        )
         return cls(
             engine=require_str(data.get("engine"), "research_run_spec.engine"),
             dataset=DatasetSpec.from_dict(data.get("dataset")),
@@ -510,4 +526,5 @@ class ResearchRunSpec:
                 data.get("risk_free_rate"), "research_run_spec.risk_free_rate"
             ),
             split=ChronologicalSplitSpec.from_dict(split_raw) if split_raw is not None else None,
+            context_fingerprint=context_fingerprint,
         )

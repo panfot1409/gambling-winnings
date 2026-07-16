@@ -10,9 +10,14 @@ is on a strict allowlist and the artifact is a clean, pure-Python distribution:
   ``tests``, ``tools``, ``docs``, ``__pycache__``, ``.env``);
 * no member carries a data / secret / binary extension (``.parquet``/``.csv``/``.jsonl``
   research data, ``.env``/``.pem``/``.key`` secrets, ``.so``/``.pyd``/``.dll`` binaries);
-* the wheel contains only ``eth_research/…`` runtime source plus its ``.dist-info``; the
-  sdist contains only ``…/src/eth_research/…`` plus ``pyproject.toml`` / ``README.md`` /
-  ``PKG-INFO``;
+* **inside the package tree** (``eth_research/…`` in the wheel, ``…/src/eth_research/…`` in
+  the sdist) every member is a *pure-Python* file — only ``.py`` / ``.pyi`` sources and the
+  ``py.typed`` marker are admitted, so a data file of **any** extension (a raw Coinbase
+  ``.json`` candle bundle, a ``.pkl`` / ``.npy`` / ``.arrow`` blob, a manifest ``.json``)
+  dropped under the package can never ride along undetected;
+* the wheel contains only that package tree plus its ``.dist-info``; the sdist contains only
+  that package tree plus ``pyproject.toml`` / ``README.md`` / ``PKG-INFO`` (and hatchling's
+  ``.gitignore``);
 * there are no case-colliding member paths;
 * the wheel ships ``eth_research/py.typed``, declares the ``eth-research`` console entry
   point, and is tagged pure-python (``py3-none-any``).
@@ -76,15 +81,28 @@ def _case_collisions(names: Iterable[str]) -> list[str]:
     return failures
 
 
+# Inside the package tree, only these are admitted — a strict pure-Python allowlist, so a
+# non-source file of any extension cannot be shipped inside the package.
+_PACKAGE_FILE_SUFFIXES = (".py", ".pyi")
+_PACKAGE_FILE_BASENAMES = frozenset({"py.typed"})
+
+
+def _is_pure_python_package_file(name: str) -> bool:
+    basename = name.rsplit("/", 1)[-1]
+    return basename in _PACKAGE_FILE_BASENAMES or name.endswith(_PACKAGE_FILE_SUFFIXES)
+
+
 def _wheel_member_allowed(name: str) -> bool:
-    return name.startswith("eth_research/") or (
-        name.startswith("eth_research-") and ".dist-info/" in name
-    )
+    if name.startswith("eth_research-") and ".dist-info/" in name:
+        return True
+    if name.startswith("eth_research/"):
+        return _is_pure_python_package_file(name)
+    return False
 
 
 def _sdist_member_allowed(relpath: str) -> bool:
     if relpath.startswith("src/eth_research/"):
-        return True
+        return _is_pure_python_package_file(relpath)
     # hatchling always ships .gitignore in an sdist; it is a benign ignore-pattern file.
     return relpath in {"pyproject.toml", "README.md", "PKG-INFO", ".gitignore"}
 

@@ -70,9 +70,18 @@ def _load_dataset(dataset: DatasetConfig, base_dir: Path) -> ValidatedDataset:
     file_cfg = dataset.file
     if file_cfg is None:  # pragma: no cover - guaranteed by the parser
         raise ConfigurationError("dataset: file source without a file block")
-    path = base_dir / file_cfg.path
+    # Confine the *resolved* path within base_dir: the textual guard already rejects a
+    # literal ``research/`` / ``..`` / absolute path, but a symlink whose name is innocuous
+    # could still point the reader at the governed roots or the sealed holdout. Resolving and
+    # requiring containment refuses that escape.
+    base_resolved = base_dir.resolve()
+    resolved = (base_dir / file_cfg.path).resolve()
+    if not resolved.is_relative_to(base_resolved):
+        raise DatasetError(
+            f"dataset file path escapes the configuration directory: {file_cfg.path}"
+        )
     try:
-        frame = read_raw_ohlcv(path)
+        frame = read_raw_ohlcv(resolved)
     except (OSError, ValueError, TypeError) as exc:
         raise DatasetError(f"could not read dataset file {file_cfg.path}: {exc}") from exc
     spec = DatasetSpec(
@@ -179,7 +188,15 @@ def execute_config(
     }
     files["manifest.json"] = canonical_json_bytes(manifest)
 
-    resolved_out = output_dir if output_dir is not None else base_dir / config.output.directory
+    if output_dir is not None:
+        resolved_out = output_dir
+    else:
+        candidate = base_dir / config.output.directory
+        if not candidate.resolve().is_relative_to(base_dir.resolve()):
+            raise ConfigurationError(
+                f"output directory escapes the configuration directory: {config.output.directory}"
+            )
+        resolved_out = candidate
     effective_overwrite = config.output.overwrite if overwrite is None else overwrite
     digests = publish_bundle(
         resolved_out, files, overwrite=effective_overwrite, completeness_marker="manifest.json"

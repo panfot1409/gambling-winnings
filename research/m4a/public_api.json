@@ -495,11 +495,16 @@
         {
           "name": "split",
           "type": "ChronologicalSplitSpec | None"
+        },
+        {
+          "name": "context_fingerprint",
+          "type": "str | None"
         }
       ],
       "frozen": true,
       "kind": "dataclass",
       "methods": [
+        "context_fingerprint",
         "from_dict",
         "split",
         "to_dict"

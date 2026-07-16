@@ -36,6 +36,7 @@ spec, the dataset identity, the evaluated window, and the delegated metrics.
   "result_schema_version": 1,
   "run_spec": {
     "context_bars": 30,
+    "context_fingerprint": null,
     "cost": {"scenario": "base"},
     "dataset": {"allow_extra_columns": false, "assume_utc": false, "interval_seconds": 86400},
     "engine": "binary",
@@ -101,9 +102,15 @@ deterministic `run_id`, and the recorded interpreter/dependency versions.
 }
 ```
 
-- `run_id` is the SHA-256 of the immutable research inputs alone (engine,
-  dataset fingerprint, strategy identity, cost scenario, initial cash, context
-  bars, risk-free rate). It is machine-independent.
+- `run_id` is the SHA-256 of the **entire** recorded run specification (engine,
+  dataset interpretation, strategy identity, cost scenario, split, numeric
+  parameters, `context_bars`, and the warm-up `context_fingerprint`) together
+  with the dataset content fingerprint and the `dataset_manifest_sha256`. Any
+  change to a bound input yields a different id, and none can be altered in the
+  receipt without the `run_id` failing to recompute on `verify`. It is
+  machine-independent. A **custom** (non-built-in) strategy is recorded as
+  `custom:<name>` and bound by name only — see
+  [V1_LIMITATIONS.md](V1_LIMITATIONS.md).
 - `dataset_manifest_sha256`, `report_sha256`, and `config_sha256` are `null`
   when that artifact was not bound.
 - The receipt records **no** credential, wallet, key, absolute path, hostname,
@@ -188,7 +195,9 @@ Strict rules: exact keys only; no string-to-number coercion; `bool` is not
 `int`; numbers must be finite; the cost scenario must belong to the chosen
 engine; a `path` or `output.directory` must be a relative, traversal-free local
 path — never absolute, a URL, a `.git` path, or under the governed `research/`
-roots. Relative paths resolve against the **config file's own directory**.
+roots (both compared case-insensitively). Relative paths resolve against the
+**config file's own directory**, and the *resolved* path is confined there — so a
+symlink cannot redirect a dataset read or an output write outside that directory.
 
 Load a config in Python:
 

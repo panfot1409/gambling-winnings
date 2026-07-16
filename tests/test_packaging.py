@@ -73,16 +73,27 @@ def test_double_build_is_byte_identical(two_builds: tuple[Path, Path]) -> None:
         assert a == b, f"{name} is not reproducible: {a} != {b}"
 
 
+def _is_pure_python_package_file(rel: str) -> bool:
+    base = rel.rsplit("/", 1)[-1]
+    return base == "py.typed" or rel.endswith((".py", ".pyi"))
+
+
 def test_sdist_contains_no_private_data(two_builds: tuple[Path, Path]) -> None:
     first, _ = two_builds
     with tarfile.open(_sdist(first), "r:gz") as tf:
-        names = tf.getnames()
-    for name in names:
+        members = [m for m in tf.getmembers() if m.isfile()]
+    for member in members:
+        name = member.name
         segments = name.split("/")
         assert "research" not in segments, f"research/ leaked into the sdist: {name}"
         assert ".github" not in segments
         assert "tests" not in segments
-        assert not name.lower().endswith((".parquet", ".csv", ".jsonl"))
+        assert not name.lower().endswith((".parquet", ".csv", ".jsonl", ".json"))
+        # Inside the package tree only pure-Python files may ship — an allowlist, so a data
+        # file of *any* extension (raw candles, a manifest, a pickle) cannot ride along.
+        if "/src/eth_research/" in name:
+            rel = name.split("/src/eth_research/", 1)[1]
+            assert _is_pure_python_package_file(rel), f"non-source file in package tree: {name}"
 
 
 def test_wheel_ships_py_typed_and_entry_point(two_builds: tuple[Path, Path]) -> None:
@@ -94,6 +105,11 @@ def test_wheel_ships_py_typed_and_entry_point(two_builds: tuple[Path, Path]) -> 
         assert "eth_research.cli:main" in zf.read(entry).decode("utf-8")
         # no research/ data ships in the wheel either
         assert not any(n.split("/")[:1] == ["research"] for n in names)
+        # inside the package tree, only pure-Python files ship (allowlist)
+        for name in names:
+            if name.startswith("eth_research/") and not name.endswith("/"):
+                rel = name.split("eth_research/", 1)[1]
+                assert _is_pure_python_package_file(rel), f"non-source file in wheel: {name}"
 
 
 def test_sdist_rebuilds_a_wheel(two_builds: tuple[Path, Path], tmp_path: Path) -> None:

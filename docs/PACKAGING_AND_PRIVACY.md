@@ -39,6 +39,10 @@ that:
   `.github`, `tests`, `tools`, `docs`, `__pycache__`, `.env`);
 - no member carries a data, secret, or binary extension (`.parquet`, `.csv`,
   `.jsonl`, `.env`, `.pem`, `.key`, `.so`, `.pyd`, `.dll`, …);
+- **inside the package tree** the allowlist is inverted to admit only pure-Python
+  files — `.py` / `.pyi` sources and the `py.typed` marker — so a data file of
+  *any* extension (a raw candle `.json`, a manifest, a pickle) dropped under
+  `eth_research/` is rejected, not merely the few denied suffixes above;
 - the wheel ships `eth_research/py.typed`, declares the console entry point, and
   is tagged `py3-none-any`.
 

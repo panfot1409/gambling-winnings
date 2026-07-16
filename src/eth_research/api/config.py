@@ -57,6 +57,7 @@ __all__ = [
     "SyntheticDatasetConfig",
     "load_config",
     "load_config_file",
+    "load_config_source",
 ]
 
 CONFIG_SCHEMA_VERSION = 1
@@ -94,9 +95,13 @@ def _safe_rel_path(value: Any, field: str) -> str:
     pure = PurePosixPath(text)
     if pure.is_absolute() or ".." in pure.parts:
         raise CanonicalError(f"{field}: must be a relative path without '..'")
-    if ".git" in pure.parts:
+    # Compare case-insensitively: on a case-insensitive filesystem (macOS/Windows)
+    # ``Research/`` and ``.GIT/`` resolve into the same governed / VCS trees as the
+    # lowercase spellings, so the textual guard must reject them too.
+    lowered = [part.casefold() for part in pure.parts]
+    if ".git" in lowered:
         raise CanonicalError(f"{field}: must not reference a .git directory")
-    meaningful = [part for part in pure.parts if part != "."]
+    meaningful = [part for part in lowered if part != "."]
     if meaningful and meaningful[0] == "research":
         raise CanonicalError(f"{field}: must not reference governed research artifacts")
     return text
@@ -338,8 +343,13 @@ def load_config(raw: bytes, *, fmt: str) -> RunConfig:
         raise ConfigurationError(f"could not read configuration: {exc}") from exc
 
 
-def load_config_file(path: str | Path) -> RunConfig:
-    """Read a ``.json`` or ``.toml`` config file and parse it into a :class:`RunConfig`."""
+def load_config_source(path: str | Path) -> tuple[RunConfig, bytes]:
+    """Read a ``.json``/``.toml`` config file **once** and return ``(config, raw_bytes)``.
+
+    Reading the file a single time lets a caller bind exactly the validated bytes into a
+    receipt, with no window in which the file could be swapped between validation and the
+    bytes the receipt attests to.
+    """
     file_path = Path(path)
     suffix = file_path.suffix.lower()
     if suffix == ".json":
@@ -352,4 +362,9 @@ def load_config_file(path: str | Path) -> RunConfig:
         raw = file_path.read_bytes()
     except OSError as exc:
         raise ConfigurationError(f"could not read config file {file_path}: {exc}") from exc
-    return load_config(raw, fmt=fmt)
+    return load_config(raw, fmt=fmt), raw
+
+
+def load_config_file(path: str | Path) -> RunConfig:
+    """Read a ``.json`` or ``.toml`` config file and parse it into a :class:`RunConfig`."""
+    return load_config_source(path)[0]
