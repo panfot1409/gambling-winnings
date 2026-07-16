@@ -508,12 +508,14 @@ src/eth_research/
     m2b-replay.yml  # fresh-clone reproducibility on authoritative + compat runtimes
     m3a-replay.yml  # M3A results reproduce byte-for-byte; both access ledgers byte-empty
     m3b-replay.yml  # M3B dual-state reproduce byte-for-byte; both ledgers byte-empty
-    # (the write-capable m2b-acquire.yml is retired: data is frozen)
+    m3d-replay.yml  # M3D prospective cohort rebuilds byte-exact; three ledgers byte-empty
+    # (write-capable acquisition workflows are retired: all data is frozen)
 .github/scripts/
     verify_m3a_registry.py # CI gate: the registry terminal event binds the published bytes
 research/m2b/       # committable provenance records, frozen contracts, raw bytes, ledger
 research/m3a/       # M3A partition, walk-forward protocol, registry, results, report, gate ledger
 research/m3b/       # M3B fractional protocol, registry, results, report, run-001 manifest
+research/m3d/       # M3D research-history governance + frozen prospective ETH-USD cohort (immature)
 tests/              # unit, hand-calculated ledger, and look-ahead regression tests
 examples/           # runnable end-to-end example
 docs/PLAN.md        # milestone plan
@@ -524,6 +526,10 @@ docs/M2B_ACQUISITION.md # real-data acquisition procedure (GitHub Actions clean 
 docs/M3A_PLAN.md    # Milestone 3A development research laboratory plan
 docs/M3B_PLAN.md    # Milestone 3B fractional execution-risk laboratory plan
 docs/M3B_FINDINGS.md # Milestone 3B run-001 honest findings
+docs/M3D_PLAN.md    # Milestone 3D prospective-evidence governance plan (data-only)
+docs/M3D_ACQUISITION.md # M3D prospective cohort acquisition record
+docs/M3D_PROSPECTIVE_PROTOCOL.md # M3D cohort protocol + 365-observation maturity rule
+docs/M3D_THREAT_MODEL.md # M3D threats to "evaluated nothing" + controls
 docs/REMEDIATION.md # Milestone 1 correctness remediation record
 ```
 
@@ -548,5 +554,7 @@ CI installs with `uv sync --locked` and fails if the lock and
 See [docs/PLAN.md](docs/PLAN.md) for the milestone plan,
 [docs/M3A_PLAN.md](docs/M3A_PLAN.md) for the development research laboratory,
 [docs/M3B_PLAN.md](docs/M3B_PLAN.md) for the fractional execution-risk
-laboratory, and [docs/REMEDIATION.md](docs/REMEDIATION.md) for the
-Milestone 1 correctness remediation record.
+laboratory, [docs/M3D_PLAN.md](docs/M3D_PLAN.md) for the data-only
+prospective-evidence governance facility, and
+[docs/REMEDIATION.md](docs/REMEDIATION.md) for the Milestone 1 correctness
+remediation record.

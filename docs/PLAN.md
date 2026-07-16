@@ -221,6 +221,18 @@ until the tag is published and verified remotely.
 - Markdown/HTML tearsheet reports comparing strategies against the
   buy-and-hold benchmark.
 
+Milestone 3 was delivered as stacked sub-milestones: 3A (development research
+laboratory, `docs/M3A_PLAN.md`), 3B (fractional execution-risk laboratory,
+`docs/M3B_PLAN.md`), 3C (adaptive-research governance), and 3D — a **data-only,
+governance-only** prospective-evidence facility (`docs/M3D_PLAN.md`). Milestone
+3D treats the research-train partition as exhausted for new candidate research,
+builds machine-verifiable research-program history and a multiplicity ledger,
+and acquires + freezes a strictly non-overlapping future-only prospective ETH-USD
+daily cohort (beginning after the final M2B candle). The cohort is currently
+**immature** (3 of a required 365 observations); M3D evaluates, ranks, tunes, or
+promotes **no** strategy, and authorizes no evaluation. See
+`docs/M3D_PROSPECTIVE_PROTOCOL.md` and `docs/M3D_THREAT_MODEL.md`.
+
 ## 10. Milestone 4 — Optional machine learning (gated)
 
 Only after Milestones 2A/2B–3 are in place:

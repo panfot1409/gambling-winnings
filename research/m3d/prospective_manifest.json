@@ -1,0 +1,79 @@
+{
+  "candidate_declared": false,
+  "canonical_content_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+  "cohort_start": "2026-07-12T00:00:00Z",
+  "evaluation_authorized": false,
+  "evaluation_ledger": {
+    "byte_count": 0,
+    "event_count": 0,
+    "path": "research/m3d/prospective_evaluations.jsonl"
+  },
+  "first_open": "2026-07-12T00:00:00Z",
+  "identity": {
+    "endpoint": "https://api.exchange.coinbase.com/products/ETH-USD/candles",
+    "interval_seconds": 86400,
+    "product": "ETH-USD",
+    "venue": "coinbase-exchange"
+  },
+  "kind": "prospective_cohort_manifest",
+  "last_open": "2026-07-14T00:00:00Z",
+  "m2b_final_open": "2026-07-11T00:00:00+00:00",
+  "maturity_conditions": {
+    "canonical_reacquisition_match": true,
+    "contiguous_daily": true,
+    "no_structural_errors": true,
+    "row_count_at_least_floor": false,
+    "starts_at_cohort_start": true
+  },
+  "maturity_state": "immature",
+  "minimum_maturity_rows": 365,
+  "nominal_maturity_exclusive_end": "2027-07-12T00:00:00Z",
+  "nominal_maturity_last_open": "2027-07-11T00:00:00Z",
+  "package_version": "0.7.0",
+  "performance_metrics_computed": false,
+  "promotion_decision_exists": false,
+  "provenance": {
+    "audit_acquisition": {
+      "attempt_id": "coinbase-eth-usd-prospective-audit-002",
+      "plan_sha256": "0ebce837f7b1c998c15c08bb344980e2c38c0458ae3ceec297498231620f01dd",
+      "raw_bundle_fingerprint": "af586f2490f30bb257aba1dcfdbca7a610e53948dff03af4772ad9d37cd7016f",
+      "raw_sha256": "866e7b5d77ecd2ec5baf05493e7048b869a88b202bbc6185c70d5af8702355ae",
+      "receipt_sha256": "22ac66312a74a8ccb3cfd5312bf821d7c1dc2351135caf1df18479f2cbdf8cc0"
+    },
+    "canonical_content_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+    "data_use_ledger_sha256": "0f061a11c832a369f226ea8d3845652ed7c67b7878cfca908db0da54b7ab62e4",
+    "exhaustion_decision_sha256": "693800379aed38067d4732ebd6c89557b3dcee2cbbc67d28dda5b9be435a7db5",
+    "genesis_acquisition": {
+      "attempt_id": "coinbase-eth-usd-prospective-genesis-001",
+      "plan_sha256": "afc04259f7fb758b76683fa5f63ca93d654d7348829a330028d606ebd93d88b4",
+      "raw_bundle_fingerprint": "af586f2490f30bb257aba1dcfdbca7a610e53948dff03af4772ad9d37cd7016f",
+      "raw_sha256": "866e7b5d77ecd2ec5baf05493e7048b869a88b202bbc6185c70d5af8702355ae",
+      "receipt_sha256": "966808bb14f9b1059773fa4cc2f6b2389cce498e5bb0ce2fb7c7967511679536"
+    },
+    "multiplicity_ledger_sha256": "29c39c7898fb9d430ed9bce7841fc26f67352d2dbe17decb3b72943b2283890f",
+    "program_snapshot_sha256": "b2f8d978a3d9e15d612231beb39db114bef13688c75332f5670873680b39feb4",
+    "protocol_sha256": "cb08396babb1d8c8c454b5eae12210ff0a0edf17ebafb55688de341d280094a5",
+    "quality_report_sha256": "f39929484784db99af4ec314f25cfc7cf6e5eef73d9cc43834b47e2f32e7c0eb",
+    "reacquisition_audit_sha256": "d4ff04a86d755c1c6dcd132ce26265169d232e22d962c22bb162ed7ec7fb4d42",
+    "segment_chain_sha256": "05cd7b84c06aac9b02f2843dd3ae04d6a9a03f87e23ed432ed0e3497e53aef20",
+    "specification_catalog_sha256": "e7c9cacb181857180c0e6005e596f1b72be7b2df2de9fd86039010d189d69d72"
+  },
+  "remaining_rows": 362,
+  "row_count": 3,
+  "schema_version": 1,
+  "sealed_ledgers": {
+    "development_gate": {
+      "byte_count": 0,
+      "event_count": 0,
+      "path": "research/m3a/development_gate_access.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "final_holdout": {
+      "byte_count": 0,
+      "event_count": 0,
+      "path": "research/m2b/test_evaluations.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "strategy_evaluation_performed": false
+}

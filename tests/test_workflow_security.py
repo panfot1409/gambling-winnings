@@ -36,7 +36,9 @@ _COINBASE_HOST_RE = re.compile(r"https?://[^\s\"']*coinbase", re.IGNORECASE)
 
 
 def _all_workflow_files() -> list[Path]:
-    return sorted(WORKFLOWS.glob("*.yml"))
+    # GitHub executes both extensions; scan both so a write-capable *.yaml cannot
+    # hide from the host-allowlist / id-token / artifact-upload controls.
+    return sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
 
 
 class TestAcquisitionWorkflowsRetired:
@@ -52,7 +54,15 @@ class TestAcquisitionWorkflowsRetired:
     def test_audit_push_bootstrap_trigger_is_removed(self) -> None:
         assert not (REPO_ROOT / "research/m2b/audit_acquire.trigger").exists()
 
+    def test_m3d_acquisition_workflow_is_removed(self) -> None:
+        assert not (WORKFLOWS / "m3d-acquire.yml").exists()
+
+    def test_m3d_acquire_trigger_is_removed(self) -> None:
+        assert not (REPO_ROOT / "research/m3d/acquire.trigger").exists()
+
     def test_no_workflow_can_write_contents(self) -> None:
+        # At the final HEAD no workflow may write repository contents — the
+        # temporary M3D acquisition workflow is retired.
         for path in _all_workflow_files():
             text = path.read_text(encoding="utf-8")
             assert "contents: write" not in text, f"{path.name} still grants contents: write"

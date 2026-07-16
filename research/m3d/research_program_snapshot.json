@@ -1,0 +1,120 @@
+{
+  "attestation": {
+    "is_cryptographic": false,
+    "kind": "operational_hash_binding"
+  },
+  "conclusions": {
+    "development_gate": "untouched",
+    "final_holdout": "untouched",
+    "m2b": "real Coinbase ETH-USD data frozen; original final holdout never accessed",
+    "m3a": "research-train development laboratory; no development-gate access",
+    "m3b": "fractional long-only accounting / execution-risk measurement run completed; no development-gate access",
+    "m3c": "exactly one adaptively-motivated candidate evaluated on the research train and mechanically rejected",
+    "promotable_strategy_exists": false
+  },
+  "kind": "research_program_snapshot",
+  "milestones": {
+    "m2b": {
+      "artifacts": {
+        "dataset_lock": "6ccd3698f71b25b9cfbab758caeeb4150b2ca257df4f4acedd985da249462a4d",
+        "dataset_manifest": "58ec9cb9940f76c991db92696e0a72df3365fa2b5d31305fa25f15468ac7b4fd",
+        "frozen_dossier": "20ce9be93d955189244c3b57c932dafbbe54a2babde4d4860275ca1d624d432e",
+        "holdout_identity": "214ce4a0d8a927c0657074cbf1aa0182eeda85c128d33f8b7854646f5c0f2885",
+        "protocol": "a75a9cf508ead459976060ab7518c4e382ecb95e54cc0ee36ec0ff9281f26a81",
+        "quality_report": "b167df002768469bd5fb17c5a6588edc2c98e3ce910a0995187e1f68ed14f07a",
+        "runtime_contract": "ea9d6fabed37e533496688be16f384ab0b1e1cb5c9e6e8d407d64f40c7e4e9bd"
+      },
+      "conclusion": "real Coinbase ETH-USD data frozen; original final holdout never accessed",
+      "dataset": {
+        "content_fingerprint": "sha256:273f89eb07ae882784e40c2bc2ef2be5db93ddb3efa7de6270880ad1b7dd5718",
+        "first_open": "2016-05-23T00:00:00+00:00",
+        "last_open": "2026-07-11T00:00:00+00:00",
+        "row_count": 3702
+      },
+      "gate_accessed": false,
+      "holdout_accessed": false
+    },
+    "m3a": {
+      "artifacts": {
+        "artifact_errata": "afa78abdf9d92deccaa6146e520a25234614f425e3648e45dc611c0b91f29ced",
+        "development_partition": "14d61c9ad36a20b70b3f830e8470dc416319ef4accf36b90c5d2b4094ead7ac2",
+        "development_results": "5f6377b6eb0eb8c2a5ba126c37b29de5095670f7ed27c064f44e18c9c91ea8ae",
+        "errata_run003": "f7a027cc503b1049776598e4f1f38e89c5381f3c11cf7561ea6ea3c98e984f27",
+        "experiment_registry": "14bec91772a70f89c1316f0c6b3b3ec4ccb4c6c82b6f1315ce797e5f15410a0a",
+        "run003_manifest": "1ea0ade8ed291762a6571c352550b24697137235305163579dda6a76739f4e24",
+        "run003_results": "5f6377b6eb0eb8c2a5ba126c37b29de5095670f7ed27c064f44e18c9c91ea8ae",
+        "run003_return_evidence": "b593a03cbdd4edd4ceb09b035312713df555cd71a5662c757dd8f0e13b1c6f71",
+        "walk_forward_protocol": "61b32d4ee18e252552c92619c8464cd20b306e313393b0c86cbbbb2093a1c160",
+        "walk_forward_protocol_v2": "2483380bd606691181c15b8bfcecd5329e76ab1774c89404180fe8a5bb3627a8"
+      },
+      "conclusion": "research-train development laboratory; no development-gate access",
+      "gate_accessed": false,
+      "holdout_accessed": false,
+      "latest_completed_experiment": "m3a-fixed-baseline-comparison-v2-run-003"
+    },
+    "m3b": {
+      "artifacts": {
+        "artifact_annotations": "cf96cfb064fa33265059f379a9902d6e8040335e37e81f36ed059d9231bcdaba",
+        "artifact_errata": "2e3d18f9b5a34440adfbaf08a8979b793be2b69f3ac49200278e395c6d8bd3b8",
+        "execution_trace_commitments": "be1d295c137c20e57efc56a388d6faedb3044972502e302a43fd3bca0ac8672c",
+        "experiment_registry": "204e66d21e41d0ca5af6620fd71af89ce561085a21b59a3e4786238bfa1e3eb9",
+        "fractional_protocol": "9c1e00eca5e8e58ce88e05d0b4ccdb71b34f798afe72cda3e9c88dee5641d4b6",
+        "fractional_report": "68501639e7ba0660c7114c5b502861996b25bc0dff7e136500f4aca28260ae96",
+        "fractional_results": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc",
+        "run001_archive_v2": "b9f8100cf699886a399247b5922a76e667474eb9171b7fcd40d5bafdaab1bd52",
+        "run001_immutable_results": "81f94fab60f4f168bf5bb237c1e32e0d4567f4325ee6c541af7feffca2ab9dfc",
+        "run001_manifest": "d91ac46e58b8650da8e15fad19ec83520de0ada1989f0c5b16268e91fe82ca36"
+      },
+      "completed_experiment": "m3b-fractional-execution-risk-v1-run-001",
+      "conclusion": "fractional long-only accounting / execution-risk measurement run completed; no development-gate access",
+      "gate_accessed": false,
+      "holdout_accessed": false
+    },
+    "m3c": {
+      "artifacts": {
+        "candidate_decision": "f1b76101f2bb137036fd7b78c9d7ef2ad7a085b0e605ba0552bff939a9bdbc55",
+        "candidate_report": "f0e776aecec3d91f3af5288bc54eaf9d4731c72516fd1075ffb8b5ef0d260e54",
+        "candidate_results": "4db76efb923bc209e4354afabad897ea084ea2bbafb9e0f11b0a4a49961e00fc",
+        "experiment_registry": "d31ceff78e7901095634a39ee3d2a45ea5d05070fcb92354172f3915916d46eb",
+        "protocol": "86f2245cc3621bac85c80fa9b87ab3e0b87cc3d8ef7ff2dd00b4188b01c86be9",
+        "research_budget": "81706025850427f35aee70fcc1d135faa7ef68a9b4b48ee481ace5b7b47405af",
+        "research_lineage": "57cfd3a3aa180ab5c3b68b0da0cd11f0fcc99b3ea46f3c31b829e81f5e919f40",
+        "run001_manifest": "1fdf1f779732f48218aed8a9e851c8b1aa49bf73cb32b0e3233fe3d4dd4e7d47"
+      },
+      "candidate_fingerprint": "d45d3bdf7a3dca7003e8382995e5a350d0c9e61edf47e87e294d151070f4cae6",
+      "candidate_id": "dual_horizon_trend_63_252_vol_target_30d_50pct",
+      "conclusion": "exactly one adaptively-motivated candidate evaluated on the research train and mechanically rejected",
+      "experiment_id": "m3c-dual-horizon-trend-v1-run-001",
+      "gate_accessed": false,
+      "holdout_accessed": false,
+      "outcome": "rejected_for_development_gate_promotion"
+    }
+  },
+  "package_version": "0.7.0",
+  "release_tag_debt": {
+    "current_development_version": "0.7.0",
+    "current_version_tagged": false,
+    "upstream_m3c_tagged": false,
+    "upstream_m3c_version": "0.6.0"
+  },
+  "repository": {
+    "m3c_accepted_head": "c50872431534f199dd0ba78ef86967bcd0b94e4c",
+    "research_train_content_fingerprint": "sha256:60aa988e9db786db5723c925abc794463c23ff701791173b745196c7a8b12033",
+    "upstream_main_sha": "a7640e35c861e72413c9a0154e2ae3af0a075889"
+  },
+  "schema_version": 1,
+  "sealed_ledgers": {
+    "development_gate": {
+      "byte_count": 0,
+      "event_count": 0,
+      "path": "research/m3a/development_gate_access.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "final_holdout": {
+      "byte_count": 0,
+      "event_count": 0,
+      "path": "research/m2b/test_evaluations.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

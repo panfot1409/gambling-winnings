@@ -1,0 +1,236 @@
+{
+  "cost_scenarios": [
+    {
+      "identifier": "base",
+      "milestones": [
+        "m3a"
+      ]
+    },
+    {
+      "identifier": "causal_proxy_base",
+      "milestones": [
+        "m3b",
+        "m3c"
+      ]
+    },
+    {
+      "identifier": "causal_proxy_stressed",
+      "milestones": [
+        "m3b",
+        "m3c"
+      ]
+    },
+    {
+      "identifier": "compatibility_v1",
+      "milestones": [
+        "m3b",
+        "m3c"
+      ]
+    },
+    {
+      "identifier": "severe",
+      "milestones": [
+        "m3a"
+      ]
+    },
+    {
+      "identifier": "stressed",
+      "milestones": [
+        "m3a"
+      ]
+    }
+  ],
+  "drawdown_breaker": {
+    "enabled": false,
+    "executed": false,
+    "milestone": "m3b",
+    "state": "declared_disabled"
+  },
+  "kind": "research_specification_catalog",
+  "package_version": "0.7.0",
+  "risk_overlays": [
+    {
+      "identifier": "volatility_target_30d_50pct",
+      "milestones": [
+        "m3b",
+        "m3c"
+      ],
+      "parameters": {
+        "annual_volatility_target": 0.5,
+        "volatility_denominator_floor": 0.1,
+        "volatility_lookback": 30,
+        "volatility_min_observations": 30
+      }
+    }
+  ],
+  "schema_version": 1,
+  "strategies": [
+    {
+      "completed_experiment_count": 6,
+      "first_seen_commit": "b89627463775bf32698effb5adea1270a5927890",
+      "first_seen_milestone": "m2b",
+      "identifier": "buy_and_hold",
+      "may_evaluate_again": true,
+      "parameter_selected_after_results": false,
+      "parameters": {},
+      "partitions_exposed": [
+        "m2b_train",
+        "m2b_validation",
+        "research_train"
+      ],
+      "promotion_eligible": false,
+      "rejection_reason": null,
+      "role": "benchmark",
+      "specification_fingerprint": "2704d0b357b0101f5655d467f9070a68eb24c3edfe373e9b46370ced291603cb",
+      "status": "active_benchmark"
+    },
+    {
+      "completed_experiment_count": 5,
+      "first_seen_commit": "598cb67483b24b0d7591a87e8ef3ac914126bb5a",
+      "first_seen_milestone": "m3a",
+      "identifier": "cash",
+      "may_evaluate_again": true,
+      "parameter_selected_after_results": false,
+      "parameters": {},
+      "partitions_exposed": [
+        "research_train"
+      ],
+      "promotion_eligible": false,
+      "rejection_reason": null,
+      "role": "benchmark",
+      "specification_fingerprint": "5e59c572f2c62d5619d7ee49245603374e9dccd8d381038fe4413386fb64a5c6",
+      "status": "active_benchmark"
+    },
+    {
+      "completed_experiment_count": 5,
+      "first_seen_commit": "598cb67483b24b0d7591a87e8ef3ac914126bb5a",
+      "first_seen_milestone": "m3a",
+      "identifier": "donchian_55_20",
+      "may_evaluate_again": true,
+      "parameter_selected_after_results": false,
+      "parameters": {
+        "entry_channel": 55,
+        "exit_channel": 20
+      },
+      "partitions_exposed": [
+        "research_train"
+      ],
+      "promotion_eligible": false,
+      "rejection_reason": null,
+      "role": "exploratory_fixed_rule",
+      "specification_fingerprint": "7e7cf62c2774122bdc63ad388d4bde3bbea2831e7df081b15179c374bdd575ec",
+      "status": "exploratory_completed"
+    },
+    {
+      "completed_experiment_count": 1,
+      "first_seen_commit": "59cdecea27284535e83f12b1c2430998ead1f92e",
+      "first_seen_milestone": "m3c",
+      "identifier": "dual_horizon_trend_63_252_vol_target_30d_50pct",
+      "may_evaluate_again": false,
+      "parameter_selected_after_results": false,
+      "parameters": {
+        "annual_volatility_target": 0.5,
+        "fast_horizon_days": 63,
+        "slow_horizon_days": 252,
+        "volatility_lookback_days": 30
+      },
+      "partitions_exposed": [
+        "research_train"
+      ],
+      "promotion_eligible": false,
+      "rejection_reason": "rejected_for_development_gate_promotion",
+      "role": "candidate",
+      "specification_fingerprint": "4eb6760a7c27f75bf0329fca5d570fa926e1210505dc8a49f6629656267f61e9",
+      "status": "rejected_for_development_gate_promotion"
+    },
+    {
+      "completed_experiment_count": 1,
+      "first_seen_commit": "b89627463775bf32698effb5adea1270a5927890",
+      "first_seen_milestone": "m2b",
+      "identifier": "moving_average_crossover",
+      "may_evaluate_again": true,
+      "parameter_selected_after_results": false,
+      "parameters": {
+        "fast_window": 20,
+        "slow_window": 50
+      },
+      "partitions_exposed": [
+        "m2b_train",
+        "m2b_validation"
+      ],
+      "promotion_eligible": false,
+      "rejection_reason": null,
+      "role": "exploratory_fixed_rule",
+      "specification_fingerprint": "c7000e643f1958f0d6e1834c343cb0c0744f201100bae490ab70a37f63d32a6a",
+      "status": "exploratory_completed"
+    },
+    {
+      "completed_experiment_count": 3,
+      "first_seen_commit": "598cb67483b24b0d7591a87e8ef3ac914126bb5a",
+      "first_seen_milestone": "m3a",
+      "identifier": "sma_20_50",
+      "may_evaluate_again": true,
+      "parameter_selected_after_results": false,
+      "parameters": {
+        "fast_window": 20,
+        "slow_window": 50
+      },
+      "partitions_exposed": [
+        "research_train"
+      ],
+      "promotion_eligible": false,
+      "rejection_reason": null,
+      "role": "exploratory_fixed_rule",
+      "specification_fingerprint": "036affe32db536eef5a2d6249a2dc19fba7dc3d43c439f11bc1df50fb84472c6",
+      "status": "exploratory_completed"
+    },
+    {
+      "completed_experiment_count": 1,
+      "first_seen_commit": "2628440329a212cf0d2de16938161820e56b0a6a",
+      "first_seen_milestone": "m3b",
+      "identifier": "vol_target_buy_and_hold_30d_50pct",
+      "may_evaluate_again": true,
+      "parameter_selected_after_results": false,
+      "parameters": {
+        "annual_volatility_target": 0.5,
+        "base": "buy_and_hold",
+        "volatility_lookback_days": 30
+      },
+      "partitions_exposed": [
+        "research_train"
+      ],
+      "promotion_eligible": false,
+      "rejection_reason": null,
+      "role": "measurement_instrument",
+      "specification_fingerprint": "1a08bc6a773959adc5afece3c1bcdd4ca56a75c6ef02a040f677fd647246089f",
+      "status": "measurement_completed"
+    },
+    {
+      "completed_experiment_count": 2,
+      "first_seen_commit": "2628440329a212cf0d2de16938161820e56b0a6a",
+      "first_seen_milestone": "m3b",
+      "identifier": "vol_target_donchian_55_20_30d_50pct",
+      "may_evaluate_again": true,
+      "parameter_selected_after_results": false,
+      "parameters": {
+        "annual_volatility_target": 0.5,
+        "base": "donchian_55_20",
+        "volatility_lookback_days": 30
+      },
+      "partitions_exposed": [
+        "research_train"
+      ],
+      "promotion_eligible": false,
+      "rejection_reason": null,
+      "role": "measurement_instrument",
+      "specification_fingerprint": "80448be19a2f43fdff680df2148e9f226e606e3b7fcaf3cc6b7efda6a9dadb86",
+      "status": "measurement_completed"
+    }
+  ],
+  "summary": {
+    "benchmark_count": 2,
+    "candidate_count": 1,
+    "rejected_count": 1,
+    "strategy_count": 8
+  }
+}
