@@ -1,0 +1,66 @@
+# Milestone 3E — read-only proposal PR verifier.
+#
+# Runs on any pull request that touches a proposal under research/m3e/proposals/**.
+# It replays the COMPLETE proposed cohort (accepted rows from committed M3D bytes +
+# the appended new window from the proposal runners), re-runs the 35-check proposal
+# verifier, and asserts the PR is a DRAFT requiring human review. It is strictly
+# read-only (read-only repository contents + pull-requests), so untrusted proposal
+# content never runs in a write-permission job, and it uses the plain PR event, never
+# the privileged PR-target event.
+#
+# This workflow decides nothing and merges nothing — the human reviewer does.
+
+name: M3E Update PR Check
+
+on:
+  pull_request:
+    paths:
+      - "research/m3e/proposals/**"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  verify-proposal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: The update proposal PR must be a DRAFT (human review required)
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.pull_request.draft }}" != "true" ]; then
+            echo "refusing: an M3E update-proposal PR must be a draft for human review"
+            exit 1
+          fi
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: Replay the complete proposed cohort + run the 35-check verifier
+        run: |
+          set -euo pipefail
+          uv run --no-sync python - <<'PY'
+          from eth_research.m3e.verify_m3e_program import (
+              verify_proposals_root,
+              verify_update_proposal,
+          )
+
+          # Every child of the proposals root must be a manifest-bearing proposal dir;
+          # a manifest-less sibling or a stray file (a smuggled artifact) fails here,
+          # so nothing under research/m3e/proposals/ escapes the 35-check verifier.
+          proposals = verify_proposals_root(".")
+          assert proposals, "no proposal with a manifest found under research/m3e/proposals/"
+          for proposal in proposals:
+              checks = verify_update_proposal(".", proposal)
+              assert len(checks) == 35, f"{proposal}: {len(checks)} checks, expected 35"
+              print(f"{proposal}: 35/35 checks pass")
+          PY
+      - name: The verifier mutated no tracked file
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git status --porcelain)"

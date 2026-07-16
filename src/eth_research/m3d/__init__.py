@@ -17,11 +17,12 @@ milestone identities keep their own recorded versions and are never rewritten.
 
 from __future__ import annotations
 
-from eth_research import __version__ as _PACKAGE_VERSION
-
-# The M3D governance/data artifacts stamp the running development package
-# version; kept as a named constant so a single import point identifies the
-# milestone without every module reaching back into the top-level package.
-M3D_PACKAGE_VERSION: str = _PACKAGE_VERSION
+# Milestone 3D is complete and its artifacts are frozen at development version
+# 0.7.0. Once a later milestone bumps the running package (M3E → 0.8.0), this
+# constant must pin the literal 0.7.0 the M3D artifacts already stamp — exactly as
+# every prior completed milestone pins its own version (``M3C_PACKAGE_VERSION =
+# "0.6.0"``, etc.). The freeze is replay-neutral: every M3D artifact rebuilds
+# byte-for-byte and ``m3d-replay`` stays green under the newer running package.
+M3D_PACKAGE_VERSION: str = "0.7.0"
 
 __all__ = ["M3D_PACKAGE_VERSION"]
