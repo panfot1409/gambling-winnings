@@ -18,6 +18,12 @@ from eth_research.api.backtest import (
     run_binary_backtest,
     run_fractional_backtest,
 )
+from eth_research.api.config import (
+    CONFIG_SCHEMA_VERSION,
+    RunConfig,
+    load_config,
+    load_config_file,
+)
 from eth_research.api.dataset import (
     CanonicalDatasetArtifacts,
     DataSplitResult,
@@ -61,6 +67,7 @@ from eth_research.api.models import (
     ValidationFinding,
     ValidationReport,
 )
+from eth_research.api.publish import publish_bundle
 from eth_research.api.receipt import RunReceipt, build_receipt, verify_run_receipt
 from eth_research.api.results import ResearchResult
 from eth_research.api.strategies import (
@@ -80,6 +87,7 @@ __all__ = [
     "BINARY_COST_SCENARIOS",
     "BINARY_STRATEGY_KINDS",
     "BINARY_STRATEGY_PARAMS",
+    "CONFIG_SCHEMA_VERSION",
     "ENGINES",
     "FRACTIONAL_COST_SCENARIOS",
     "FRACTIONAL_STRATEGY_KINDS",
@@ -109,6 +117,7 @@ __all__ = [
     "ResearchResult",
     "ResearchRunSpec",
     "ResultValidationError",
+    "RunConfig",
     "RunReceipt",
     "Strategy",
     "StrategyError",
@@ -129,6 +138,9 @@ __all__ = [
     "list_binary_strategies",
     "list_fractional_strategies",
     "load_canonical_dataset",
+    "load_config",
+    "load_config_file",
+    "publish_bundle",
     "run_binary_backtest",
     "run_fractional_backtest",
     "validate_dataset",
