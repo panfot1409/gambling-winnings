@@ -94,8 +94,10 @@ def _safe_rel_path(value: Any, field: str) -> str:
     pure = PurePosixPath(text)
     if pure.is_absolute() or ".." in pure.parts:
         raise CanonicalError(f"{field}: must be a relative path without '..'")
-    normalized = text.lstrip("./")
-    if normalized.startswith("research/") or normalized.split("/", 1)[0] == ".git":
+    if ".git" in pure.parts:
+        raise CanonicalError(f"{field}: must not reference a .git directory")
+    meaningful = [part for part in pure.parts if part != "."]
+    if meaningful and meaningful[0] == "research":
         raise CanonicalError(f"{field}: must not reference governed research artifacts")
     return text
 

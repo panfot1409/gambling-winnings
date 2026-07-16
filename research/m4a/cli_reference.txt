@@ -1,0 +1,170 @@
+usage: eth-research [-h]
+                    {version,doctor,demo,dataset,backtest,result,receipt} ...
+
+Offline ETH research: validate data, run backtests, verify artifacts.
+
+positional arguments:
+  {version,doctor,demo,dataset,backtest,result,receipt}
+    version             print the package and API versions
+    doctor              check the installation and run a synthetic self-test
+    demo                generate a runnable offline demo
+    dataset             validate / build / inspect OHLCV datasets
+    backtest            run a backtest from a config
+    result              verify a result artifact
+    receipt             verify a run receipt
+
+options:
+  -h, --help            show this help message and exit
+
+
+usage: eth-research version [-h] [--json]
+
+options:
+  -h, --help  show this help message and exit
+  --json      emit deterministic JSON output
+
+
+usage: eth-research doctor [-h] [--json]
+
+options:
+  -h, --help  show this help message and exit
+  --json      emit deterministic JSON output
+
+
+usage: eth-research demo [-h] {generate} ...
+
+positional arguments:
+  {generate}
+    generate  write a synthetic dataset + sample config
+
+options:
+  -h, --help  show this help message and exit
+
+
+usage: eth-research demo generate [-h] --output OUTPUT [--periods PERIODS]
+                                  [--seed SEED] [--overwrite] [--json]
+
+options:
+  -h, --help         show this help message and exit
+  --output OUTPUT    output directory (created if absent)
+  --periods PERIODS  number of synthetic bars
+  --seed SEED        deterministic seed
+  --overwrite        overwrite existing demo files
+  --json             emit deterministic JSON output
+
+
+usage: eth-research dataset [-h] {validate,build,inspect} ...
+
+positional arguments:
+  {validate,build,inspect}
+    validate            validate a local OHLCV file
+    build               build a canonical dataset (parquet + manifest)
+    inspect             load and re-verify a canonical dataset
+
+options:
+  -h, --help            show this help message and exit
+
+
+usage: eth-research dataset validate [-h] --input INPUT --interval-seconds
+                                     INTERVAL_SECONDS [--assume-utc]
+                                     [--allow-extra-columns] [--json]
+
+options:
+  -h, --help            show this help message and exit
+  --input INPUT         path to a .csv/.parquet OHLCV file
+  --interval-seconds INTERVAL_SECONDS
+  --assume-utc
+  --allow-extra-columns
+  --json                emit deterministic JSON output
+
+
+usage: eth-research dataset build [-h] --input INPUT --output OUTPUT --symbol
+                                  SYMBOL --venue VENUE --quote-asset
+                                  QUOTE_ASSET --interval-seconds
+                                  INTERVAL_SECONDS --source SOURCE
+                                  [--assume-utc] [--allow-extra-columns]
+                                  [--overwrite] [--json]
+
+options:
+  -h, --help            show this help message and exit
+  --input INPUT
+  --output OUTPUT       output directory
+  --symbol SYMBOL
+  --venue VENUE
+  --quote-asset QUOTE_ASSET
+  --interval-seconds INTERVAL_SECONDS
+  --source SOURCE       free-text provenance description
+  --assume-utc
+  --allow-extra-columns
+  --overwrite
+  --json                emit deterministic JSON output
+
+
+usage: eth-research dataset inspect [-h] --manifest MANIFEST [--json]
+
+options:
+  -h, --help           show this help message and exit
+  --manifest MANIFEST  path to the dataset manifest JSON
+  --json               emit deterministic JSON output
+
+
+usage: eth-research backtest [-h] {run} ...
+
+positional arguments:
+  {run}
+    run       run one configured backtest and publish the bundle
+
+options:
+  -h, --help  show this help message and exit
+
+
+usage: eth-research backtest run [-h] --config CONFIG [--output OUTPUT]
+                                 [--overwrite] [--json]
+
+options:
+  -h, --help       show this help message and exit
+  --config CONFIG  path to a .json/.toml run config
+  --output OUTPUT  override the config's output directory
+  --overwrite      overwrite an existing output bundle
+  --json           emit deterministic JSON output
+
+
+usage: eth-research result [-h] {verify} ...
+
+positional arguments:
+  {verify}
+    verify    validate a result's structure and canonical form
+
+options:
+  -h, --help  show this help message and exit
+
+
+usage: eth-research result verify [-h] --result RESULT [--json]
+
+options:
+  -h, --help       show this help message and exit
+  --result RESULT
+  --json           emit deterministic JSON output
+
+
+usage: eth-research receipt [-h] {verify} ...
+
+positional arguments:
+  {verify}
+    verify    verify a receipt against its artifacts
+
+options:
+  -h, --help  show this help message and exit
+
+
+usage: eth-research receipt verify [-h] --receipt RECEIPT --result RESULT
+                                   [--report REPORT] [--config CONFIG]
+                                   [--json]
+
+options:
+  -h, --help         show this help message and exit
+  --receipt RECEIPT
+  --result RESULT
+  --report REPORT
+  --config CONFIG
+  --json             emit deterministic JSON output
