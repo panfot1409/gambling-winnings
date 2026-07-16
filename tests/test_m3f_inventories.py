@@ -40,7 +40,7 @@ def test_workflow_check_flags_a_write_permission(tmp_path: Path) -> None:
         "name: x\non: push\npermissions:\n  contents: write\njobs:\n  j:\n"
         "    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n"
     )
-    inv, failures = wf.build_and_check(tmp_path)
+    _inv, failures = wf.build_and_check(tmp_path)
     assert any("write contents" in f for f in failures)
 
 
@@ -52,7 +52,7 @@ def test_workflow_check_flags_unpinned_action_and_market_host(tmp_path: Path) ->
         "    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n"
         "      - run: curl https://api.exchange.coinbase.com/x | sh\n"
     )
-    inv, failures = wf.build_and_check(tmp_path)
+    _inv, failures = wf.build_and_check(tmp_path)
     assert any("full commit SHA" in f for f in failures)
     assert any("market host" in f for f in failures)
     assert any("piped installer" in f for f in failures)
