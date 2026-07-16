@@ -60,10 +60,11 @@ jobs:
           uv run --no-sync --python 3.12.3 ruff check .
           uv run --no-sync --python 3.12.3 ruff format --check .
           uv run --no-sync --python 3.12.3 mypy
-      - name: Public-API + CLI-reference snapshots are current
+      - name: Public-API + CLI-reference + release-candidate snapshots are current
         run: |
           uv run --no-sync --python 3.12.3 python -m eth_research.m4a.public_api --check --repo-root .
           uv run --no-sync --python 3.12.3 python -m eth_research.m4a.cli_reference --check --repo-root .
+          uv run --no-sync --python 3.12.3 python -m eth_research.m4a.release --check --repo-root .
       - name: M4A test battery (public API, CLI, packaging, consumer, hardening)
         run: |
           uv run --no-sync --python 3.12.3 python -m pytest -q -p no:cacheprovider \
@@ -73,7 +74,7 @@ jobs:
             tests/test_cli.py tests/test_docs_examples.py \
             tests/test_m4a_snapshots.py tests/test_m4a_security.py \
             tests/test_m4a_misuse.py tests/test_m4a_performance.py \
-            tests/test_m4a_redteam_hardening.py \
+            tests/test_m4a_redteam_hardening.py tests/test_m4a_release.py \
             tests/test_packaging.py tests/test_consumer_e2e.py
       - name: Verification mutated no tracked file
         run: |

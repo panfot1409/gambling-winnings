@@ -1,0 +1,22 @@
+{
+  "api_version": "1.0",
+  "cli_reference_sha256": "5b6aa48545a8a09a19afccb0a3963905c86d5b4a5dad8373cc2e7d2109068fcc",
+  "package": "eth-research",
+  "package_version": "1.0.0",
+  "public_api_snapshot_sha256": "2f09f2d8919ad9010b4b49ef8a6ea5e3a267866b12c8c379cd0afbc79adf46d7",
+  "release_schema_version": 1,
+  "requires_python": ">=3.12",
+  "schema_versions": {
+    "config": 1,
+    "manifest": 1,
+    "public_api_snapshot": 1,
+    "receipt": 1,
+    "result": 1,
+    "validation_report": 1
+  },
+  "sealed_ledgers": {
+    "research/m2b/test_evaluations.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "research/m3a/development_gate_access.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "research/m3d/prospective_evaluations.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

@@ -12,7 +12,25 @@ committed for review and drift detection; they are **not** shipped in the distri
   rendered help depends on the exact CPython argparse formatting, so the drift check is
   pinned to CPython 3.12.
 
-Both `--check` guards fail closed when the committed snapshot no longer matches the
-running package, so an accidental public-API or CLI change is caught in review. This is a
-governed root: it self-verifies here and is out of scope for the accepted M2B–M3E stack
-freeze table and the frozen M3F audit.
+The four release-candidate artifacts below are deterministic, source-derived records — no
+binary is committed. Regenerate all four with `python -m eth_research.m4a.release --write`;
+verify with `--check`.
+
+- `distribution_manifest.json` — the pure-Python members that ship inside the package
+  (`.py` / `.pyi` + `py.typed`), each with its content hash. `tests/test_m4a_release.py`
+  builds the wheel and proves the built distribution ships exactly these members, byte for
+  byte.
+- `distribution_dependencies.json` — the pinned runtime dependency graph (the offline
+  `numpy` / `pandas` / `pyarrow` stack) with the versions locked in `uv.lock` and the pinned
+  build backend.
+- `release_candidate_state.json` — the frozen RC state: package/API versions, every artifact
+  schema version, and the sha256 of each of the three sealed governance ledgers (each must be
+  the empty-string digest) plus the public-API and CLI-reference snapshots.
+- `distribution_proof.json` — an attestation of the proofs that back the distribution (double
+  build byte-identity, scanner-clean, consumer E2E, offline import closure), each naming the
+  test that establishes it.
+
+Every `--check` guard fails closed when a committed artifact no longer matches the running
+package, so an accidental public-API, CLI, distribution, or governance-state change is caught
+in review. This is a governed root: it self-verifies here and is out of scope for the accepted
+M2B–M3E stack freeze table and the frozen M3F audit.

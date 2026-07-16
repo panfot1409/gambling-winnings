@@ -1,0 +1,31 @@
+{
+  "direct_third_party_dependencies": [
+    "numpy",
+    "pandas",
+    "pyarrow"
+  ],
+  "forbidden_capabilities_absent": true,
+  "package": "eth-research",
+  "properties": {
+    "consumer_e2e_out_of_tree": {
+      "proven_by": "tests/test_consumer_e2e.py"
+    },
+    "distribution_scanner_clean": {
+      "proven_by": "tests/test_packaging.py::test_scanner_reports_clean"
+    },
+    "double_build_byte_identical_linux": {
+      "proven_by": "tests/test_packaging.py::test_double_build_is_byte_identical"
+    },
+    "manifest_matches_built_distribution": {
+      "proven_by": "tests/test_m4a_release.py::test_distribution_manifest_matches_built_wheel"
+    },
+    "no_network_or_exchange_import": {
+      "proven_by": "tests/test_m4a_security.py::test_runtime_layer_has_no_forbidden_capability"
+    },
+    "package_tree_is_pure_python": {
+      "proven_by": "tests/test_packaging.py::test_sdist_contains_no_private_data"
+    }
+  },
+  "release_schema_version": 1,
+  "version": "1.0.0"
+}
