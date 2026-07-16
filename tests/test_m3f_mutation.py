@@ -174,3 +174,19 @@ def test_publish_rolls_back_newly_created_files_on_write_error(tmp_path: Path) -
     with pytest.raises((FileExistsError, NotADirectoryError)):
         register._publish_atomically(root, pairs)
     assert not (root / good).exists()  # the first write was rolled back
+
+
+def test_publish_restores_preexisting_files_on_reregistration_failure(tmp_path: Path) -> None:
+    # B5: a failed re-registration must not corrupt already-committed artifacts.
+    (tmp_path / "research/m3f").mkdir(parents=True)
+    (tmp_path / "research/m3f/a.json").write_bytes(b"OLD-A")
+    (tmp_path / "research/m3f/b.json").write_bytes(b"OLD-B")
+    pairs = [
+        ("research/m3f/a.json", b"NEW-A"),
+        ("research/m3f/b.json", b"NEW-B"),
+        ("research/m3f/a.json/child", b"x"),  # parent is now a file -> OSError mid-run
+    ]
+    with pytest.raises((FileExistsError, NotADirectoryError)):
+        register._publish_atomically(tmp_path, pairs)
+    assert (tmp_path / "research/m3f/a.json").read_bytes() == b"OLD-A"
+    assert (tmp_path / "research/m3f/b.json").read_bytes() == b"OLD-B"

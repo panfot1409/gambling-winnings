@@ -14,6 +14,8 @@ The post-drill (P) artifact is the recovery drill record.
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 
 from eth_research.m3f import M3F_PACKAGE_VERSION
@@ -64,24 +66,41 @@ def _build_registration_pairs(
     ]
 
 
-def _publish_atomically(root: Path, pairs: list[tuple[str, bytes]]) -> list[str]:
-    """Write every (relpath, bytes) pair, rolling back all writes on any failure.
+def _atomic_write(path: Path, data: bytes) -> None:
+    """Write ``data`` to ``path`` atomically (temp file in the same directory + rename)."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".m3f-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        os.replace(tmp, path)
+    except OSError:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
-    Files that already existed are left untouched by rollback (only newly created
-    paths are removed), so a re-registration that fails cannot corrupt prior state.
+
+def _publish_atomically(root: Path, pairs: list[tuple[str, bytes]]) -> list[str]:
+    """Write every (relpath, bytes) pair atomically, rolling back on any failure.
+
+    Each file is written to a temp sibling and renamed into place, so no file is ever
+    seen half-written. Before overwriting, each pre-existing target's bytes are
+    snapshotted; on any failure every completed write is reverted — a newly created
+    file is removed and a pre-existing file is restored to its original bytes — so a
+    failed re-registration cannot corrupt prior state.
     """
-    created: list[Path] = []
+    completed: list[tuple[Path, bytes | None]] = []
     try:
         for relpath, data in pairs:
             path = root / relpath
             path.parent.mkdir(parents=True, exist_ok=True)
-            existed = path.exists()
-            path.write_bytes(data)
-            if not existed:
-                created.append(path)
+            original = path.read_bytes() if path.is_file() else None
+            _atomic_write(path, data)
+            completed.append((path, original))
     except OSError:
-        for path in reversed(created):
-            path.unlink(missing_ok=True)
+        for path, original in reversed(completed):
+            if original is None:
+                path.unlink(missing_ok=True)
+            else:
+                _atomic_write(path, original)
         raise
     return sorted(relpath for relpath, _ in pairs)
 
