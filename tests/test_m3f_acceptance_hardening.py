@@ -14,6 +14,7 @@ market host), B2 (dependency registry hash), plus the bundle symlink-read guard.
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 from pathlib import Path
 
@@ -245,16 +246,31 @@ def test_frozen_inventories_survive_version_bump_and_new_workflow(registered_clo
     from eth_research.m3f.dependency_inventory import verify_inventory as verify_dep
     from eth_research.m3f.workflow_inventory import verify_inventory as verify_wf
 
-    # Simulate the M4A layer: bump the package version (rewrites uv.lock/pyproject) and
-    # add a new workflow — exactly what would drift a live-tree inventory verifier.
+    # Simulate a future governed layer beyond this one: bump the package version
+    # (which rewrites uv.lock + pyproject) and add a new workflow — exactly what would
+    # drift a live-tree inventory verifier. The sentinel version is guaranteed to differ
+    # from whatever the source-freeze commit recorded, independent of the repo's current
+    # running version, so this stays a genuine bump after M4A moves the tree to 1.0.0.
+    bumped = "99.99.99"
     pyproject = registered_clone / "pyproject.toml"
     pyproject.write_text(
-        pyproject.read_text(encoding="utf-8").replace('version = "0.9.0"', 'version = "1.0.0"', 1),
+        re.sub(
+            r'^version = "[^"]+"',
+            f'version = "{bumped}"',
+            pyproject.read_text(encoding="utf-8"),
+            count=1,
+            flags=re.MULTILINE,
+        ),
         encoding="utf-8",
     )
     lock = registered_clone / "uv.lock"
     lock.write_text(
-        lock.read_text(encoding="utf-8").replace('version = "0.9.0"', 'version = "1.0.0"', 1),
+        re.sub(
+            r'(name = "eth-research"\nversion = )"[^"]+"',
+            rf'\g<1>"{bumped}"',
+            lock.read_text(encoding="utf-8"),
+            count=1,
+        ),
         encoding="utf-8",
     )
     (registered_clone / ".github/workflows/m4a-rc.yml").write_text(
