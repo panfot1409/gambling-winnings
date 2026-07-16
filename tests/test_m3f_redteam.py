@@ -19,6 +19,7 @@ import pytest
 import eth_research
 from eth_research.m3f.dependency_inventory import _parse_lock_packages, build_inventory
 from eth_research.m3f.honest_state import _any_workflow_writes, derive_honest_state
+from eth_research.m3f.oracle import run_oracles
 from eth_research.m3f.validation import M3FValidationError
 from eth_research.m3f.workflow_inventory import _scan_one, workflow_grants_write
 
@@ -175,3 +176,22 @@ def test_real_lock_sources_are_all_reproducible() -> None:
     inv = build_inventory(REPO_ROOT)
     kinds = {p["source_kind"] for p in inv["locked_packages"]}
     assert kinds <= {"registry", "editable"}, kinds
+
+
+# --------------------------------------------------------------------------- #
+# Theme 3 — oracle robustness (C2)                                            #
+# --------------------------------------------------------------------------- #
+def test_oracle_rejects_naive_timestamp_as_clean_failure(tmp_path: Path) -> None:
+    # A naive (non-UTC) cohort timestamp must produce a clean per-oracle failure,
+    # not an uncaught TypeError that crashes the collector.
+    shutil.copytree(REPO_ROOT / "research", tmp_path / "research")
+    base = tmp_path / "research/m3e/accepted_base.json"
+    base.write_text(
+        base.read_text(encoding="utf-8").replace(
+            '"first_open": "2026-07-12T00:00:00Z"', '"first_open": "2026-07-12T00:00:00"'
+        ),
+        encoding="utf-8",
+    )
+    report = run_oracles(tmp_path)  # must not raise
+    assert report.ok is False
+    assert any(f.startswith("m3e_cohort_window") for f in report.failures)

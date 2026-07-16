@@ -24,7 +24,7 @@ evaluation, no ledger mutation, no network, no wall-clock decision.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -72,9 +72,14 @@ def _parse_utc(value: object, label: str) -> datetime:
     text = require_str(value, label)
     normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
     try:
-        return datetime.fromisoformat(normalized)
+        parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
         raise M3FValidationError(f"{label}: not an ISO-8601 instant: {text!r}") from exc
+    # Require an explicit UTC instant: a naive or non-UTC timestamp is rejected here
+    # rather than crashing the cohort-window subtraction on a naive/aware mix.
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
+        raise M3FValidationError(f"{label}: must be an explicit UTC instant: {text!r}")
+    return parsed
 
 
 # --------------------------------------------------------------------------- #
@@ -214,9 +219,11 @@ def run_oracles(repo_root: str | Path) -> OracleReport:
         try:
             fn(root)
             report.checks.append(name)
-        except (OSError, M3FValidationError) as exc:
+        except Exception as exc:
+            # Fail closed: any oracle error (including an unexpected type) is recorded
+            # as a failure rather than crashing the collector and masking later oracles.
             report.checks.append(name)
-            report.failures.append(f"{name}: {exc}")
+            report.failures.append(f"{name}: {type(exc).__name__}: {exc}")
     return report
 
 
