@@ -14,14 +14,14 @@ aliases, so a catalogued repository-relative path can never escape the repo root
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import unicodedata
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from eth_research._json import StrictJSONError, require_canonical_file_bytes, strict_json_loads
-from eth_research.data.provenance import sha256_bytes, sha256_file
-from eth_research.m3d.validation import canonical_json_bytes, canonical_sha256
 
 __all__ = [
     "M3FValidationError",
@@ -49,6 +49,34 @@ _MAX_JSON_BYTES = 8 * 1024 * 1024  # a governance/inventory artifact is never th
 
 class M3FValidationError(ValueError):
     """A committed M3F/accepted artifact failed a strict invariant."""
+
+
+# Hashing + canonical serialization are inlined here (stdlib only) rather than imported
+# from eth_research.data.provenance / eth_research.m3d.validation, which transitively
+# pull pandas and the whole data pipeline. M3F only serializes its own artifacts, so a
+# local copy stays self-consistent while keeping the package free of any third-party
+# dependency (the source-scope firewall asserts this). canonical_json_bytes mirrors the
+# accepted stack's serializer exactly: sorted keys, two-space indent, one trailing
+# newline, UTF-8, NaN/Infinity rejected at serialization time.
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 16), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def canonical_json_bytes(payload: Any) -> bytes:
+    text = json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False)
+    return (text + "\n").encode("utf-8")
+
+
+def canonical_sha256(payload: Any) -> str:
+    return sha256_bytes(canonical_json_bytes(payload))
 
 
 def load_canonical_json(raw: bytes, label: str) -> Any:

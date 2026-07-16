@@ -1,16 +1,19 @@
 """M3F isolation guarantees (commit: independent verifier).
 
-Two structural firewalls, enforced by parsing source rather than trusting a
-comment:
+Structural firewalls, enforced by parsing source (relative *and* dynamic imports,
+not just absolute) rather than trusting a comment, and backstopped by a runtime
+import-closure check:
 
 1. ``tools/m3f_independent_verify.py`` imports only the Python standard library —
    never ``eth_research`` and never a third-party package — so it cannot share a
    common-mode parser/logic defect with the packaged verifiers it shadows.
 
 2. The ``eth_research.m3f`` package's entire dependency on the rest of
-   ``eth_research`` is a tiny, explicit allowlist routed through one strict module,
-   and it imports no third-party package. M3F verifies the accepted stack; it must
-   not import the strategy/evaluation logic it is judging.
+   ``eth_research`` is a one-module allowlist (``eth_research._json``), and it
+   imports no third-party package (hashing + canonical JSON are inlined). Above
+   all, M3F must not import — directly, relatively, dynamically, or transitively —
+   the strategy/evaluation/backtest logic it is judging; a subprocess import closes
+   the case at runtime.
 
 The independent verifier is also exercised end-to-end: it passes on the real
 repository and independently detects the tampering the packaged verifiers detect.
@@ -21,6 +24,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -32,26 +36,71 @@ INDEPENDENT_TOOL = REPO_ROOT / "tools/m3f_independent_verify.py"
 M3F_PACKAGE_DIR = Path(eth_research.__file__).resolve().parent / "m3f"
 
 # The complete allowlist of non-m3f eth_research modules the m3f package may import.
-_ALLOWED_ETH_RESEARCH = frozenset(
-    {
-        "eth_research._json",
-        "eth_research.data.provenance",
-        "eth_research.m3d.validation",
-    }
+_ALLOWED_ETH_RESEARCH = frozenset({"eth_research._json"})
+
+# No m3f module — directly or transitively — may load the judged strategy/eval logic.
+_FORBIDDEN_SUBSTRINGS = (
+    "backtest",
+    "evaluation",
+    "strateg",
+    "metric",
+    "develop",
+    "experiment",
+    "fractional",
+    "liquidity",
+    "bootstrap",
+    "cost",
 )
 
 
-def _imported_modules(source: str) -> set[str]:
-    """Every absolute module name referenced by an import statement in ``source``."""
+def _resolve_relative(package: str | None, level: int, module: str | None) -> str:
+    """Resolve a relative import (level>0) to an absolute module name."""
+    if not package:
+        return "<unresolved-relative-import>"
+    parts = package.split(".")
+    base = ".".join(parts[: len(parts) - (level - 1)]) if level >= 1 else package
+    return f"{base}.{module}" if module else base
+
+
+def _imported_modules(source: str, package: str | None = None) -> set[str]:
+    """Every module referenced by an import statement — absolute AND relative."""
     tree = ast.parse(source)
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 names.add(alias.name)
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            names.add(node.module)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0:
+                if node.module:
+                    names.add(node.module)
+            else:
+                base = _resolve_relative(package, node.level, node.module)
+                names.add(base)
+                if node.module is None:
+                    # `from . import x` / `from .. import x`: each name is a submodule.
+                    for alias in node.names:
+                        names.add(f"{base}.{alias.name}")
     return names
+
+
+def _dynamic_import_calls(source: str) -> set[str]:
+    """Targets of ``__import__(...)`` / ``importlib.import_module(...)`` calls."""
+    tree = ast.parse(source)
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        is_dunder = isinstance(func, ast.Name) and func.id == "__import__"
+        is_ilib = isinstance(func, ast.Attribute) and func.attr == "import_module"
+        if is_dunder or is_ilib:
+            arg = node.args[0] if node.args else None
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                found.add(arg.value)
+            else:
+                found.add("<dynamic-import>")
+    return found
 
 
 def _top(module: str) -> str:
@@ -71,11 +120,14 @@ def _load_independent_tool() -> ModuleType:
 # firewall 1 — the independent tool is standard-library-only                  #
 # --------------------------------------------------------------------------- #
 def test_independent_verifier_imports_only_stdlib() -> None:
-    modules = _imported_modules(INDEPENDENT_TOOL.read_text(encoding="utf-8"))
+    source = INDEPENDENT_TOOL.read_text(encoding="utf-8")
+    modules = _imported_modules(source)  # a script has no package: relatives -> sentinel
     assert modules, "expected at least one import"
     for module in modules:
         assert not module.startswith("eth_research"), f"independent tool imports {module}"
+        assert not module.startswith("<"), f"independent tool uses a relative import: {module}"
         assert _top(module) in sys.stdlib_module_names, f"non-stdlib import: {module}"
+    assert _dynamic_import_calls(source) == set(), "independent tool uses a dynamic import"
 
 
 def test_independent_verifier_has_no_eth_research_import_statement() -> None:
@@ -89,10 +141,28 @@ def test_independent_verifier_has_no_eth_research_import_statement() -> None:
 # --------------------------------------------------------------------------- #
 # firewall 2 — the m3f package's import scope                                 #
 # --------------------------------------------------------------------------- #
+def test_import_walker_resolves_relative_and_flags_dynamic() -> None:
+    # C1: the firewall must see relative and dynamic imports, not only absolute ones.
+    src = (
+        "from ..evaluation import x\n"
+        "from . import y\n"
+        "import importlib\n"
+        "importlib.import_module('eth_research.backtest')\n"
+        "__import__('eth_research.strategies')\n"
+    )
+    modules = _imported_modules(src, package="eth_research.m3f")
+    assert "eth_research.evaluation" in modules  # ``..evaluation`` resolved
+    assert "eth_research.m3f.y" in modules  # ``. y`` resolved
+    assert _dynamic_import_calls(src) == {"eth_research.backtest", "eth_research.strategies"}
+
+
 def test_m3f_package_source_scope_firewall() -> None:
     offenders: list[str] = []
     for path in sorted(M3F_PACKAGE_DIR.glob("*.py")):
-        for module in _imported_modules(path.read_text(encoding="utf-8")):
+        source = path.read_text(encoding="utf-8")
+        # Relative imports are resolved against the package (an m3f module lives in
+        # eth_research.m3f), so `from ..evaluation import x` resolves and is caught.
+        for module in _imported_modules(source, package="eth_research.m3f"):
             if module.startswith("eth_research"):
                 if module.startswith("eth_research.m3f"):
                     continue  # internal package imports are always fine
@@ -100,7 +170,35 @@ def test_m3f_package_source_scope_firewall() -> None:
                     offenders.append(f"{path.name}: {module} (not in the allowlist)")
             elif _top(module) not in sys.stdlib_module_names:
                 offenders.append(f"{path.name}: third-party import {module}")
+        for target in _dynamic_import_calls(source):
+            offenders.append(f"{path.name}: dynamic import {target}")
     assert offenders == [], f"m3f import-scope firewall breached: {offenders}"
+
+
+def test_m3f_package_loads_no_strategy_or_third_party_at_runtime() -> None:
+    # Runtime backstop that also catches relative/dynamic/transitive imports: import
+    # every m3f module in a subprocess and diff sys.modules against the forbidden set.
+    modules = sorted(f"eth_research.m3f.{p.stem}" for p in M3F_PACKAGE_DIR.glob("*.py"))
+    code = (
+        "import sys\n"
+        "before = set(sys.modules)\n"
+        + "".join(f"import {m}\n" for m in modules if not m.endswith("__init__"))
+        + "print('\\n'.join(sorted(set(sys.modules) - before)))\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    ).stdout
+    loaded = out.split()
+    third_party = [m for m in loaded if m in {"pandas", "numpy", "pyarrow", "scipy"}]
+    forbidden = [
+        m
+        for m in loaded
+        if m.startswith("eth_research.")
+        and not m.startswith("eth_research.m3f")
+        and any(s in m for s in _FORBIDDEN_SUBSTRINGS)
+    ]
+    assert third_party == [], f"m3f loaded third-party packages: {third_party}"
+    assert forbidden == [], f"m3f loaded judged strategy/eval modules: {forbidden}"
 
 
 # --------------------------------------------------------------------------- #
