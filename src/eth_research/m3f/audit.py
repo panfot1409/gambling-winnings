@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from eth_research.m3f.bundle import CAPSULE_MANIFEST_RELPATH, verify_manifest
 from eth_research.m3f.catalog import CATALOG_RELPATH, verify_catalog
 from eth_research.m3f.dependency_inventory import INVENTORY_RELPATH as DEP_RELPATH
 from eth_research.m3f.dependency_inventory import verify_inventory as verify_dep_inventory
@@ -23,6 +24,7 @@ from eth_research.m3f.honest_state import (
     verify_honest_state,
 )
 from eth_research.m3f.oracle import run_oracles
+from eth_research.m3f.recovery import DRILL_RELPATH, verify_drill_record
 from eth_research.m3f.state_machine import verify_state
 from eth_research.m3f.validation import M3FValidationError
 from eth_research.m3f.workflow_inventory import INVENTORY_RELPATH as WF_RELPATH
@@ -123,6 +125,25 @@ def verify_repository_freeze(repo_root: str | Path) -> FreezeResult:
         result._fail("08_semantic_oracles", "; ".join(oracle_report.failures[:5]))
     else:
         result._ok("08_semantic_oracles")
+
+    # 9-10. Recovery capsule + disposable-clone drill (present post-registration).
+    if (root / CAPSULE_MANIFEST_RELPATH).is_file():
+        try:
+            verify_manifest(root)
+            result._ok("09_recovery_capsule")
+        except M3FValidationError as exc:
+            result._fail("09_recovery_capsule", str(exc))
+    else:
+        result._fail("09_recovery_capsule", "recovery_capsule_manifest.json is not committed")
+
+    if (root / DRILL_RELPATH).is_file():
+        try:
+            verify_drill_record(root)
+            result._ok("10_recovery_drill")
+        except M3FValidationError as exc:
+            result._fail("10_recovery_drill", str(exc))
+    else:
+        result._fail("10_recovery_drill", "recovery_drill.json is not committed")
 
     return result
 
