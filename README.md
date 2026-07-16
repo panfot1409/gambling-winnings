@@ -407,6 +407,44 @@ advice. See [docs/M3B_PLAN.md](docs/M3B_PLAN.md),
 [docs/M3B_EXECUTION_COST_SPEC.md](docs/M3B_EXECUTION_COST_SPEC.md),
 [docs/M3B_RISK_POLICY_SPEC.md](docs/M3B_RISK_POLICY_SPEC.md).
 
+## Offline research platform 1.0 (Milestone 4A)
+
+Milestone 4A turns the accepted internal research stack (M2B–M3F) into an
+installable, documented **offline research platform** with a small public API and
+one CLI, for use on *your own* local OHLCV files — never touching a network, an
+exchange, a wallet, or any private accepted-research byte. It adds a public
+boundary *over* the accepted engines; it does not change their numerical or causal
+contracts.
+
+- **Public API** (`eth_research.api`): a small, strictly-typed surface — a closed
+  error taxonomy, frozen canonical-JSON value models, a strategy protocol plus a
+  built-in registry, and pure functions (`validate_dataset`,
+  `generate_synthetic_dataset`, `chronological_split`, `run_binary_backtest`,
+  `run_fractional_backtest`, `calculate_metrics`, `build_receipt`,
+  `verify_run_receipt`, `load_config`, …) that **delegate** to the accepted
+  engines and metrics without reimplementing a formula. The public metrics are
+  scalar-identical to the internal engines.
+- **CLI** (`eth-research`): `version`, `doctor`, `demo generate`,
+  `dataset validate|build|inspect`, `backtest run`, `result verify`,
+  `receipt verify` — concise human output or deterministic `--json`, stable exit
+  codes, no prompts, no colour, no network, overwrite refused by default.
+- **Deterministic artifacts**: every run publishes a transactional bundle
+  (`result.json`, `report.md`, `receipt.json`, `manifest.json`) whose bytes are
+  reproducible; a `RunReceipt` binds the artifact digests and a
+  machine-independent run id and records no credential/path/host/wall-clock.
+- **Private-data-safe, reproducible packaging**: the wheel/sdist ship only the
+  runtime package + `py.typed` (the `research/` tree, tests, and tools are never
+  packaged), a scanner (`tools/scan_distribution.py`) enforces the allowlist, and
+  the double build is byte-identical.
+
+Quickstart, the full API reference, the data/execution/cost/metric contracts, the
+security model, and the honest v1 limitations (foremost: no `LICENSE` yet, so the
+distribution is not cleared for public/PyPI upload) are documented under
+[docs/QUICKSTART.md](docs/QUICKSTART.md), [docs/PUBLIC_API.md](docs/PUBLIC_API.md),
+and [docs/V1_LIMITATIONS.md](docs/V1_LIMITATIONS.md). This is a research and
+evaluation tool, not a trading system, and not investment advice. See
+[docs/M4A_PLAN.md](docs/M4A_PLAN.md).
+
 ## Conventions
 
 - **Timestamps are candle open times**, UTC (`datetime64[ns, UTC]`); a
@@ -503,6 +541,9 @@ src/eth_research/
         experiment.py    # the 75-cell runner (fold x scenario x strategy)
         orchestrator.py  # fail-closed register + execute + publish lifecycle
         replay.py        # dual-state offline replay (--check)
+    api/            # M4A public offline research API (errors/models/dataset/strategies/backtest/results/receipt/config/publish)
+    cli/            # M4A single offline CLI entry point (eth-research)
+    m4a/            # M4A RC governance: public-API + CLI-reference snapshots + drift checks
 .github/workflows/
     ci.yml          # lint/type/test on 3.12/3.13 + authoritative-runtime job
     m2b-replay.yml  # fresh-clone reproducibility on authoritative + compat runtimes
@@ -511,11 +552,13 @@ src/eth_research/
     m3d-replay.yml  # M3D prospective cohort rebuilds byte-exact; three ledgers byte-empty
     m3e-replay.yml  # M3E review-only update facility reproduces byte-exact; no proposal
     m3f-replay.yml  # M3F freeze verifier + recovery drill + independent stdlib verifier
+    m4a-release-candidate.yml # M4A read-only RC gate: public API/CLI, packaging, snapshots
     # (write-capable acquisition workflows are retired: all data is frozen)
 .github/scripts/
     verify_m3a_registry.py # CI gate: the registry terminal event binds the published bytes
 tools/
     m3f_independent_verify.py # standard-library-only freeze verifier (imports no eth_research)
+    scan_distribution.py      # private-data-safe wheel/sdist allowlist scanner
 research/m2b/       # committable provenance records, frozen contracts, raw bytes, ledger
 research/m3a/       # M3A partition, walk-forward protocol, registry, results, report, gate ledger
 research/m3b/       # M3B fractional protocol, registry, results, report, run-001 manifest

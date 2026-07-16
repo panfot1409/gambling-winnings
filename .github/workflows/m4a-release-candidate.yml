@@ -1,0 +1,160 @@
+name: M4A Release Candidate
+
+# Read-only verification of the Milestone 4A offline research platform 1.0 release
+# candidate. It proves the public API + CLI behave, the RC snapshots have not drifted,
+# the wheel/sdist are private-data-safe and reproducible, an installed wheel works
+# out-of-tree, and the accepted governance state is untouched. No artifact is uploaded,
+# published, released, tagged, or pushed; no secret or market host is referenced; the
+# default token is read-only.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "src/eth_research/**"
+      - "tests/test_api_*.py"
+      - "tests/test_cli.py"
+      - "tests/test_m4a_*.py"
+      - "tests/test_packaging.py"
+      - "tests/test_consumer_e2e.py"
+      - "tests/test_docs_examples.py"
+      - "tests/test_version.py"
+      - "examples/**"
+      - "research/m4a/**"
+      - "tools/scan_distribution.py"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/m4a-release-candidate.yml"
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GATE_LEDGER: research/m3a/development_gate_access.jsonl
+  HOLDOUT_LEDGER: research/m2b/test_evaluations.jsonl
+  PROSPECTIVE_LEDGER: research/m3d/prospective_evaluations.jsonl
+  EMPTY_SHA: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+jobs:
+  authoritative-build:
+    # Full M4A gate under the authoritative runtime (CPython 3.12.3).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Install the authoritative CPython 3.12.3
+        run: uv python install 3.12.3
+      - name: Verify uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: Lint + format + types
+        run: |
+          uv run --no-sync --python 3.12.3 ruff check .
+          uv run --no-sync --python 3.12.3 ruff format --check .
+          uv run --no-sync --python 3.12.3 mypy
+      - name: Public-API + CLI-reference snapshots are current
+        run: |
+          uv run --no-sync --python 3.12.3 python -m eth_research.m4a.public_api --check --repo-root .
+          uv run --no-sync --python 3.12.3 python -m eth_research.m4a.cli_reference --check --repo-root .
+      - name: M4A test battery (public API, CLI, packaging, consumer, hardening)
+        run: |
+          uv run --no-sync --python 3.12.3 python -m pytest -q -p no:cacheprovider \
+            tests/test_version.py \
+            tests/test_api_public_surface.py tests/test_api_engines.py \
+            tests/test_api_config.py tests/test_api_publish.py \
+            tests/test_cli.py tests/test_docs_examples.py \
+            tests/test_m4a_snapshots.py tests/test_m4a_security.py \
+            tests/test_m4a_misuse.py tests/test_m4a_performance.py \
+            tests/test_packaging.py tests/test_consumer_e2e.py
+      - name: Verification mutated no tracked file
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
+
+  compatibility-build:
+    # The public API + CLI behave identically on each supported interpreter. The
+    # RC snapshots are pinned to 3.12, so their drift tests self-skip on 3.13.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
+      - name: Public API + CLI tests
+        run: |
+          uv run --no-sync python -m pytest -q -p no:cacheprovider \
+            tests/test_api_public_surface.py tests/test_api_engines.py \
+            tests/test_api_config.py tests/test_api_publish.py \
+            tests/test_cli.py tests/test_m4a_misuse.py tests/test_m4a_snapshots.py
+
+  distribution-security:
+    # Build the wheel + sdist and prove they are private-data-safe and reproducible.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Build distribution twice (into separate directories)
+        run: |
+          uv build --out-dir dist_a
+          uv build --out-dir dist_b
+      - name: Scanner reports the distribution clean
+        run: |
+          uv run --no-sync python tools/scan_distribution.py dist_a/*.whl dist_a/*.tar.gz
+      - name: Double build is byte-identical (reproducible)
+        run: |
+          set -euo pipefail
+          for f in dist_a/*; do
+            base="$(basename "$f")"
+            a="$(sha256sum "dist_a/$base" | cut -d' ' -f1)"
+            b="$(sha256sum "dist_b/$base" | cut -d' ' -f1)"
+            test "$a" = "$b" || { echo "$base not reproducible: $a != $b" >&2; exit 1; }
+          done
+      - name: Delete local dist (never upload or publish)
+        run: rm -rf dist_a dist_b
+
+  release-candidate-state:
+    # The RC layer changed no accepted governance state.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: The three sealed ledgers are byte-empty
+        run: |
+          set -euo pipefail
+          for L in "$GATE_LEDGER" "$HOLDOUT_LEDGER" "$PROSPECTIVE_LEDGER"; do
+            test "$(sha256sum "$L" | cut -d' ' -f1)" = "$EMPTY_SHA"
+          done
+      - name: The package identifies itself as 1.0.0
+        run: |
+          uv run --no-sync --python 3.12.3 python -c "import eth_research; assert eth_research.__version__ == '1.0.0', eth_research.__version__"
+      - name: The accepted M2B-M3F governance graph still verifies
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.m3f.audit --repo-root . --deep
