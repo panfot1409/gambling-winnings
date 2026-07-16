@@ -175,3 +175,26 @@ def verify_honest_state(repo_root: str | Path) -> None:
     committed_md = (root / HONEST_STATE_MD_RELPATH).read_bytes()
     if committed_md != render_honest_state_md(state):
         raise M3FValidationError("committed HONEST_STATE.md does not reproduce from the JSON")
+
+
+def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wrapper
+    from eth_research.m3f.cli import emit, repo_root_parser
+
+    args = repo_root_parser("M3F honest-state (read-only)").parse_args(argv)
+    root = Path(args.repo_root)
+    try:
+        if (root / HONEST_STATE_RELPATH).is_file():
+            verify_honest_state(root)
+            emit({"ok": True, "mode": "verify_committed"}, as_json=True)
+        else:
+            emit({"ok": True, "mode": "derive", "state": derive_honest_state(root)}, as_json=True)
+        return 0
+    except (OSError, M3FValidationError) as exc:
+        emit({"ok": False, "error": str(exc)}, as_json=True)
+        return 1
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import sys
+
+    sys.exit(main())

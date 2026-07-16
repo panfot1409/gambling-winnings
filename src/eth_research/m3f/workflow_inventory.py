@@ -124,3 +124,18 @@ def verify_inventory(repo_root: str | Path) -> None:
     failures = check_inventory(fresh)
     if failures:
         raise M3FValidationError("workflow supply-chain check failed: " + "; ".join(failures[:6]))
+
+
+def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wrapper
+    from eth_research.m3f.cli import emit, repo_root_parser
+
+    args = repo_root_parser("M3F workflow inventory (read-only)").parse_args(argv)
+    _inv, failures = build_and_check(args.repo_root)
+    emit({"ok": not failures, "failures": failures}, as_json=True)
+    return 0 if not failures else 1
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import sys
+
+    sys.exit(main())

@@ -110,3 +110,22 @@ def verify_inventory(repo_root: str | Path) -> None:
     fresh = build_inventory(root)
     if canonical_json_bytes(committed) != canonical_json_bytes(fresh):
         raise M3FValidationError("dependency inventory drifted from uv.lock/pyproject.toml")
+
+
+def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wrapper
+    from eth_research.m3f.cli import emit, repo_root_parser
+
+    args = repo_root_parser("M3F dependency inventory (read-only)").parse_args(argv)
+    try:
+        verify_inventory(args.repo_root)
+        emit({"ok": True}, as_json=True)
+        return 0
+    except (OSError, M3FValidationError) as exc:
+        emit({"ok": False, "error": str(exc)}, as_json=True)
+        return 1
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import sys
+
+    sys.exit(main())
