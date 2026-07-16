@@ -162,6 +162,34 @@ def _blob_bytes(repo_root: Path, commit: str, relpath: str) -> bytes:
     return result.stdout
 
 
+def frozen_source_sha(repo_root: str | Path) -> str:
+    """The M3F source-freeze commit SHA recorded in the committed freeze catalog.
+
+    The frozen inventories (dependency, workflow) verify against the sources *at this
+    immutable commit* rather than the live working tree, so a later governed layer that
+    bumps the package version or adds a workflow cannot drift an accepted M3F artifact.
+    """
+    root = Path(repo_root)
+    catalog = load_canonical_json((root / CATALOG_RELPATH).read_bytes(), "freeze_catalog")
+    return require_str(catalog.get("source_freeze_sha"), "source_freeze_sha")
+
+
+def blob_at_commit(repo_root: str | Path, commit: str, relpath: str) -> bytes:
+    """Bytes of ``relpath`` at ``commit`` (fails closed if the commit is unreachable)."""
+    return _blob_bytes(Path(repo_root), commit, relpath)
+
+
+def tracked_paths_at_commit(repo_root: str | Path, commit: str, dirpath: str) -> list[str]:
+    """Sorted repo-relative paths tracked under ``dirpath`` at ``commit``."""
+    out = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-tree", "-r", "--name-only", commit, dirpath],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return sorted(p for p in out.splitlines() if p)
+
+
 def _milestone_of(relpath: str) -> str:
     for prefix, milestone in _MILESTONE_PREFIXES:
         if relpath.startswith(prefix):

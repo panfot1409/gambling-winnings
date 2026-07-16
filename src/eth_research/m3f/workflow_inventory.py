@@ -22,6 +22,7 @@ known exchange hosts rather than proving no live egress — both are backstopped
 from __future__ import annotations
 
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -164,13 +165,32 @@ def render_inventory_bytes(inventory: dict[str, Any]) -> bytes:
 
 
 def verify_inventory(repo_root: str | Path) -> None:
-    """Committed inventory reproduces from the live workflows AND passes the checks."""
+    """Committed inventory reproduces from the FROZEN workflows AND passes the checks.
+
+    Verifies against ``.github/workflows`` *at the M3F source-freeze commit* (immutable
+    git blobs), not the live tree, so a later governed layer that adds a workflow (e.g.
+    the M4A release-candidate CI) cannot invalidate this accepted, frozen artifact. Fails
+    closed if the freeze commit is unreachable.
+    """
+    from eth_research.m3f.catalog import (
+        blob_at_commit,
+        frozen_source_sha,
+        tracked_paths_at_commit,
+    )
+
     root = Path(repo_root)
     committed = load_canonical_json((root / INVENTORY_RELPATH).read_bytes(), "workflow_inventory")
-    fresh = build_inventory(root)
+    freeze = frozen_source_sha(root)
+    with tempfile.TemporaryDirectory() as td:
+        frozen = Path(td)
+        (frozen / ".github/workflows").mkdir(parents=True)
+        for rel in tracked_paths_at_commit(root, freeze, ".github/workflows"):
+            if rel.endswith((".yml", ".yaml")):
+                (frozen / rel).write_bytes(blob_at_commit(root, freeze, rel))
+        fresh = build_inventory(frozen)
+        failures = check_inventory(fresh)
     if canonical_json_bytes(committed) != canonical_json_bytes(fresh):
-        raise M3FValidationError("workflow inventory drifted from .github/workflows")
-    failures = check_inventory(fresh)
+        raise M3FValidationError("workflow inventory drifted from the frozen .github/workflows")
     if failures:
         raise M3FValidationError("workflow supply-chain check failed: " + "; ".join(failures[:6]))
 

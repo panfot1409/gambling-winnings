@@ -172,7 +172,11 @@ def _scan_run(tmp_path: Path, command: str) -> dict[str, object]:
 
 
 _EVASIONS = [
-    ("git_c_push", 'git -c http.extraheader="AUTHORIZATION: bearer x" push origin HEAD:main', "can_push"),
+    (
+        "git_c_push",
+        'git -c http.extraheader="AUTHORIZATION: bearer x" push origin HEAD:main',
+        "can_push",
+    ),
     ("git_c_tag", "git -c user.name=ci tag nightly-$GITHUB_SHA", "can_merge_or_release_or_tag"),
     ("gh_pr_repo_merge", "gh pr --repo o/r merge 12", "can_merge_or_release_or_tag"),
 ]
@@ -192,7 +196,7 @@ def test_workflow_scanner_sees_subdomained_market_host(tmp_path: Path, host: str
 
 def test_read_only_workflow_not_falsely_flagged(tmp_path: Path) -> None:
     # The broadened patterns must not false-positive a benign read-only step.
-    facts = _scan_run(tmp_path, "git status && echo pushing docs && python -m eth_research.m3f.audit")
+    facts = _scan_run(tmp_path, "git status && echo pushing docs && python -m pytest")
     assert facts["can_push"] is False
     assert facts["can_merge_or_release_or_tag"] is False
     assert workflow_grants_write("permissions:\n  contents: read\n") is False
@@ -230,3 +234,38 @@ def test_capsule_manifest_refuses_symlinked_file(registered_clone: Path) -> None
     _git(registered_clone, "add", "-A")
     with pytest.raises(CapsuleError):
         build_manifest(registered_clone)
+
+
+# --------------------------------------------------------------------------- #
+# frozen inventories: a later governed layer (M4A) that bumps the version and  #
+# adds a workflow must NOT drift the accepted M3F inventories (verify against   #
+# the source-freeze commit, not the live tree).                                #
+# --------------------------------------------------------------------------- #
+def test_frozen_inventories_survive_version_bump_and_new_workflow(registered_clone: Path) -> None:
+    from eth_research.m3f.dependency_inventory import verify_inventory as verify_dep
+    from eth_research.m3f.workflow_inventory import verify_inventory as verify_wf
+
+    # Simulate the M4A layer: bump the package version (rewrites uv.lock/pyproject) and
+    # add a new workflow — exactly what would drift a live-tree inventory verifier.
+    pyproject = registered_clone / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text(encoding="utf-8").replace('version = "0.9.0"', 'version = "1.0.0"', 1),
+        encoding="utf-8",
+    )
+    lock = registered_clone / "uv.lock"
+    lock.write_text(
+        lock.read_text(encoding="utf-8").replace('version = "0.9.0"', 'version = "1.0.0"', 1),
+        encoding="utf-8",
+    )
+    (registered_clone / ".github/workflows/m4a-rc.yml").write_text(
+        "name: m4a\non:\n  push:\npermissions:\n  contents: read\njobs:\n"
+        "  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
+        encoding="utf-8",
+    )
+    _git(registered_clone, "add", "-A")
+    _git(registered_clone, "commit", "-q", "-m", "simulate M4A layer")
+
+    # The frozen inventories still verify against the source-freeze commit, unaffected by
+    # the live version bump and the added workflow.
+    verify_dep(registered_clone)
+    verify_wf(registered_clone)

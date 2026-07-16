@@ -12,6 +12,7 @@ inventory itself.
 from __future__ import annotations
 
 import re
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -115,14 +116,30 @@ def render_inventory_bytes(inventory: dict[str, Any]) -> bytes:
 
 
 def verify_inventory(repo_root: str | Path) -> None:
-    """The committed inventory reproduces byte-for-byte from the current lock/pyproject."""
+    """The committed inventory reproduces byte-for-byte from the frozen lock/pyproject.
+
+    Verifies against ``uv.lock`` + ``pyproject.toml`` *at the M3F source-freeze commit*
+    (an immutable git blob), not the live working tree, so a later governed layer that
+    bumps the package version — which necessarily rewrites uv.lock/pyproject — cannot
+    invalidate this accepted, frozen artifact. Fails closed if the freeze commit is
+    unreachable.
+    """
+    from eth_research.m3f.catalog import blob_at_commit, frozen_source_sha
+
     root = Path(repo_root)
     committed = load_canonical_json((root / INVENTORY_RELPATH).read_bytes(), "dependency_inventory")
     if require_int(committed.get("schema_version"), "schema_version") != 1:
         raise M3FValidationError("unexpected dependency inventory schema")
-    fresh = build_inventory(root)
+    freeze = frozen_source_sha(root)
+    with tempfile.TemporaryDirectory() as td:
+        frozen = Path(td)
+        (frozen / "uv.lock").write_bytes(blob_at_commit(root, freeze, "uv.lock"))
+        (frozen / "pyproject.toml").write_bytes(blob_at_commit(root, freeze, "pyproject.toml"))
+        fresh = build_inventory(frozen)
     if canonical_json_bytes(committed) != canonical_json_bytes(fresh):
-        raise M3FValidationError("dependency inventory drifted from uv.lock/pyproject.toml")
+        raise M3FValidationError(
+            "dependency inventory drifted from the frozen uv.lock/pyproject.toml"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wrapper
