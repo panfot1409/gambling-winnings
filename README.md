@@ -586,6 +586,11 @@ docs/M3F_SUPPLY_CHAIN_AUDIT.md # M3F workflow + dependency supply-chain closure
 docs/M3F_BUG_LOG.md # M3F reproduced defects (failing-test-first) + fixes
 docs/M3F_FINDINGS.md # M3F three-auditor red-team findings + fixes + honest negatives
 docs/M3F_TERMINAL_AUDIT.md # M3F terminal verified-state audit + verdict
+docs/M4A_PLAN.md    # Milestone 4A offline research platform 1.0 release-candidate plan
+docs/INSTALLATION.md .. docs/V1_LIMITATIONS.md # v1 user docs (install/quickstart/API/schemas/…)
+docs/M4A_BUG_LOG.md # M4A reproduced red-team defects (failing-test-first) + fixes
+docs/M4A_FINDINGS.md # M4A three-auditor red-team findings + disposition + honest negatives
+docs/M4A_TERMINAL_AUDIT.md # M4A terminal acceptance audit + verdict
 docs/REMEDIATION.md # Milestone 1 correctness remediation record
 ```
 
