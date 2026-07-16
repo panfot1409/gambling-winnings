@@ -27,6 +27,26 @@ eth-research = "eth_research.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/eth_research"]
+# Belt-and-suspenders: never let a byte-compiled cache or a stray dotfile ride along.
+exclude = ["**/__pycache__", "**/*.pyc", "**/*.pyo"]
+
+[tool.hatch.build.targets.sdist]
+# Private-data-safe distribution. ``only-include`` is a strict, path-anchored allowlist:
+# the sdist ships ONLY the runtime package source (including py.typed), the build metadata,
+# and the root README — the exact inputs needed to rebuild the wheel. Everything else is
+# excluded by omission: research/** (raw market data and the sealed governance ledgers),
+# .github/**, tests/**, tools/**, docs/**, uv.lock, and every dotfile or cache. (A bare
+# ``include`` glob would match README.md at any depth and leak the research/ READMEs, so
+# the anchored ``only-include`` is used instead.) tools/scan_distribution.py enforces this
+# allowlist on the built artifacts.
+only-include = [
+    "src/eth_research",
+    "pyproject.toml",
+    "README.md",
+]
+# hatchling always ships a benign .gitignore in the sdist regardless of exclude; the
+# distribution scanner allowlists exactly that one support file and nothing else.
+exclude = ["**/__pycache__", "**/*.pyc", "**/*.pyo"]
 
 [tool.uv]
 # Pin the isolated-build toolchain too, so builds are as frozen as the
