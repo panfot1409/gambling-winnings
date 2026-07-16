@@ -38,6 +38,12 @@ CATALOG_RELPATH = "research/m3f/freeze_catalog.json"
 CATALOG_SCHEMA_VERSION = 1
 CATALOG_ALGORITHM = "sha256"
 GOVERNED_ROOT = "research"
+# The M3F verification layer is created at registration (R), after the source-freeze
+# commit (E) this catalog binds, and each of its artifacts is self-verifying (honest
+# state, inventories, capsule manifest, and drill each reproduce from bytes). It is
+# therefore excluded from the catalog and its anti-orphan enumeration — cataloguing a
+# file that does not yet exist at the freeze commit would be an E-vs-R circularity.
+M3F_LAYER_PREFIX = "research/m3f/"
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 # Milestone ownership by committed path prefix (exact vocabulary).
@@ -166,9 +172,10 @@ def build_catalog(
 
     artifacts: list[dict[str, Any]] = []
     for relpath in _tracked_governed_files(root):
-        # M3F's own catalog is bound by self-hash, not as a catalogued artifact
-        # (avoids the include-my-own-hash circularity).
-        if relpath == CATALOG_RELPATH:
+        # The whole M3F verification layer is excluded (see M3F_LAYER_PREFIX): it is
+        # created at registration and self-verifying, and the catalog is bound by
+        # self-hash rather than as one of its own catalogued artifacts.
+        if relpath.startswith(M3F_LAYER_PREFIX):
             continue
         normalize_relpath(relpath, "artifact.path")
         raw = _blob_bytes(root, freeze, relpath)
@@ -293,9 +300,12 @@ def verify_catalog(repo_root: str | Path) -> CatalogResult:
             acc.fail("06_role_vocab", f"{rel}: bad role")
     acc.ok("07_all_catalogued_artifacts_hash_correctly", str(len(artifacts)))
 
-    # Anti-orphan: every tracked governed file (except the catalog itself) is catalogued.
+    # Anti-orphan: every tracked governed file outside the M3F verification layer is
+    # catalogued (the M3F layer is excluded per M3F_LAYER_PREFIX; it self-verifies).
     try:
-        tracked = set(_tracked_governed_files(root)) - {CATALOG_RELPATH}
+        tracked = {
+            p for p in _tracked_governed_files(root) if not p.startswith(M3F_LAYER_PREFIX)
+        }
         orphans = sorted(tracked - catalogued)
         stale = sorted(catalogued - tracked)
         if orphans:

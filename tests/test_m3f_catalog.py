@@ -104,6 +104,22 @@ def test_orphan_governed_file_is_caught(tmp_path: Path) -> None:
     assert any("orphan" in f or "uncatalogued" in f for f in result.failures)
 
 
+def test_m3f_layer_files_are_excluded_not_orphaned(tmp_path: Path) -> None:
+    # Registration (R) adds self-verifying artifacts under research/m3f/ after the
+    # source freeze the catalog binds; they must be neither catalogued nor orphaned.
+    repo, sha = _mini_repo(tmp_path)
+    _generate_and_write(repo, sha)
+    (repo / "research/m3f/honest_state.json").write_bytes(canonical_json_bytes({"any": 1}))
+    _git(repo, "add", "-A")  # tracks the catalog + honest_state.json under research/m3f/
+    result = verify_catalog(repo)
+    result.raise_for_status()
+    assert result.ok
+    catalog = build_catalog(
+        repo, source_freeze_sha=sha, accepted_main_sha=sha, package_version="0.9.0"
+    )
+    assert not any(a["path"].startswith("research/m3f/") for a in catalog["artifacts"])
+
+
 def test_nonempty_ledger_is_caught(tmp_path: Path) -> None:
     repo, sha = _mini_repo(tmp_path)
     _generate_and_write(repo, sha)
