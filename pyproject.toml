@@ -22,6 +22,9 @@ dev = [
     "ruff>=0.4",
 ]
 
+[project.scripts]
+eth-research = "eth_research.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/eth_research"]
 
