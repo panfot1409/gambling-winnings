@@ -138,6 +138,13 @@ def prepare_update_proposal(
     head = str(descriptor["head_branch"])
 
     # 5. The single privileged effect: a new bot branch + a commit of only the proposal.
+    #    The committed pathspec must resolve to exactly the proposal directory — never
+    #    an arbitrary caller string (e.g. ``.``) that could stage unrelated files onto
+    #    the bot branch while the outcome still claims "committed only the proposal".
+    if (root / proposal_relpath).resolve() != Path(proposal_dir).resolve():
+        raise M3EValidationError(
+            "proposal_relpath must name the proposal directory being committed"
+        )
     git.create_and_checkout_branch(head)
     git.add(proposal_relpath)
     commit_sha = git.commit(commit_message)

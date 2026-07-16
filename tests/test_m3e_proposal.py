@@ -18,7 +18,7 @@ from eth_research.m3e.proposal import (
     AssembledProposal,
 )
 from eth_research.m3e.validation import M3EValidationError, canonical_json_bytes, domain_sha256
-from eth_research.m3e.verify_m3e_program import verify_update_proposal
+from eth_research.m3e.verify_m3e_program import verify_proposals_root, verify_update_proposal
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 
@@ -111,3 +111,38 @@ def test_a_forged_manifest_self_hash_is_rejected(
     (tmp_path / "prop" / PROPOSAL_MANIFEST_NAME).write_bytes(canonical_json_bytes(doc))
     with pytest.raises(M3EValidationError, match="manifest_sha256 does not match"):
         verify_update_proposal(REPO_ROOT, tmp_path / "prop")
+
+
+# --------------------------------------------------------------------------- #
+# audit §17 (Auditor B finding 3): the proposals root is a closed set         #
+# --------------------------------------------------------------------------- #
+def test_proposals_root_is_empty_returns_no_proposals(tmp_path: Path) -> None:
+    # A repo with no proposals root at all yields the empty list, not an error.
+    assert verify_proposals_root(tmp_path) == []
+
+
+def test_proposals_root_accepts_a_manifest_bearing_directory(tmp_path: Path) -> None:
+    root = tmp_path / "research/m3e/proposals"
+    (root / "good").mkdir(parents=True)
+    (root / "good" / PROPOSAL_MANIFEST_NAME).write_text("{}")
+    assert verify_proposals_root(tmp_path) == [root / "good"]
+
+
+def test_proposals_root_rejects_a_manifest_less_sibling(tmp_path: Path) -> None:
+    # A sibling directory without a manifest would be skipped by a per-proposal check
+    # that only visits manifest-bearing dirs — a place to smuggle unverified files.
+    root = tmp_path / "research/m3e/proposals"
+    (root / "good").mkdir(parents=True)
+    (root / "good" / PROPOSAL_MANIFEST_NAME).write_text("{}")
+    (root / "smuggled").mkdir()
+    (root / "smuggled" / "aux.json").write_text('{"sharpe": 2.1}')
+    with pytest.raises(M3EValidationError, match="manifest-less"):
+        verify_proposals_root(tmp_path)
+
+
+def test_proposals_root_rejects_a_stray_top_level_file(tmp_path: Path) -> None:
+    root = tmp_path / "research/m3e/proposals"
+    root.mkdir(parents=True)
+    (root / "stowaway.json").write_text('{"pnl": 1.0}')
+    with pytest.raises(M3EValidationError, match="non-directory entry"):
+        verify_proposals_root(tmp_path)

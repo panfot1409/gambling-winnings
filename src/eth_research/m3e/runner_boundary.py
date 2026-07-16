@@ -91,6 +91,24 @@ def load_and_verify_runner(
     ):
         raise M3EValidationError(f"runner {runner_label!r} replayed a different update plan")
 
+    # A runner directory is a CLOSED file-set: exactly the plan, the receipt, and the
+    # raw bodies the plan declares — nothing else. An extra file (even one whose name
+    # carries no strategy marker, so the proposal marker-scan would miss it), a
+    # subdirectory, or a symlink is a smuggled artifact and is refused here, at the one
+    # typed boundary that re-derives the runner from bytes.
+    allowed = {RUNNER_PLAN_FILENAME, RUNNER_RECEIPT_FILENAME} | {
+        str(window["raw_filename"]) for window in plan.windows
+    }
+    for entry in sorted(directory.iterdir()):
+        if entry.is_symlink() or not entry.is_file():
+            raise M3EValidationError(
+                f"runner {runner_label!r} directory has a non-regular entry: {entry.name}"
+            )
+        if entry.name not in allowed:
+            raise M3EValidationError(
+                f"runner {runner_label!r} directory has an unexpected file: {entry.name}"
+            )
+
     receipt: ProspectiveAttemptReceipt = load_prospective_attempt_receipt(receipt_path)
     bundles = build_runner_bundles(raw_dir=directory, update_plan=plan, receipt=receipt)
     rows = new_window_canonical_rows(bundles)

@@ -311,6 +311,35 @@ def _no_forbidden_artifact(proposal_dir: Path) -> None:
                 )
 
 
+def verify_proposals_root(repo_root: str | Path) -> list[Path]:
+    """Enumerate ``research/m3e/proposals/`` as a closed set of proposal directories.
+
+    Every child must be a real directory bearing a ``proposal_manifest.json`` — a
+    manifest-less sibling directory or a stray top-level file (a place to smuggle an
+    unverified artifact past a per-proposal check that only visits manifest-bearing
+    dirs) is refused. Returns the sorted proposal directories (possibly empty). The
+    PR-check workflow calls this before verifying each returned proposal, so no
+    committed entry under the proposals root escapes verification.
+    """
+    root = Path(repo_root) / "research/m3e/proposals"
+    if not root.exists():
+        return []
+    if root.is_symlink() or not root.is_dir():
+        raise M3EValidationError("research/m3e/proposals is not a directory")
+    proposals: list[Path] = []
+    for child in sorted(root.iterdir()):
+        if child.is_symlink() or not child.is_dir():
+            raise M3EValidationError(
+                f"proposals root has a non-directory entry (smuggled?): {child.name}"
+            )
+        if not (child / PROPOSAL_MANIFEST_NAME).is_file():
+            raise M3EValidationError(
+                f"proposals root has a manifest-less directory (smuggled?): {child.name}"
+            )
+        proposals.append(child)
+    return proposals
+
+
 def _require_committed_matches(directory: Path, name: str, rebuilt: bytes) -> None:
     from eth_research.m3e.validation import load_canonical_json_bytes
 

@@ -108,6 +108,27 @@ def test_boundary_pins_both_runners_to_the_same_plan(
         load_and_verify_runner(raw_dir, runner_label="a", expected_plan_sha256="0" * 64)
 
 
+def test_boundary_rejects_an_unexpected_file_in_the_runner_dir(
+    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+) -> None:
+    # audit §17 (Auditor B finding 4): a runner directory is a closed file-set. An
+    # extra file whose name carries no strategy marker (so the proposal marker-scan
+    # would miss it) is a smuggled artifact and must be refused at this boundary — the
+    # boundary previously read only the declared files and ignored any extra.
+    raw_dir = tmp_path / "runner_a"
+    m3e_write_runner(
+        raw_dir,
+        plan,
+        attempt_id="coinbase-eth-usd-prospective-update-runner-a",
+        source_commit="a" * 40,
+        workflow_run_id="run-a",
+        runner_identity="ubuntu-x64-a",
+    )
+    (raw_dir / "aux.json").write_text('{"note": "an innocuously named stowaway"}')
+    with pytest.raises(M3EValidationError, match="unexpected file"):
+        load_and_verify_runner(raw_dir, runner_label="a")
+
+
 # --------------------------------------------------------------------------- #
 # offline runner CLI                                                          #
 # --------------------------------------------------------------------------- #
@@ -139,7 +160,10 @@ def test_offline_verify_writes_a_matching_receipt(
         created_at_utc="2026-07-22T02:17:06Z",
     )
     assert len(receipt.responses) == len(plan.windows)
-    # The complete staged artifact re-derives through the boundary.
+    # Production drops the intermediate responses sidecar once the receipt is written;
+    # the committed runner artifact is the closed {plan, receipt, raws} set, which
+    # re-derives through the boundary.
+    (staging / RESPONSES_SIDECAR).unlink()
     runner = load_and_verify_runner(staging, runner_label="a")
     assert runner.row_count == 7
 

@@ -192,3 +192,22 @@ def test_seam_refuses_a_tampered_accepted_base(
         prepare_update_proposal(
             clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=_PROPOSAL_REL
         )
+
+
+def test_seam_refuses_a_proposal_relpath_that_is_not_the_proposal_dir(
+    m3a_checkout: Path, m3e_write_runner: Callable[..., object]
+) -> None:
+    # audit §17 (Auditor B finding 6): the committed pathspec must resolve to exactly
+    # the proposal directory. A hostile/mistaken relpath (here the repo root ".") that
+    # would stage unrelated files onto the bot branch is refused before any git effect.
+    clone = m3a_checkout
+    proposal_dir = _stage(clone, m3e_write_runner)
+    git = _SubprocessGitPort(clone)
+    with pytest.raises(M3EValidationError, match="proposal_relpath must name the proposal"):
+        prepare_update_proposal(clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=".")
+    # No bot branch was created — the refusal happened before the single git effect.
+    assert git.current_branch() != "."
+    assert not any(
+        b.startswith("bot/m3e-prospective-update/")
+        for b in git._run("branch", "--format=%(refname:short)").split()
+    )

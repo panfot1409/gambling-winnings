@@ -44,11 +44,15 @@ jobs:
         run: |
           set -euo pipefail
           uv run --no-sync python - <<'PY'
-          from pathlib import Path
-          from eth_research.m3e.verify_m3e_program import verify_update_proposal
+          from eth_research.m3e.verify_m3e_program import (
+              verify_proposals_root,
+              verify_update_proposal,
+          )
 
-          roots = sorted(Path("research/m3e/proposals").glob("*"))
-          proposals = [p for p in roots if (p / "proposal_manifest.json").is_file()]
+          # Every child of the proposals root must be a manifest-bearing proposal dir;
+          # a manifest-less sibling or a stray file (a smuggled artifact) fails here,
+          # so nothing under research/m3e/proposals/ escapes the 35-check verifier.
+          proposals = verify_proposals_root(".")
           assert proposals, "no proposal with a manifest found under research/m3e/proposals/"
           for proposal in proposals:
               checks = verify_update_proposal(".", proposal)
