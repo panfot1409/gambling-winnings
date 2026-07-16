@@ -208,6 +208,20 @@ def _register_clone(tmp_path: Path) -> Path:
     subprocess.run(["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True)
     subprocess.run(["git", "-C", str(clone), "config", "user.email", "a@b.c"], check=True)
     subprocess.run(["git", "-C", str(clone), "config", "user.name", "T"], check=True)
+    # Reset to a pre-registration state so this works whether or not REPO_ROOT is
+    # already registered.
+    subprocess.run(
+        ["git", "-C", str(clone), "rm", "-r", "-q", "--ignore-unmatch", "research/m3f"], check=True
+    )
+    if subprocess.run(
+        ["git", "-C", str(clone), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip():
+        subprocess.run(
+            ["git", "-C", str(clone), "commit", "-q", "-m", "reset to pre-registration"], check=True
+        )
     freeze = subprocess.run(
         ["git", "-C", str(clone), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
     ).stdout.strip()

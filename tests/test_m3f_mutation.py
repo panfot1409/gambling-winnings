@@ -46,12 +46,19 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout
 
 
+def _reset_to_preregistration(clone: Path) -> None:
+    _git(clone, "rm", "-r", "-q", "--ignore-unmatch", "research/m3f")
+    if _git(clone, "status", "--porcelain").strip():
+        _git(clone, "commit", "-q", "-m", "reset to pre-registration")
+
+
 @pytest.fixture(scope="module")
 def registered_clone(tmp_path_factory: pytest.TempPathFactory) -> Path:
     clone = tmp_path_factory.mktemp("m3f-mutation") / "clone"
     subprocess.run(["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True)
     _git(clone, "config", "user.email", "a@b.c")
     _git(clone, "config", "user.name", "T")
+    _reset_to_preregistration(clone)
     freeze = _git(clone, "rev-parse", "HEAD").strip()
     register.write_registration_artifacts(clone, source_freeze_sha=freeze, accepted_main_sha=freeze)
     _git(clone, "add", "-A")
@@ -152,6 +159,9 @@ def test_registration_publishes_nothing_on_derivation_failure(
 ) -> None:
     clone = tmp_path / "clone"
     subprocess.run(["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True)
+    _git(clone, "config", "user.email", "a@b.c")
+    _git(clone, "config", "user.name", "T")
+    _reset_to_preregistration(clone)
     freeze = _git(clone, "rev-parse", "HEAD").strip()
 
     def boom(_root: Path) -> dict[str, object]:

@@ -34,11 +34,20 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout
 
 
+def _reset_to_preregistration(clone: Path) -> None:
+    """Remove any committed research/m3f layer so registration starts from a clean E
+    state, whether or not the source repository is already registered."""
+    _git(clone, "rm", "-r", "-q", "--ignore-unmatch", "research/m3f")
+    if _git(clone, "status", "--porcelain").strip():
+        _git(clone, "commit", "-q", "-m", "reset to pre-registration")
+
+
 def _clone(tmp_path: Path) -> tuple[Path, str]:
     clone = tmp_path / "clone"
     subprocess.run(["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True)
     _git(clone, "config", "user.email", "a@b.c")
     _git(clone, "config", "user.name", "T")
+    _reset_to_preregistration(clone)
     return clone, _git(clone, "rev-parse", "HEAD").strip()
 
 

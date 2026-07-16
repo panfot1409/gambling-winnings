@@ -220,6 +220,19 @@ def test_independent_verifier_fails_on_registered_repo_missing_catalog(tmp_path:
 
     clone = tmp_path / "clone"
     subprocess.run(["git", "clone", "--quiet", "--local", str(REPO_ROOT), str(clone)], check=True)
+    subprocess.run(["git", "-C", str(clone), "config", "user.email", "a@b.c"], check=True)
+    subprocess.run(["git", "-C", str(clone), "config", "user.name", "T"], check=True)
+    # Reset to pre-registration so this holds whether or not REPO_ROOT is registered.
+    subprocess.run(
+        ["git", "-C", str(clone), "rm", "-r", "-q", "--ignore-unmatch", "research/m3f"], check=True
+    )
+    if subprocess.run(
+        ["git", "-C", str(clone), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip():
+        subprocess.run(["git", "-C", str(clone), "commit", "-q", "-m", "reset"], check=True)
     freeze = subprocess.run(
         ["git", "-C", str(clone), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
     ).stdout.strip()
