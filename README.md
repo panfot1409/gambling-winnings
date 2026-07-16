@@ -542,6 +542,7 @@ docs/M3F_RECOVERY_RUNBOOK.md # M3F recovery capsule reconstruction procedure
 docs/M3F_SUPPLY_CHAIN_AUDIT.md # M3F workflow + dependency supply-chain closure
 docs/M3F_BUG_LOG.md # M3F reproduced defects (failing-test-first) + fixes
 docs/M3F_FINDINGS.md # M3F three-auditor red-team findings + fixes + honest negatives
+docs/M3F_TERMINAL_AUDIT.md # M3F terminal verified-state audit + verdict
 docs/REMEDIATION.md # Milestone 1 correctness remediation record
 ```
 
