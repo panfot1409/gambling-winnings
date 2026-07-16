@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 import eth_research
+from eth_research.m3f.dependency_inventory import _parse_lock_packages, build_inventory
 from eth_research.m3f.honest_state import _any_workflow_writes, derive_honest_state
 from eth_research.m3f.validation import M3FValidationError
 from eth_research.m3f.workflow_inventory import _scan_one, workflow_grants_write
@@ -142,3 +143,35 @@ def test_evaluation_authorized_non_bool_fails_closed(tmp_path: Path) -> None:
     base_path.write_text(tampered, encoding="utf-8")
     with pytest.raises(M3FValidationError):
         derive_honest_state(root)
+
+
+# --------------------------------------------------------------------------- #
+# Theme 2 — dependency source classification (B4)                             #
+# --------------------------------------------------------------------------- #
+def test_git_source_with_registry_in_url_classified_by_key() -> None:
+    block = (
+        '[[package]]\nname = "evil"\nversion = "1.0"\n'
+        'source = { git = "https://github.com/acme/registry-tools?rev=main" }\n'
+    )
+    assert _parse_lock_packages(block)[0]["source_kind"] == "git"
+
+
+def test_build_inventory_fails_closed_on_nonreproducible_source(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\nversion = "0"\nrequires-python = ">=3.12"\n', encoding="utf-8"
+    )
+    (tmp_path / "uv.lock").write_text(
+        '[[package]]\nname = "evil"\nversion = "1.0"\n'
+        'source = { git = "https://x/registry?rev=main" }\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(M3FValidationError, match="non-reproducible"):
+        build_inventory(tmp_path)
+
+
+def test_real_lock_sources_are_all_reproducible() -> None:
+    # No drift: the real repo's packages are only registry/editable, so the committed
+    # inventory bytes are unchanged by the stricter key-based classification.
+    inv = build_inventory(REPO_ROOT)
+    kinds = {p["source_kind"] for p in inv["locked_packages"]}
+    assert kinds <= {"registry", "editable"}, kinds

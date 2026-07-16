@@ -28,6 +28,10 @@ from eth_research.m3f.validation import (
 INVENTORY_RELPATH = "research/m3f/dependency_inventory.json"
 
 _PKG_BLOCK = re.compile(r"\[\[package\]\]\n(.*?)(?=\n\[\[|\Z)", re.DOTALL)
+# Source kinds that carry a reproducible identity: a hash-pinned registry
+# distribution or the project's own editable install. A git/directory/path/url/
+# virtual source is a mutable or local reference and fails closed.
+_REPRODUCIBLE_SOURCES = frozenset({"registry", "editable"})
 
 
 def _parse_lock_packages(lock_text: str) -> list[dict[str, Any]]:
@@ -38,18 +42,15 @@ def _parse_lock_packages(lock_text: str) -> list[dict[str, Any]]:
         if not name_m or not ver_m:
             continue
         src_m = re.search(r"^source = \{ ([^}]+) \}", block, re.MULTILINE)
-        source = src_m.group(1).strip() if src_m else "unknown"
+        source = src_m.group(1).strip() if src_m else ""
         wheels = len(re.findall(r'wheels = \[|url = "[^"]+\.whl"', block))
         has_sdist = "sdist = {" in block
-        source_kind = (
-            "registry"
-            if "registry" in source
-            else "editable"
-            if "editable" in source
-            else "url"
-            if "url" in source
-            else "unknown"
-        )
+        # Classify by the inline-table *key* (``source = { <key> = … }``), never a
+        # substring: a ``git``/``directory``/``url`` source whose value merely contains
+        # the text "registry" must not be mislabeled ``registry`` and slip the
+        # reproducible-source gate.
+        key_m = re.match(r"([A-Za-z0-9_-]+)\s*=", source)
+        source_kind = key_m.group(1) if key_m else "unknown"
         packages.append(
             {
                 "name": name_m.group(1),
@@ -74,10 +75,12 @@ def build_inventory(repo_root: str | Path) -> dict[str, Any]:
     names = [p["name"] for p in packages]
     if len(names) != len(set(names)):
         raise M3FValidationError("duplicate package identity in the lockfile")
-    # every non-editable locked distribution must carry a reproducible source identity
+    # every locked distribution must carry a reproducible source identity
     for pkg in packages:
-        if pkg["source_kind"] == "unknown":
-            raise M3FValidationError(f"package {pkg['name']} has no reproducible source identity")
+        if pkg["source_kind"] not in _REPRODUCIBLE_SOURCES:
+            raise M3FValidationError(
+                f"package {pkg['name']} has a non-reproducible source: {pkg['source_kind']}"
+            )
 
     return {
         "schema_version": 1,
