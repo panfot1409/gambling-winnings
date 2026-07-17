@@ -36,7 +36,7 @@ from eth_research.api.serialization import (
 from eth_research.portfolio import M4B_PACKAGE_VERSION
 from eth_research.portfolio.currencies import require_currency_code
 from eth_research.portfolio.engine import PortfolioRunResult
-from eth_research.portfolio.metrics import PortfolioMetrics
+from eth_research.portfolio.metrics import PortfolioMetrics, compute_portfolio_metrics
 from eth_research.portfolio.trace import (
     TraceCommitment,
     build_trace_commitment,
@@ -55,6 +55,10 @@ __all__ = [
 
 RESULT_SCHEMA_VERSION = 1
 _RECONCILE_TOLERANCE = 1e-6
+#: 365.25 days x 24 hours x 3600 seconds — the canonical annualization basis is the universe's own
+#: bar interval, so the full-graph verifier can re-derive the metrics from the run and the universe
+#: alone (every M4B caller computes ``periods_per_year`` the same way).
+_SECONDS_PER_YEAR = 365.25 * 24.0 * 3600.0
 
 _RESULT_FIELDS = {
     "schema_version",
@@ -320,6 +324,10 @@ def _asset_from_mapping(data: Any, field: str) -> AssetTotal:
 
 def _check_internal_consistency(result: PortfolioResult, field: str) -> None:
     metrics = result.metrics
+    if result.initial_equity != metrics.initial_equity:
+        raise CanonicalError(f"{field}.initial_equity: disagrees with the metrics initial equity")
+    if result.terminal_equity != metrics.terminal_equity:
+        raise CanonicalError(f"{field}.terminal_equity: disagrees with the metrics terminal equity")
     if abs(result.cost_total - metrics.total_cost) > _RECONCILE_TOLERANCE:
         raise CanonicalError(f"{field}.cost_total: disagrees with the metrics total cost")
     if result.num_fills != metrics.num_fills:
@@ -393,9 +401,12 @@ def verify_portfolio_result(
 ) -> None:
     """Full-graph verify: fail closed unless the result agrees with the universe and the run.
 
-    Re-derives the per-asset totals and the trace commitment from ``run_result``, re-checks every
-    bound identity against ``universe`` and ``run_result``, and confirms the attribution roll-ups
-    reconcile. Raises :class:`CanonicalError` on the first disagreement.
+    Re-derives the per-asset totals, the trace commitment, the headline initial/terminal equity, the
+    fill count, and the entire descriptive-metrics block from ``run_result`` (annualized on the
+    universe's own bar interval), re-checks every bound identity against ``universe`` and
+    ``run_result``, and confirms the attribution roll-ups reconcile. A result edited to overstate
+    its terminal equity or metrics — even one that keeps its own internal roll-up balanced by a
+    unchecked residual — is refused. Raises :class:`CanonicalError` on the first disagreement.
     """
     if result.universe_fingerprint != universe.fingerprint:
         raise CanonicalError("verify: universe fingerprint does not match the supplied universe")
@@ -418,4 +429,17 @@ def verify_portfolio_result(
     if result.per_asset_contribution != _aggregate_per_asset(run_result):
         raise CanonicalError("verify: per-asset attribution does not match the run")
     verify_trace_commitment(result.trace_commitment, run_result)
+    # Bind the headline equity, the fill count, and the whole descriptive-metrics block to the run —
+    # not merely to the result's own internal roll-up (whose residual term is a free plug that would
+    # otherwise absorb a lie in terminal equity). The annualization basis is the universe's own bar
+    # interval, so the metrics are re-derivable from the run and the universe alone.
+    if result.initial_equity != run_result.initial_equity:
+        raise CanonicalError("verify: initial equity does not match the run")
+    if result.terminal_equity != run_result.terminal_equity:
+        raise CanonicalError("verify: terminal equity does not match the run")
+    if result.num_fills != run_result.all_fills:
+        raise CanonicalError("verify: fill count does not match the run")
+    periods_per_year = _SECONDS_PER_YEAR / universe.bar_interval_seconds
+    if result.metrics != compute_portfolio_metrics(run_result, periods_per_year=periods_per_year):
+        raise CanonicalError("verify: descriptive metrics do not match the run")
     _check_internal_consistency(result, "verify")

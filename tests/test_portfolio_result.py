@@ -177,6 +177,42 @@ def test_verify_rejects_a_structurally_extra_asset() -> None:
         verify_portfolio_result(tampered, _UNIVERSE, run)  # type: ignore[arg-type]
 
 
+def test_verify_rejects_a_forged_terminal_equity_and_metrics() -> None:
+    # A result that overstates terminal equity — bumping cumulative_residual to keep its own
+    # internal roll-up balanced and inventing a Sharpe — must be refused. verify binds the headline
+    # equity and the whole metrics block to the run, not merely to the free-residual roll-up.
+    from dataclasses import replace
+
+    result, run, _metrics = _built()
+    forge = 50_000.0
+    forged_metrics = replace(
+        result.metrics,
+        terminal_equity=result.metrics.terminal_equity + forge,
+        total_return=(result.terminal_equity + forge) / result.initial_equity - 1.0,
+        cumulative_residual=result.metrics.cumulative_residual + forge,
+        sharpe_ratio=9.99,
+    )
+    forged = replace(result, terminal_equity=result.terminal_equity + forge, metrics=forged_metrics)
+    with pytest.raises(CanonicalError, match="terminal equity does not match the run"):
+        verify_portfolio_result(forged, _UNIVERSE, run)  # type: ignore[arg-type]
+
+    # A forge that keeps terminal equity honest but invents a single metric is caught by the
+    # metrics recomputation from the run.
+    metrics_only = replace(result, metrics=replace(result.metrics, sharpe_ratio=9.99))
+    with pytest.raises(CanonicalError, match="metrics do not match the run"):
+        verify_portfolio_result(metrics_only, _UNIVERSE, run)  # type: ignore[arg-type]
+
+
+def test_from_mapping_rejects_metrics_equity_disagreeing_with_the_result() -> None:
+    # Parse-layer defense: the result's headline terminal equity must agree with the metrics block
+    # it carries, so a load that bumps only one of the two is rejected before any run is consulted.
+    result, _run, _metrics = _built()
+    payload = result.canonical()
+    payload["terminal_equity"] = payload["terminal_equity"] + 1000.0
+    with pytest.raises(CanonicalError, match="terminal_equity"):
+        PortfolioResult.from_mapping(payload)
+
+
 def test_verify_rejects_a_substituted_universe() -> None:
     result, run, _metrics = _built()
     other = UniverseSpec(
