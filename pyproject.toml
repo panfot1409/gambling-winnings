@@ -5,14 +5,52 @@ build-backend = "hatchling.build"
 [project]
 name = "eth-research"
 version = "1.1.0"
-description = "Research-only toolkit for developing and evaluating Ethereum trading algorithms on historical data."
+description = "Offline, reproducible toolkit for research and simulation of Ethereum trading strategies on historical market data — no live trading."
 readme = "README.md"
 requires-python = ">=3.12"
+keywords = [
+    "ethereum",
+    "backtesting",
+    "simulation",
+    "quantitative-research",
+    "reproducible-research",
+    "offline",
+    "walk-forward",
+    "portfolio",
+]
+authors = [{ name = "The eth-research maintainers" }]
+maintainers = [{ name = "The eth-research maintainers" }]
+# No license classifier is declared: the repository ships no LICENSE and choosing one is an
+# external human decision (see docs/V1_LICENSE_DECISION.md). "Private :: Do Not Upload" is a
+# deliberate belt-and-suspenders guard so the unlicensed package cannot be pushed to public PyPI
+# by accident; the maintainer removes it when the license + trusted-publisher gates are cleared.
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Typing :: Typed",
+    "Private :: Do Not Upload",
+]
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
     "pyarrow>=15",
 ]
+
+[project.urls]
+Homepage = "https://github.com/panfot1409/gambling-winnings"
+Repository = "https://github.com/panfot1409/gambling-winnings"
+Documentation = "https://github.com/panfot1409/gambling-winnings/tree/main/docs"
+Changelog = "https://github.com/panfot1409/gambling-winnings/blob/main/CHANGELOG.md"
+Issues = "https://github.com/panfot1409/gambling-winnings/issues"
 
 [project.optional-dependencies]
 dev = [
