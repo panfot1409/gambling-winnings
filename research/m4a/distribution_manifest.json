@@ -1,0 +1,926 @@
+{
+  "build_backend_pin": "hatchling==1.31.0",
+  "distribution_kinds": [
+    "sdist",
+    "wheel"
+  ],
+  "expected_package_members": [
+    {
+      "path": "eth_research/__init__.py",
+      "sha256": "209cd22a83fd123573365e91ecfc01dca806911f4b448002c52800ab962004d6",
+      "size": 350
+    },
+    {
+      "path": "eth_research/_atomic.py",
+      "sha256": "9b193d18e8035ba1a59aa7eab0341801c5bd8031938e7eb4e3c1ef8063495906",
+      "size": 2476
+    },
+    {
+      "path": "eth_research/_json.py",
+      "sha256": "136693a8d05a898404d9d192fa713cf76a9339b8d980c2521d36c965f634807b",
+      "size": 3572
+    },
+    {
+      "path": "eth_research/api/__init__.py",
+      "sha256": "3245401b25585ecc49d1b50f1fbaa644e98e89c870a0da58387816e9bd647e86",
+      "size": 4095
+    },
+    {
+      "path": "eth_research/api/backtest.py",
+      "sha256": "953ce90e3fcf8aa82977c23dba0be143899b0a483c1f1b75951524fd0fd136ab",
+      "size": 13663
+    },
+    {
+      "path": "eth_research/api/config.py",
+      "sha256": "a15b120e1fe74b5d66e31a5b0cf5dda8712f93bd60d5fdb07c7df028f5e72010",
+      "size": 16201
+    },
+    {
+      "path": "eth_research/api/dataset.py",
+      "sha256": "670c3634ef49af0c08eac8408ae6dc9249c4bcf807041c162f43e69eaf66b5a4",
+      "size": 11948
+    },
+    {
+      "path": "eth_research/api/errors.py",
+      "sha256": "cc35e92989ec9f78a6cd6b77be954202822b71ab6d59a788ecfbaf79b2b5ab78",
+      "size": 6060
+    },
+    {
+      "path": "eth_research/api/models.py",
+      "sha256": "28b53ca6f8f31534c2d6015c21c198c90f991284b2c38fd2915382b4fc674c46",
+      "size": 20192
+    },
+    {
+      "path": "eth_research/api/orchestrate.py",
+      "sha256": "db62aff62b947dd7856fb2623d71b665222c62bea3868f08d2242a305a92e8fe",
+      "size": 9233
+    },
+    {
+      "path": "eth_research/api/publish.py",
+      "sha256": "2d021bf26e869ffd0a6b74835d6475c957f197d68554437cb16ebeadaecb3443",
+      "size": 5437
+    },
+    {
+      "path": "eth_research/api/receipt.py",
+      "sha256": "179e17688869c3f7881fba11c43872d8842f8dad4c3f3608a1f9a3ebd620982b",
+      "size": 12440
+    },
+    {
+      "path": "eth_research/api/results.py",
+      "sha256": "080c36291e7713c213b4bd23225465ce8035d8450eb1c0abd9f90e0d73d2f6a3",
+      "size": 5977
+    },
+    {
+      "path": "eth_research/api/serialization.py",
+      "sha256": "f45af84b3c972508bd6b6611709e9cde141fa73f06fdf72ceb0edec458f4afe4",
+      "size": 5656
+    },
+    {
+      "path": "eth_research/api/strategies.py",
+      "sha256": "4c0b1a2705884b2bd8eb56aad0ec2d0c3a66aee07aa7e62112a95310628c9d84",
+      "size": 4504
+    },
+    {
+      "path": "eth_research/artifact_errata.py",
+      "sha256": "5a655336f1fba10364c81f255817e2365bd3c2522cd1155831bab457975e070f",
+      "size": 39172
+    },
+    {
+      "path": "eth_research/backtest.py",
+      "sha256": "c8338dfe0201fedbe191ad1a284b427d1e49ce6fda195fcea8a3478f6b9b854e",
+      "size": 12502
+    },
+    {
+      "path": "eth_research/bootstrap.py",
+      "sha256": "202cbbcb01bfd6391adbcfd4be9adfdb235f2257638b187ec4ab3bb4cebccd5d",
+      "size": 8417
+    },
+    {
+      "path": "eth_research/bootstrap_v2.py",
+      "sha256": "4346202bb8d42b491a717a6887b3659d33f800d0c15b193195e9753e251663aa",
+      "size": 14988
+    },
+    {
+      "path": "eth_research/cli/__init__.py",
+      "sha256": "59f6b79e4d059503929b7b2b7e01e980a41f35955e90b5242454df0a4cac6d34",
+      "size": 176
+    },
+    {
+      "path": "eth_research/cli/app.py",
+      "sha256": "695f37ed972013323a426005800b1d354afe40cf7a88d3aa1ade03996ab4e468",
+      "size": 19872
+    },
+    {
+      "path": "eth_research/costs.py",
+      "sha256": "36e293ff7bf3b4bb910d6190ab8afef515df85f99c5965e2f467834cbd259037",
+      "size": 2182
+    },
+    {
+      "path": "eth_research/data/__init__.py",
+      "sha256": "8b9776204ce7324842947108fb8e7407f78e4ca7fb8ec52dc47292c49654f82d",
+      "size": 1826
+    },
+    {
+      "path": "eth_research/data/acquire_runner.py",
+      "sha256": "548b40064349d0f3135eb7905a8217bcd8fa2761ad7d02cd4272526207d51bca",
+      "size": 11414
+    },
+    {
+      "path": "eth_research/data/acquisition_plan.py",
+      "sha256": "d0fdf7616bcd340e747322f91a836c6508c89a5e5e73d6f608fe3ff4bbf18ea6",
+      "size": 28460
+    },
+    {
+      "path": "eth_research/data/builder.py",
+      "sha256": "76409e2c2652529d9df86f011d7ca5e90b5f3a3c2c629e2f16af8a25c2f14ea6",
+      "size": 15124
+    },
+    {
+      "path": "eth_research/data/coinbase.py",
+      "sha256": "36a1b1296744c93bb27346ec19cfc05e554b0e4605910da3c57858723d280f92",
+      "size": 44568
+    },
+    {
+      "path": "eth_research/data/load.py",
+      "sha256": "7fb7cf115e4676224ed8ffbc3fd368d972f5ee501323c377fa91061f62c10c8a",
+      "size": 2775
+    },
+    {
+      "path": "eth_research/data/lock.py",
+      "sha256": "50e748f68fc1847cd6e5397618f16a0794bd359b272ab6eb954977f7fe5e1311",
+      "size": 14841
+    },
+    {
+      "path": "eth_research/data/provenance.py",
+      "sha256": "b7f23c831dbaf99ad5a89ea22135c9db196b164335d4280abd099b4bf17ae2db",
+      "size": 17668
+    },
+    {
+      "path": "eth_research/data/quality.py",
+      "sha256": "e784baa1c0d20e5b90b4fa79042970e3c7017b2e972fa1d649de128f2c57acf6",
+      "size": 31136
+    },
+    {
+      "path": "eth_research/data/schema.py",
+      "sha256": "c1ba25ef05ec3af95ab9dc3c059407a11eaad3dc5af407716f3e2cf12cd4a40e",
+      "size": 12708
+    },
+    {
+      "path": "eth_research/data/synthetic.py",
+      "sha256": "3ac5ee450a008875d40fffcffb28750b9ccc7c237228a10eae7ece3a97248d41",
+      "size": 1947
+    },
+    {
+      "path": "eth_research/data/validation.py",
+      "sha256": "22a1fab63b5c70c2716234b4bea495c6cf46f5f6c2d3a51ed2d0d99b0886ec09",
+      "size": 4455
+    },
+    {
+      "path": "eth_research/decision.py",
+      "sha256": "c4c719dcd586b7c194ca3794988870afc195dfa337615b912d0ddc2388a5870c",
+      "size": 13865
+    },
+    {
+      "path": "eth_research/develop_m3a.py",
+      "sha256": "e6ac00ab11ac6537dd81dd5f716e9b032ff6987c2121a97b957fb461f907862a",
+      "size": 10455
+    },
+    {
+      "path": "eth_research/development.py",
+      "sha256": "89df318c933041bd96e545befe644109a3c8e1de522e8ebf7c478a37cb697b59",
+      "size": 21003
+    },
+    {
+      "path": "eth_research/development_completion.py",
+      "sha256": "96a47936ff7d1a3660caa165e6cfd7440c6e7237fe159ef15b8e6312f66f97d3",
+      "size": 9029
+    },
+    {
+      "path": "eth_research/development_evaluation.py",
+      "sha256": "9edbc4d103a8a47f843c6e841ee6a9a480802f5087463574fd3716052a95bf34",
+      "size": 48706
+    },
+    {
+      "path": "eth_research/development_ledger.py",
+      "sha256": "281b901e4137d5591a9bcb0b1e04f5b18cd973bce9e950266fa16de535290879",
+      "size": 12051
+    },
+    {
+      "path": "eth_research/development_orchestrator.py",
+      "sha256": "33f04a370e8f4ce1ea4c9bc47268d79ff5859026886c4d49558abc3eb8f8f5f0",
+      "size": 28846
+    },
+    {
+      "path": "eth_research/development_publication.py",
+      "sha256": "611021783a1c85c4aebee330238bbb912765f9c22e7b471a17d692dcbb84c6fa",
+      "size": 13156
+    },
+    {
+      "path": "eth_research/development_results_v2.py",
+      "sha256": "6e541d29f6601eb5962ecf7001973cb238ef60dd0c4c3b80d1eae6571c84a3d2",
+      "size": 42127
+    },
+    {
+      "path": "eth_research/discovery.py",
+      "sha256": "c13f3a9e528ee80bafc5c520119d9597eb4e91b52166115a0b76eea842329e63",
+      "size": 18636
+    },
+    {
+      "path": "eth_research/dossier.py",
+      "sha256": "28d56f089dce7c76d36eb38fa93e5a28e48c64ccb996772cf44c7c6f37948a27",
+      "size": 52085
+    },
+    {
+      "path": "eth_research/environment.py",
+      "sha256": "0d8732a183c26896a1c2c36eb7a104009bc66fbb6c5b013d8e81829eeaa1e83a",
+      "size": 21515
+    },
+    {
+      "path": "eth_research/evaluation.py",
+      "sha256": "854634bd8979b3235f86bfe794d96820df0ea254da083a19839d1ae319e8a4c7",
+      "size": 53562
+    },
+    {
+      "path": "eth_research/experiment_archive.py",
+      "sha256": "e643e962b8cbbc5c63cce15d29f65320ee6db43896490e7083735c3453ccbdad",
+      "size": 21561
+    },
+    {
+      "path": "eth_research/experiment_registry.py",
+      "sha256": "409a2034d072fc5d00a72f1d403241d2fd61f365f553ae01c5b1dfdee9ee6396",
+      "size": 30724
+    },
+    {
+      "path": "eth_research/financial_equivalence.py",
+      "sha256": "88aba99f3a5f63a9783514c5521fca784bc2e0e81148847ee9eb1a23364074f1",
+      "size": 5951
+    },
+    {
+      "path": "eth_research/fractional/__init__.py",
+      "sha256": "672340cc0a5788d6c10f8f04ac6be6e838878631eec2abfa9d3a95edc4f61876",
+      "size": 1081
+    },
+    {
+      "path": "eth_research/fractional/accounting.py",
+      "sha256": "c6095c027f746e7c31db548cc75aa2ba6c037eb27bad9e798a3d1f5c889c359d",
+      "size": 9581
+    },
+    {
+      "path": "eth_research/fractional/archive.py",
+      "sha256": "5557d3b290de183f6761e52a82a9b025623427d344c226fa0065694a6e92466e",
+      "size": 10115
+    },
+    {
+      "path": "eth_research/fractional/archive_v2.py",
+      "sha256": "d8305806f5e644f3481bb460681b597d18fae563ed2f3a4758091c56d4420e10",
+      "size": 9378
+    },
+    {
+      "path": "eth_research/fractional/artifact_annotations.py",
+      "sha256": "e343d6a751d78bf86ca3f4d3fb5648ee8453498ebf895485a3ccffea029820e9",
+      "size": 10110
+    },
+    {
+      "path": "eth_research/fractional/compatibility.py",
+      "sha256": "99373665125a9cb96a25e668b9b69e86dced973b25e6a67fd69654c3a7f18012",
+      "size": 4558
+    },
+    {
+      "path": "eth_research/fractional/completion.py",
+      "sha256": "7f750916e6cd9139a14c3cc354ac930fda3e11ee58839831b96912422b45d54b",
+      "size": 10023
+    },
+    {
+      "path": "eth_research/fractional/cost_model.py",
+      "sha256": "015ac31cb4fed04ddb4d84b7c091880029eb7d80b169f4dc62dbaffa557e50cf",
+      "size": 12047
+    },
+    {
+      "path": "eth_research/fractional/dataset.py",
+      "sha256": "63a105b8b2db73b05fbf6195f9d93895ec0127b9cf5bddcd77d9ca758b4940f7",
+      "size": 11941
+    },
+    {
+      "path": "eth_research/fractional/engine.py",
+      "sha256": "6837a860033e0f77a6185c1ab897a1625dec2f27794c51200183c2d8ef076cb1",
+      "size": 13783
+    },
+    {
+      "path": "eth_research/fractional/execution_trace.py",
+      "sha256": "ea99d7b66e173c1a85d6aecd70966d17da145943f55f784890f2679ae193c755",
+      "size": 10052
+    },
+    {
+      "path": "eth_research/fractional/experiment.py",
+      "sha256": "ca2eebef97e35f24741269c3f698a514ef508f69a9d930d3ff776c81d6a81748",
+      "size": 7930
+    },
+    {
+      "path": "eth_research/fractional/legacy_completion_audit.py",
+      "sha256": "bb5d90529565f12ec952fddb7da7f09e2409c36d660fa22b71bf3deaa7f58a72",
+      "size": 5487
+    },
+    {
+      "path": "eth_research/fractional/liquidity.py",
+      "sha256": "d97afb58fc40f69e32ef8e4fb0d0a7473bb442b70d45f67acae934247178a810",
+      "size": 5274
+    },
+    {
+      "path": "eth_research/fractional/metrics.py",
+      "sha256": "4d095dbd33136450eafd14febbcb878fb9fb60865ee8c47aa26de2441add31e8",
+      "size": 3698
+    },
+    {
+      "path": "eth_research/fractional/orchestrator.py",
+      "sha256": "6603a0338bc55a375ec73f984aa6e2b8dab19022d37dc4cde340d18d83fe09d9",
+      "size": 20354
+    },
+    {
+      "path": "eth_research/fractional/protocol.py",
+      "sha256": "143a4ebf2a7174171655fb8a62b5a7b5002d6df0fd446059fca8fd07f3c15966",
+      "size": 18777
+    },
+    {
+      "path": "eth_research/fractional/reconciliation.py",
+      "sha256": "600ac9bad3dbec1228277368f8e3935fe6a04744f395d8585ab1ee3331aa4a6b",
+      "size": 9947
+    },
+    {
+      "path": "eth_research/fractional/recovery.py",
+      "sha256": "6a5331248839af6429571e5c5211a3e9182c28b2dc4cc602191b6d1304d20aba",
+      "size": 7975
+    },
+    {
+      "path": "eth_research/fractional/registry.py",
+      "sha256": "f2ef63d8c4a17fb0cadf0749165003831066ec2d2134946647a348c9441d58f0",
+      "size": 19250
+    },
+    {
+      "path": "eth_research/fractional/replay.py",
+      "sha256": "3a472b5c4315dd289524d2f4c16669d427db1402337c4199bbd1df0443471c2d",
+      "size": 6732
+    },
+    {
+      "path": "eth_research/fractional/report_erratum.py",
+      "sha256": "71c609ce8aa2ed0a747838daa0403f67051260fba4691bc1c96ad9f4572a0b98",
+      "size": 36027
+    },
+    {
+      "path": "eth_research/fractional/results.py",
+      "sha256": "1f9949c499d563b218a7c82be73a9911410c981ff77b8a89452a22dee955c00c",
+      "size": 30326
+    },
+    {
+      "path": "eth_research/fractional/risk.py",
+      "sha256": "c8cd8eb6c54507d7d81375f87fbb03fa7ca32f770c288e5d364f78eb9a0a898e",
+      "size": 9742
+    },
+    {
+      "path": "eth_research/fractional/solver.py",
+      "sha256": "b5d5e3fc901d8b9f09ecdc1f0bdeaf5583b713e3da4289e18b66b5063255efba",
+      "size": 12277
+    },
+    {
+      "path": "eth_research/fractional/strategies.py",
+      "sha256": "44c49911f8ed669621a5a31ef19e7b5da09cbabe0b6149d6cb8cc35f0c6ef435",
+      "size": 4561
+    },
+    {
+      "path": "eth_research/fractional/validation.py",
+      "sha256": "17cb333cf385f553258ef01b3d9aaf15bf1fa29f5dea389189f9c85cf520fe42",
+      "size": 8376
+    },
+    {
+      "path": "eth_research/fractional/verify_run_archive.py",
+      "sha256": "ceb8adcf006b5412f2cd2ab42aca1b5af6a91e6c2ad3629228cf887477bce4ff",
+      "size": 8099
+    },
+    {
+      "path": "eth_research/gitcheck.py",
+      "sha256": "85dd3af91a094d8486e3b1e0bb7b8156ab2ce671f3b9aa16ce0a23688daa7663",
+      "size": 9788
+    },
+    {
+      "path": "eth_research/holdout.py",
+      "sha256": "778d1da3f3a369285bbb42a948f614ba8d60214b0ad911642f76757748793810",
+      "size": 17180
+    },
+    {
+      "path": "eth_research/ledger.py",
+      "sha256": "722ca7f48ef854999621bcf38d45691477d1885dbd456cabc28f0719ca503fe8",
+      "size": 18088
+    },
+    {
+      "path": "eth_research/m2b_report.py",
+      "sha256": "59831a681afde1c84fcf87a8782aeec6f83dc3ea4372bce19435b4c50e90a092",
+      "size": 10329
+    },
+    {
+      "path": "eth_research/m3a_recovery.py",
+      "sha256": "61290eabd683912a0c82997f1b5fc96869d804ebac1822dd935d2fa77403e893",
+      "size": 7650
+    },
+    {
+      "path": "eth_research/m3a_register.py",
+      "sha256": "bf093c301ef74a52008cd0a9151cf6f3a18e0a2a0a462aa89d61439cdde3abaa",
+      "size": 13778
+    },
+    {
+      "path": "eth_research/m3c/__init__.py",
+      "sha256": "7954502909918dad3325173b785a5466ebb011526f628f8a85e0c2a3bd2c4047",
+      "size": 923
+    },
+    {
+      "path": "eth_research/m3c/archive.py",
+      "sha256": "3e744a92eead898d647124faa78e180bcef06a4b8f6af31c90709a7845467d77",
+      "size": 16742
+    },
+    {
+      "path": "eth_research/m3c/candidate.py",
+      "sha256": "67c95f388e23ea58cb8300fce14c9b8010e259f3b1c885450ded6bd751dbc92b",
+      "size": 12677
+    },
+    {
+      "path": "eth_research/m3c/completion.py",
+      "sha256": "8d713d7e9ec36600628247452c88b69e8e22bac6976cc53c26c857a14e08e5d5",
+      "size": 10098
+    },
+    {
+      "path": "eth_research/m3c/decision.py",
+      "sha256": "3b3de38be358051838d5f772a98e77860a92202fb71b7cfddd53772fb84744fe",
+      "size": 16928
+    },
+    {
+      "path": "eth_research/m3c/experiment.py",
+      "sha256": "35f1d4444e74b3ee268f87d92b7932c02d70660563e4245d57e371e180a705e1",
+      "size": 6086
+    },
+    {
+      "path": "eth_research/m3c/lineage.py",
+      "sha256": "8efaeea4c4498c66ec86c54027a4ea1a8ff42fea012b6ab280a2b9ddb4e2ba37",
+      "size": 19530
+    },
+    {
+      "path": "eth_research/m3c/numerics.py",
+      "sha256": "ceb7a6d8fccf305d6df585bd3485daf0b6f296db057fe3f096176bb032f4631a",
+      "size": 10573
+    },
+    {
+      "path": "eth_research/m3c/orchestrator.py",
+      "sha256": "59073175e33b7e2d930404bc21d115341fc300cc0b91f2c9b219bf071294ffda",
+      "size": 24855
+    },
+    {
+      "path": "eth_research/m3c/pipeline.py",
+      "sha256": "415d2706b9cc0b98bc46f90454fa869bac4e1fd1c037a0885a0c85e7150dbd05",
+      "size": 9535
+    },
+    {
+      "path": "eth_research/m3c/protocol.py",
+      "sha256": "2e6cd2553146a74f7b6aa8ea5893c3094272a78698dde4b179a56870329b7977",
+      "size": 18595
+    },
+    {
+      "path": "eth_research/m3c/recovery.py",
+      "sha256": "e0e69e9c3493ef8e0fd53a651d80e1e5d3f34c03aac63f1e512c86d41464d1bc",
+      "size": 7910
+    },
+    {
+      "path": "eth_research/m3c/registry.py",
+      "sha256": "797aa984d507e227cf6dddbc6a394830a94a76328e45f74a5f70c4bf70c54731",
+      "size": 22883
+    },
+    {
+      "path": "eth_research/m3c/replay.py",
+      "sha256": "6693a2c9383c04514089a285d0d1db8da01f446d1d4a567a716bf054dd1daa9a",
+      "size": 16892
+    },
+    {
+      "path": "eth_research/m3c/results.py",
+      "sha256": "6978191bafb76279b2e86ad4adc6a6b6a6b387040d17b8fac380681389cc3160",
+      "size": 60573
+    },
+    {
+      "path": "eth_research/m3c/statistics.py",
+      "sha256": "ba0d29e636d4a321f0848846b4cfc6a497ba012e1ba0b01e8f9a3e8b28e66f7a",
+      "size": 10186
+    },
+    {
+      "path": "eth_research/m3c/strategy.py",
+      "sha256": "6d48c588c760f0bfe80819092e3ff21be33fa4f121984cc55a067ff55c4f94f5",
+      "size": 3231
+    },
+    {
+      "path": "eth_research/m3c/validation.py",
+      "sha256": "52a077765876bfdc09b02751d6ef8373349447ca2e64c9b7c0749fe5876f4ba3",
+      "size": 3012
+    },
+    {
+      "path": "eth_research/m3c/verify_archive.py",
+      "sha256": "6b0a41587d80237623559cfe770e7e97fa21b16c4a3f5c4631cc5ad9a804ebca",
+      "size": 4895
+    },
+    {
+      "path": "eth_research/m3d/__init__.py",
+      "sha256": "602cde84d5e1f9bd5b1eaef22bcd3ba2f32e69c70924cf10e6e07896e0d5abc9",
+      "size": 1491
+    },
+    {
+      "path": "eth_research/m3d/_upstream.py",
+      "sha256": "9c0d6b895cfad4d57a92d6c0f2e648fdecd9a4b565e04203c9bf660be48509ac",
+      "size": 8228
+    },
+    {
+      "path": "eth_research/m3d/acquire_runner.py",
+      "sha256": "c2f6379c6c5ffdface22747fb9d54b2069688c9f5f57e5b0a053b8ec8ca9389e",
+      "size": 11945
+    },
+    {
+      "path": "eth_research/m3d/acquisition_plan.py",
+      "sha256": "1b0816e47ea9b595001cd29c90451fba46240955a6df8f7c2a14e86742693370",
+      "size": 15088
+    },
+    {
+      "path": "eth_research/m3d/candidate_catalog.py",
+      "sha256": "9b7db4bb85e158e647de0ff7ac1f9ddded7358254b911978179bf86341ecea88",
+      "size": 25004
+    },
+    {
+      "path": "eth_research/m3d/chain.py",
+      "sha256": "c9ab80a150903c4001a47fbfcae3ed9e43260e2d0e2600343af31cb53fd04ffd",
+      "size": 4170
+    },
+    {
+      "path": "eth_research/m3d/cohort.py",
+      "sha256": "631e065a79617abf7429813ba4174876c9611389686779cb71e45d0705478107",
+      "size": 11332
+    },
+    {
+      "path": "eth_research/m3d/data_use.py",
+      "sha256": "294a39feba858b3e17f0b97b42cd229701aa7ff6332ac27b4735c5eecd5882f2",
+      "size": 11510
+    },
+    {
+      "path": "eth_research/m3d/exhaustion.py",
+      "sha256": "a4859b49494e3cc18ca286ae8ab6d22503bf3ae75f7b690f4dba83a794beb447",
+      "size": 13393
+    },
+    {
+      "path": "eth_research/m3d/maturity.py",
+      "sha256": "1573b625b427892d2ff52e56502bdd87fe4dac53fda3aff7312b60b3d286e173",
+      "size": 4986
+    },
+    {
+      "path": "eth_research/m3d/multiplicity.py",
+      "sha256": "c9c142410e9ee15c28576c4441793ce5385a307ef5a7d0871f10d99db09223d1",
+      "size": 11519
+    },
+    {
+      "path": "eth_research/m3d/program_history.py",
+      "sha256": "11785ce9bb24de7717edae04d610851367cc4c798281d5ff3b4ac0b8448e18ab",
+      "size": 19884
+    },
+    {
+      "path": "eth_research/m3d/protocol.py",
+      "sha256": "efabcfacc96db663ae25fb708e1767d8f193259ccd12da7a7410fdb71760d8e6",
+      "size": 16371
+    },
+    {
+      "path": "eth_research/m3d/publication.py",
+      "sha256": "13e8f2782dc589cdd9a595c6d5883cce344fa68e74813d860889e5dea46b1f3a",
+      "size": 6277
+    },
+    {
+      "path": "eth_research/m3d/quality.py",
+      "sha256": "b4d352238a0c76aa15aa77f166078bcf0e25a0e39ff4068385cdd4a95d212e87",
+      "size": 5573
+    },
+    {
+      "path": "eth_research/m3d/raw_bundle.py",
+      "sha256": "171cb5451622a2a1d359b9697439183080841a2b9b300a151c6b96c6225d8118",
+      "size": 9031
+    },
+    {
+      "path": "eth_research/m3d/reacquisition_audit.py",
+      "sha256": "91419ed94a30633535838012b4e7424515b1cf90cd56223de302293351a65288",
+      "size": 5676
+    },
+    {
+      "path": "eth_research/m3d/receipt.py",
+      "sha256": "991707535bafc54909b86bef64c817dec567127b3587dd13d36f4e64bc86cecd",
+      "size": 7117
+    },
+    {
+      "path": "eth_research/m3d/replay.py",
+      "sha256": "fd66816080b009d819dfd9c419865e7b691163921bef32116f8410c6b576dff3",
+      "size": 2838
+    },
+    {
+      "path": "eth_research/m3d/segment.py",
+      "sha256": "7e358a9ed3e94fd9d3b708d68d66e865429da0b871dc76e29e0d21d21468a14f",
+      "size": 7272
+    },
+    {
+      "path": "eth_research/m3d/status.py",
+      "sha256": "f3f997a021e2de1cf90ef1b6cda4b4400cb6eadb22290145e69d5fc89a43611b",
+      "size": 3514
+    },
+    {
+      "path": "eth_research/m3d/validation.py",
+      "sha256": "f715b2b00e8c9e483ad9cf62737625bce9cd6ad36970f7d0d248f32fd8d6d160",
+      "size": 9097
+    },
+    {
+      "path": "eth_research/m3d/verify_m3d_program.py",
+      "sha256": "f3a082137989f434f636b7f09fbf9d989220cf3e9a95e01a20a5ee891c34d637",
+      "size": 10891
+    },
+    {
+      "path": "eth_research/m3e/__init__.py",
+      "sha256": "c3ae275c58c623cf6a03fd21c7d5c3d25ea575beb1f2ec9029c782b65be18ff6",
+      "size": 1911
+    },
+    {
+      "path": "eth_research/m3e/accepted_base.py",
+      "sha256": "0e095660cdf95a0e24ff6fead4a4537ebffa9d5be8c8b00be3f0b1962f2e0915",
+      "size": 9107
+    },
+    {
+      "path": "eth_research/m3e/acquire_runner.py",
+      "sha256": "f746c74a6c9e84c987aa86a359e39641860bd3365b20cdbef64bc33c067df12d",
+      "size": 12410
+    },
+    {
+      "path": "eth_research/m3e/acquisition.py",
+      "sha256": "aecb97e1d02e7298b3fb0c46301ff4594d2d5ebba73cb84cf78d78972b6c0acb",
+      "size": 8513
+    },
+    {
+      "path": "eth_research/m3e/assembly.py",
+      "sha256": "9cc340481b306ef788a2939e2bc4d3e8dacf03ae94942355d0cdcd54f9a0bc93",
+      "size": 3407
+    },
+    {
+      "path": "eth_research/m3e/comparison.py",
+      "sha256": "c2a265ebf490dad380b3c6cc0788538a4c1bcff2f613acb61669e8021a13d5ca",
+      "size": 5039
+    },
+    {
+      "path": "eth_research/m3e/cutoff.py",
+      "sha256": "f6e9b27070a271387a4422551c937bd1d5ced28bfd007601012d73696d1a002d",
+      "size": 5011
+    },
+    {
+      "path": "eth_research/m3e/lease.py",
+      "sha256": "c3710787bfd9a7f3ae39d01da5f5b9696249008f230e9019e2e773b923786085",
+      "size": 6709
+    },
+    {
+      "path": "eth_research/m3e/orchestrator.py",
+      "sha256": "25d73e1763965ae5f9381f500dfda5b185c11529ae7e3115f324b94972c62450",
+      "size": 7255
+    },
+    {
+      "path": "eth_research/m3e/proposal.py",
+      "sha256": "93d84164ab93de8a03d654615a2c2790e45c4bdf08b56f8c9031e11dba839956",
+      "size": 8187
+    },
+    {
+      "path": "eth_research/m3e/publisher.py",
+      "sha256": "88de1c7af7e3198719c44f1c35fb75656db0f35ab427c016f7296d4d7cdc4e60",
+      "size": 5000
+    },
+    {
+      "path": "eth_research/m3e/registry.py",
+      "sha256": "17ce991cb6719e22b8e006f4b7245f42711346287221435a44b6d589b9a0a12f",
+      "size": 4237
+    },
+    {
+      "path": "eth_research/m3e/replay.py",
+      "sha256": "8f8db6060442a18245d3385747c684e5ef39a0027b3b8db65242eec8da2d0f30",
+      "size": 3024
+    },
+    {
+      "path": "eth_research/m3e/review_policy.py",
+      "sha256": "afbd5cfadcb06d7ba08a4636153b125ec10bfb61e842b46525b387f21cde676d",
+      "size": 2743
+    },
+    {
+      "path": "eth_research/m3e/runner_boundary.py",
+      "sha256": "066aebecd1a2429a39f6d86af54ea131e3c6f06743ff503d4f35352f1fa801a5",
+      "size": 5445
+    },
+    {
+      "path": "eth_research/m3e/status.py",
+      "sha256": "14b07e825bdf9b94aee958a118145a7d7e7580a81f550f8f5f12970e8f1980fb",
+      "size": 5123
+    },
+    {
+      "path": "eth_research/m3e/transition.py",
+      "sha256": "1c9eb6df944675a6c161a6f694d66d18eadf7d018566adeb77909c55d1298b31",
+      "size": 6894
+    },
+    {
+      "path": "eth_research/m3e/update_plan.py",
+      "sha256": "b80fae8bc224073b53bfeacfed59874e53b927d2d782cae0974e536b5dc4920b",
+      "size": 13273
+    },
+    {
+      "path": "eth_research/m3e/validation.py",
+      "sha256": "f08f92ee9f175e39a17f7b7de5137f66f935f4359fdb597ff599afbbe6f7302d",
+      "size": 2611
+    },
+    {
+      "path": "eth_research/m3e/verify_m3e_program.py",
+      "sha256": "55036983d19be8bb7775307d4b6acd66164f20851870f8747832ab62c746a603",
+      "size": 24223
+    },
+    {
+      "path": "eth_research/m3f/__init__.py",
+      "sha256": "304505b376e249be97f8c821f5db1480b40a3b592fd9183628e1919153351d37",
+      "size": 844
+    },
+    {
+      "path": "eth_research/m3f/audit.py",
+      "sha256": "1be4fd868175db4bd7355e7f3e210abdd68abe0b42bc8014b2e9c282ff84907c",
+      "size": 6613
+    },
+    {
+      "path": "eth_research/m3f/bundle.py",
+      "sha256": "daf601e0c880e56c71f8d9893cbf5fce106adc7f8e67c7bd3d5268e33c7013d5",
+      "size": 10289
+    },
+    {
+      "path": "eth_research/m3f/catalog.py",
+      "sha256": "e4ff685b0c5c47d3ee3ad5047505974dc3d8a112e97c6eb7e4d3ce6815beceea",
+      "size": 22770
+    },
+    {
+      "path": "eth_research/m3f/cli.py",
+      "sha256": "18fe1e7f97570e2c94d4840aefc42877eef22a4b75988d899bbf1bf9a57c9d61",
+      "size": 1251
+    },
+    {
+      "path": "eth_research/m3f/dependency_inventory.py",
+      "sha256": "141f5390ccae64dbd637176b35e728479ddfe168b754d62271e962ca975413dc",
+      "size": 6770
+    },
+    {
+      "path": "eth_research/m3f/honest_state.py",
+      "sha256": "69326a9d87473adc35d9259b758c55b16df27dbd5651548d46b6b5eb550a304e",
+      "size": 8262
+    },
+    {
+      "path": "eth_research/m3f/oracle.py",
+      "sha256": "ff9e0a227222bdf37def4a84a0aa210cc6e97489dc4a68a36bf26346562f8556",
+      "size": 11347
+    },
+    {
+      "path": "eth_research/m3f/recovery.py",
+      "sha256": "bb464cff71a372988017fdd5da99e4ae95b562c88346f00b960336a24f98bd88",
+      "size": 9076
+    },
+    {
+      "path": "eth_research/m3f/register.py",
+      "sha256": "d0cab999bdb3722802796adc689ea23d373b9db8619f781d174a1a50cf6d63f2",
+      "size": 5579
+    },
+    {
+      "path": "eth_research/m3f/replay.py",
+      "sha256": "01d7ac886368a56f65d90094eaad12a707d5191928329243bb025f8b5114a12d",
+      "size": 1704
+    },
+    {
+      "path": "eth_research/m3f/state_machine.py",
+      "sha256": "8254338e267e8652cd317b2135522ecc16ca576cf119d776b14f51eec4e2915b",
+      "size": 4237
+    },
+    {
+      "path": "eth_research/m3f/validation.py",
+      "sha256": "2b067717b1a6923a70b9a38bab00917024979a866e7afb944212d1ad0feb9eff",
+      "size": 10052
+    },
+    {
+      "path": "eth_research/m3f/workflow_inventory.py",
+      "sha256": "d3023cb50006e3c7e21d250f9d6029a120b93a2daef3208e13da8ad65dececbf",
+      "size": 9552
+    },
+    {
+      "path": "eth_research/m4a/__init__.py",
+      "sha256": "91998bffb2110149d1f3ad077d1831b3aa23bd30110d0061eb5e68327234c9c7",
+      "size": 595
+    },
+    {
+      "path": "eth_research/m4a/cli_reference.py",
+      "sha256": "b63eef23200e2695dd37ba58d0058052c2ab3832d5732b567f066e9b32638c0f",
+      "size": 3333
+    },
+    {
+      "path": "eth_research/m4a/public_api.py",
+      "sha256": "5cf397887e87e06ebe299b95d9cfb070b4a372ce67b8c9bd2192c0c5df8b180c",
+      "size": 5071
+    },
+    {
+      "path": "eth_research/m4a/release.py",
+      "sha256": "09bb94aa54e0b3f382a8fa9a6c4695d2e479b62e85dfa57995dab2622f793ba2",
+      "size": 10273
+    },
+    {
+      "path": "eth_research/methodology_v2.py",
+      "sha256": "639045bc932fb303efadd812966998821117a77867a54e8109b4844aa5913900",
+      "size": 23375
+    },
+    {
+      "path": "eth_research/metrics.py",
+      "sha256": "3bfd4565437545d3d12b600727959a0a0cc7bd0ad920caa36d0d0f13ec4505d3",
+      "size": 8218
+    },
+    {
+      "path": "eth_research/protocol.py",
+      "sha256": "574685180f07af130f98f2828f5d33311f6efeff8499a7261d0409b1f37b5620",
+      "size": 45004
+    },
+    {
+      "path": "eth_research/publication.py",
+      "sha256": "0bba8f72a4ed1826fd698978b3f0da33bb750bd04b268a37ccfcd9594fcd084b",
+      "size": 13050
+    },
+    {
+      "path": "eth_research/py.typed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "eth_research/replay_m2b.py",
+      "sha256": "f09faa002e51c1427cec8f2ea33a29108cd3def1bb7bf074baaa12a8a55181ce",
+      "size": 12105
+    },
+    {
+      "path": "eth_research/replay_m3a_v2.py",
+      "sha256": "7aa907185a6da3a44816a52ce8c4a2c3cfabbe2780cd3970be9a6477dda832c5",
+      "size": 5525
+    },
+    {
+      "path": "eth_research/return_evidence.py",
+      "sha256": "c092aeaf49dd46072ef5bc5e7bbc318fabf45386daa21164eff4055c1513ea12",
+      "size": 16687
+    },
+    {
+      "path": "eth_research/splits.py",
+      "sha256": "99147cc6d42a6dbadff8d3ce6e62d36e69db3a6fa11093e8fdd6bd2ca14e8bf4",
+      "size": 3755
+    },
+    {
+      "path": "eth_research/strategies/__init__.py",
+      "sha256": "3b8a46b20c1919afd87d48ffde44ca828b67b038ca7faa6ca8091c63c9bac841",
+      "size": 476
+    },
+    {
+      "path": "eth_research/strategies/base.py",
+      "sha256": "738f518bb45dd1c114397248a700d438811257a5b336c4263378c54c85818f9f",
+      "size": 1651
+    },
+    {
+      "path": "eth_research/strategies/buy_and_hold.py",
+      "sha256": "87d221b959b5df9fd28c8d708d3071b5755be3c11bf5a8041ce93bd4cf4390fe",
+      "size": 831
+    },
+    {
+      "path": "eth_research/strategies/cash.py",
+      "sha256": "a4cce4acdbb95efcfe67afe1f17ecffc8d611cd26fb8f77d63a56d1339001111",
+      "size": 828
+    },
+    {
+      "path": "eth_research/strategies/donchian.py",
+      "sha256": "9fd4ae00240b908ee73ecfe52642dff748de270eda920691fc5472b965c98b17",
+      "size": 3118
+    },
+    {
+      "path": "eth_research/strategies/moving_average.py",
+      "sha256": "65e33c23fb187b4656d0c47b455232f6d75be022dfeec6e762c7b11c7bd2eb21",
+      "size": 1655
+    },
+    {
+      "path": "eth_research/test_readiness.py",
+      "sha256": "f75d030fe54e53f09094ec77e81771afa022ed1717444ad3a4562ee13e052e5b",
+      "size": 9477
+    },
+    {
+      "path": "eth_research/walkforward.py",
+      "sha256": "90dc07f8d24aa37a363c8f8c85dc6cc2c8ad84ad64cce409a0e8408f42efa52b",
+      "size": 22120
+    }
+  ],
+  "member_count": 181,
+  "package": "eth-research",
+  "package_tree_sha256": "e4ac2230742d7255daafb23f01708af072ae4acf98cea33608c2696d8a141de2",
+  "release_schema_version": 1,
+  "sdist_extra_members": [
+    ".gitignore",
+    "PKG-INFO",
+    "README.md",
+    "pyproject.toml"
+  ],
+  "version": "1.0.0",
+  "wheel_tag": "py3-none-any"
+}

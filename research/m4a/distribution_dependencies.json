@@ -1,0 +1,23 @@
+{
+  "build_backend_pin": "hatchling==1.31.0",
+  "package": "eth-research",
+  "release_schema_version": 1,
+  "requires_python": ">=3.12",
+  "runtime_dependencies": [
+    {
+      "locked_version": "2.5.1",
+      "name": "numpy",
+      "specifier": "numpy>=1.26"
+    },
+    {
+      "locked_version": "3.0.3",
+      "name": "pandas",
+      "specifier": "pandas>=2.2"
+    },
+    {
+      "locked_version": "25.0.0",
+      "name": "pyarrow",
+      "specifier": "pyarrow>=15"
+    }
+  ]
+}

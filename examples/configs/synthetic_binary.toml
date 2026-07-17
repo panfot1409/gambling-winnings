@@ -1,0 +1,29 @@
+# A fully offline binary-engine run on deterministic synthetic data.
+# Run it with:  eth-research backtest run --config examples/configs/synthetic_binary.toml --output /tmp/run
+config_schema_version = 1
+engine = "binary"
+
+[dataset]
+source = "synthetic"
+
+[dataset.synthetic]
+n_periods = 400
+seed = 0
+
+[strategy]
+kind = "moving_average_crossover"
+params = { fast_window = 10, slow_window = 30 }
+
+[costs]
+scenario = "base"
+
+[split]
+enabled = true
+evaluate = "validation"
+context_bars = 30
+
+[run]
+initial_cash = 10000.0
+
+[output]
+directory = "results"

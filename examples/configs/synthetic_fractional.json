@@ -1,0 +1,13 @@
+{
+  "config_schema_version": 1,
+  "dataset": {
+    "source": "synthetic",
+    "synthetic": { "n_periods": 400, "seed": 1 }
+  },
+  "engine": "fractional",
+  "strategy": { "kind": "donchian_55_20", "params": {} },
+  "costs": { "scenario": "causal_proxy_base" },
+  "split": { "enabled": true, "evaluate": "test", "context_bars": 55 },
+  "run": { "initial_cash": 10000.0 },
+  "output": { "directory": "results" }
+}

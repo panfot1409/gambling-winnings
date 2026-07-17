@@ -39,12 +39,16 @@ def test_freeze_table_covers_every_research_file() -> None:
             ["git", "-C", str(REPO_ROOT), "ls-files", "research"], text=True
         ).split()
     )
-    # The strictly-later M3F verification/recovery layer is out of scope for this accepted
-    # M2B-M3E stack snapshot: it self-verifies through its own freeze catalog and the
-    # eth_research.m3f.audit / tools/m3f_independent_verify.py verifiers. This mirrors the
+    # The strictly-later M3F verification/recovery layer and the M4A release-candidate layer
+    # are out of scope for this accepted M2B-M3E stack snapshot. M3F self-verifies through its
+    # own freeze catalog and the eth_research.m3f.audit / tools/m3f_independent_verify.py
+    # verifiers; M4A carries its own deterministic RC artifacts under research/m4a/ with their
+    # own drift checks (eth_research.m4a.public_api / cli_reference). This mirrors the
     # M3F_LAYER_PREFIX exclusion the M3F catalog applies to the accepted stack it verifies
     # (src/eth_research/m3f/catalog.py).
-    tracked = {p for p in tracked if not p.startswith("research/m3f/")}
+    tracked = {
+        p for p in tracked if not (p.startswith("research/m3f/") or p.startswith("research/m4a/"))
+    }
     listed = {row["path"] for row in _table()["files"]}
     assert listed == tracked, f"table drift: missing={tracked - listed}, extra={listed - tracked}"
 
