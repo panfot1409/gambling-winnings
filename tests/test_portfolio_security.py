@@ -1,11 +1,22 @@
 """Source-level security firewall over the M4B portfolio package (Milestone 4B, §37).
 
-The portfolio milestone is a *pure, offline simulation library*. This firewall proves — by AST scan
-and by import-closure, never by grepping docstrings (which legitimately say "no leverage, no
-shorting") — structurally that the package cannot reach a network, an exchange, a wallet, dynamic
-execution, or an ML/optimizer library; that its transitive first-party closure imports no such
-client; and that a ``Fill`` is an inert simulation *record* with no method that could route it
-anywhere. The read-only M4B replay workflow is checked for write/publish capability too.
+The portfolio milestone is a *pure, offline simulation library*. This firewall combines two guards,
+never grepping docstrings (which legitimately say "no leverage, no shorting"):
+
+* a **best-effort AST lint** — a static allow/deny scan for direct imports, forbidden builtin calls
+  (``eval``/``exec``/``compile``/``__import__``), and a fixed set of dangerous dotted attribute
+  calls (``os.system``, ``subprocess.run``, ``importlib.import_module``, …), plus a check for the
+  indirection patterns (``getattr`` on a sensitive module, ``__dict__[...]``, ``__builtins__``) that
+  a pure import/attr scan would miss. A lexical lint cannot *prove* the absence of capability
+  against a determined obfuscator; it raises the bar and documents intent, and stays quiet on the
+  shipped source (whose only ``getattr`` targets are dataclass instances);
+* the **stronger, structural import-closure** — actually importing the package's public surface and
+  asserting its transitive first-party closure pulls in no network / exchange / wallet /
+  dynamic-exec / ML / optimizer client. This is the load-bearing proof; the lint is defense in depth
+  on top of it.
+
+A ``Fill`` is additionally shown to be an inert simulation *record* with no method that could route
+it anywhere, and the read-only M4B replay workflow is checked for write/publish capability.
 """
 
 from __future__ import annotations
@@ -169,9 +180,90 @@ _FORBIDDEN_NAME_TOKENS = (
 
 _ALLOWED_THIRD_PARTY = {"numpy", "pandas", "pyarrow", "dateutil", "pytz", "tzdata", "six"}
 
+# Modules whose attributes could reach the OS / network / dynamic execution. The lint flags a
+# ``getattr`` whose target is one of these (e.g. ``getattr(os, "sys" + "tem")``), catching the
+# name-concatenation / value-indirection dodge that a direct ``os.system`` attr scan would miss.
+_SENSITIVE_MODULES = frozenset(
+    {"os", "sys", "subprocess", "importlib", "builtins", "runpy", "ctypes"}
+)
+
+# Test modules that exercise the portfolio package but legitimately need an otherwise-forbidden
+# import, mapped to the exact top-level names they may import. ``test_m4b_consumer_e2e.py`` shells
+# out via ``subprocess`` to build and install the wheel for the installed-consumer proof; it may
+# import ``subprocess`` and nothing else from the forbidden set (a network / exchange / ML client
+# would still trip the scan).
+_TEST_IMPORT_ALLOWLIST = {"test_m4b_consumer_e2e.py": frozenset({"subprocess"})}
+
 
 def _portfolio_files() -> list[Path]:
     return sorted(_PORTFOLIO.rglob("*.py"))
+
+
+def _imports_portfolio(tree: ast.AST) -> bool:
+    """Whether a parsed test module exercises the portfolio package.
+
+    True if it imports an ``eth_research.portfolio`` module *or* carries a string literal naming one
+    (an out-of-process driver, as the installed-consumer E2E does). A mere comment mention is not an
+    AST node and so does not count — a governance test that only names the path in a comment is not
+    swept in.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
+            "eth_research.portfolio"
+        ):
+            return True
+        if isinstance(node, ast.Import) and any(
+            alias.name.startswith("eth_research.portfolio") for alias in node.names
+        ):
+            return True
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and "eth_research.portfolio" in node.value
+        ):
+            return True
+    return False
+
+
+def _portfolio_importing_tests() -> list[Path]:
+    """Every ``tests/test_*.py`` that exercises the portfolio package, regardless of filename.
+
+    Detected structurally (see :func:`_imports_portfolio`), not by a ``test_portfolio_*`` filename
+    prefix — so a portfolio test added under any other name (e.g. ``test_m4b_consumer_e2e.py``) is
+    scanned too, and the offline guarantee cannot be evaded by naming.
+    """
+    hits: list[Path] = []
+    for path in sorted(_TESTS.glob("test_*.py")):
+        if _imports_portfolio(ast.parse(path.read_text(encoding="utf-8"), filename=str(path))):
+            hits.append(path)
+    return hits
+
+
+def _scan_indirection(path: Path) -> list[str]:
+    """Best-effort lint for capability reached through indirection rather than a direct import/attr.
+
+    Flags ``getattr`` on a sensitive module, and any ``__dict__[...]`` or ``__builtins__`` access —
+    the dodges (``getattr(os, "sys"+"tem")``, ``importlib.__dict__["import_module"]``) that the
+    direct allow/deny scan cannot model. The shipped source uses none of these (its only ``getattr``
+    targets are dataclass instances), so this stays quiet unless capability is smuggled in.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    findings: list[str] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and node.args
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id in _SENSITIVE_MODULES
+        ):
+            findings.append(f"{path.name}: getattr on sensitive module {node.args[0].id!r}")
+        if isinstance(node, ast.Attribute) and node.attr in ("__dict__", "__builtins__"):
+            findings.append(f"{path.name}: dynamic '{node.attr}' access")
+        if isinstance(node, ast.Name) and node.id == "__builtins__":
+            findings.append(f"{path.name}: reference to __builtins__")
+    return findings
 
 
 def _attr_path(node: ast.AST) -> str:
@@ -227,20 +319,36 @@ def test_portfolio_runtime_has_no_forbidden_capability() -> None:
     assert findings == [], "\n".join(findings)
 
 
-def test_portfolio_tests_import_no_network_or_ml_client() -> None:
-    # The tests are offline too: none may import a network / exchange / wallet / ML client.
+def test_portfolio_runtime_has_no_capability_indirection() -> None:
+    # Defense in depth over the direct scan: no getattr-on-a-sensitive-module, __dict__[...], or
+    # __builtins__ dodge anywhere in the shipped package.
     findings: list[str] = []
-    for path in sorted(_TESTS.glob("test_portfolio_*.py")):
+    for path in _portfolio_files():
+        findings.extend(_scan_indirection(path))
+    assert findings == [], "\n".join(findings)
+
+
+def test_portfolio_tests_import_no_network_or_ml_client() -> None:
+    # Every test that exercises the portfolio package must be offline too — no network / exchange /
+    # wallet / ML client — scanned by portfolio-import, not by filename prefix, so a differently
+    # named portfolio test (e.g. the installed-consumer E2E) cannot slip the guard. A narrow,
+    # explicit per-file allowlist covers the one test that must shell out to install a wheel.
+    scanned = _portfolio_importing_tests()
+    assert scanned, "expected to find portfolio-importing test modules"
+    findings: list[str] = []
+    for path in scanned:
+        allowed = _TEST_IMPORT_ALLOWLIST.get(path.name, frozenset())
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name.split(".")[0] in _FORBIDDEN_IMPORTS:
+                    top = alias.name.split(".")[0]
+                    if top in _FORBIDDEN_IMPORTS and top not in allowed:
                         findings.append(f"{path.name}: forbidden import {alias.name}")
-            elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in (
-                _FORBIDDEN_IMPORTS
-            ):
-                findings.append(f"{path.name}: forbidden import-from {node.module}")
+            elif isinstance(node, ast.ImportFrom):
+                top = (node.module or "").split(".")[0]
+                if top in _FORBIDDEN_IMPORTS and top not in allowed:
+                    findings.append(f"{path.name}: forbidden import-from {node.module}")
     assert findings == [], "\n".join(findings)
 
 
