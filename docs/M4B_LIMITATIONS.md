@@ -126,3 +126,25 @@ It deliberately reports **no** alpha, beta, information ratio, factor loading, s
 optimization objective, or value-at-risk sold as a guarantee. Every scalar reconciles from the event
 records, and any ratio that is undefined for a run is reported as `null`, never as a fabricated or
 non-finite number.
+
+The reported `terminal_equity` is a mark-to-market value (each holding at its final bar's close price
+and FX). It is **not** net of the cost of actually liquidating those holdings: the simulator never
+force-liquidates, and it does not report a separate *hypothetical liquidation* value. Doing so
+faithfully would require choosing a hypothetical-exit liquidity model (the participation and
+market-impact of unwinding the whole book at once), which is a modeling decision this offline
+accounting simulator deliberately leaves to the caller rather than fixing to a possibly-misleading
+default. Reporting a hypothetical liquidation value is a documented deferred extension.
+
+## Deferred CLI subcommands — the Python API is the complete surface
+
+The offline command group (`universe inspect|validate`, `portfolio demo|run|verify`) is read-only by
+design: it computes and prints, and never writes a file. The plan also lists a `universe build` and a
+`portfolio resume` subcommand; these are deferred. `portfolio resume` consumes a
+`PortfolioCheckpoint`, but a read-only CLI has no path to *produce* one (that would require file
+output, with the governed-path and transactional-write machinery that the read-only posture avoids),
+so checkpoints are produced and consumed through the Python API
+(`stream_portfolio_simulation` / `resume_portfolio_simulation`), which is complete and tested.
+`universe build` is likewise deferred: a research universe is constructed in code (or parsed from a
+canonical `UniverseSpec` via `universe validate --in`), not assembled from CLI flags. Neither
+deferral removes any capability — the full simulate / stream / resume / build / verify surface is
+available and covered through the public API.
