@@ -1,0 +1,1556 @@
+{
+  "api_version": "1.1",
+  "base_api_version": "1.0",
+  "m4b_symbols": {
+    "CorporateAction": {
+      "fields": [
+        {
+          "name": "instrument",
+          "type": "InstrumentId"
+        },
+        {
+          "name": "action_id",
+          "type": "str"
+        },
+        {
+          "name": "action_type",
+          "type": "str"
+        },
+        {
+          "name": "knowledge_time",
+          "type": "pd.Timestamp"
+        },
+        {
+          "name": "effective_time",
+          "type": "pd.Timestamp"
+        },
+        {
+          "name": "payment_time",
+          "type": "pd.Timestamp | None"
+        },
+        {
+          "name": "ratio",
+          "type": "float | None"
+        },
+        {
+          "name": "cash_amount",
+          "type": "float | None"
+        },
+        {
+          "name": "currency",
+          "type": "str | None"
+        },
+        {
+          "name": "source",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "from_mapping"
+      ]
+    },
+    "CorporateActionSet": {
+      "fields": [
+        {
+          "name": "actions",
+          "type": "tuple[CorporateAction, ...]"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "actions_for",
+        "canonical",
+        "fingerprint",
+        "from_mapping",
+        "known_by"
+      ]
+    },
+    "FxEvidence": {
+      "fields": [
+        {
+          "name": "observations",
+          "type": "tuple[FxObservation, ...]"
+        },
+        {
+          "name": "triangulation",
+          "type": "Mapping[tuple[str, str], str] | None"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "fingerprint",
+        "from_mapping",
+        "rate_as_of",
+        "triangulation"
+      ]
+    },
+    "FxObservation": {
+      "fields": [
+        {
+          "name": "base_currency",
+          "type": "str"
+        },
+        {
+          "name": "quote_currency",
+          "type": "str"
+        },
+        {
+          "name": "observed_time",
+          "type": "pd.Timestamp"
+        },
+        {
+          "name": "rate",
+          "type": "float"
+        },
+        {
+          "name": "source",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "from_mapping",
+        "pair"
+      ]
+    },
+    "InstrumentId": {
+      "fields": [
+        {
+          "name": "asset_class",
+          "type": "str"
+        },
+        {
+          "name": "base_asset",
+          "type": "str"
+        },
+        {
+          "name": "quote_currency",
+          "type": "str"
+        },
+        {
+          "name": "venue",
+          "type": "str"
+        },
+        {
+          "name": "symbol",
+          "type": "str"
+        },
+        {
+          "name": "instrument_type",
+          "type": "str"
+        },
+        {
+          "name": "price_unit",
+          "type": "str"
+        },
+        {
+          "name": "quantity_unit",
+          "type": "str"
+        },
+        {
+          "name": "calendar_id",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "from_mapping",
+        "instrument_id"
+      ]
+    },
+    "M4B_PACKAGE_VERSION": {
+      "kind": "constant",
+      "type": "str",
+      "value": "1.1.0"
+    },
+    "MarketPanel": {
+      "bases": [],
+      "kind": "class",
+      "methods": [
+        "fingerprint",
+        "frame",
+        "instruments"
+      ]
+    },
+    "MembershipInterval": {
+      "fields": [
+        {
+          "name": "instrument",
+          "type": "InstrumentId"
+        },
+        {
+          "name": "effective_start",
+          "type": "pd.Timestamp"
+        },
+        {
+          "name": "effective_end",
+          "type": "pd.Timestamp | None"
+        },
+        {
+          "name": "knowledge_time",
+          "type": "pd.Timestamp"
+        },
+        {
+          "name": "reason",
+          "type": "str"
+        },
+        {
+          "name": "source",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "contains",
+        "from_mapping"
+      ]
+    },
+    "MembershipSchedule": {
+      "fields": [
+        {
+          "name": "intervals",
+          "type": "tuple[MembershipInterval, ...]"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "active_at",
+        "active_universe",
+        "canonical",
+        "fingerprint",
+        "from_mapping"
+      ]
+    },
+    "PortfolioCheckpoint": {
+      "fields": [
+        {
+          "name": "base_currency",
+          "type": "str"
+        },
+        {
+          "name": "initial_equity",
+          "type": "float"
+        },
+        {
+          "name": "next_event_index",
+          "type": "int"
+        },
+        {
+          "name": "fingerprints",
+          "type": "dict[str, str]"
+        },
+        {
+          "name": "base_cash",
+          "type": "float"
+        },
+        {
+          "name": "positions",
+          "type": "tuple[tuple[InstrumentId, float], ...]"
+        },
+        {
+          "name": "prev_marks",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "prev_local_close",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "prev_fx",
+          "type": "dict[str, float]"
+        },
+        {
+          "name": "prev_equity",
+          "type": "float"
+        },
+        {
+          "name": "all_fills",
+          "type": "int"
+        },
+        {
+          "name": "committed_events",
+          "type": "tuple[dict[str, Any], ...]"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "checkpoint_hash",
+        "from_mapping",
+        "to_carry",
+        "verify_against"
+      ]
+    },
+    "PortfolioMetrics": {
+      "fields": [
+        {
+          "name": "initial_equity",
+          "type": "float"
+        },
+        {
+          "name": "terminal_equity",
+          "type": "float"
+        },
+        {
+          "name": "total_return",
+          "type": "float"
+        },
+        {
+          "name": "annualized_return",
+          "type": "float | None"
+        },
+        {
+          "name": "annualized_volatility",
+          "type": "float | None"
+        },
+        {
+          "name": "sharpe_ratio",
+          "type": "float | None"
+        },
+        {
+          "name": "sortino_ratio",
+          "type": "float | None"
+        },
+        {
+          "name": "max_drawdown",
+          "type": "float"
+        },
+        {
+          "name": "num_events",
+          "type": "int"
+        },
+        {
+          "name": "num_fills",
+          "type": "int"
+        },
+        {
+          "name": "total_cost",
+          "type": "float"
+        },
+        {
+          "name": "cost_drag",
+          "type": "float"
+        },
+        {
+          "name": "total_traded_notional",
+          "type": "float"
+        },
+        {
+          "name": "turnover",
+          "type": "float"
+        },
+        {
+          "name": "average_gross_exposure",
+          "type": "float"
+        },
+        {
+          "name": "average_cash_weight",
+          "type": "float"
+        },
+        {
+          "name": "average_max_weight",
+          "type": "float"
+        },
+        {
+          "name": "average_hhi",
+          "type": "float"
+        },
+        {
+          "name": "average_held_assets",
+          "type": "float"
+        },
+        {
+          "name": "stale_mark_events",
+          "type": "int"
+        },
+        {
+          "name": "max_staleness_seconds",
+          "type": "float"
+        },
+        {
+          "name": "cumulative_local_price_pnl",
+          "type": "float"
+        },
+        {
+          "name": "cumulative_fx_translation_pnl",
+          "type": "float"
+        },
+        {
+          "name": "cumulative_action_cash",
+          "type": "float"
+        },
+        {
+          "name": "cumulative_cost",
+          "type": "float"
+        },
+        {
+          "name": "cumulative_residual",
+          "type": "float"
+        },
+        {
+          "name": "per_currency_contribution",
+          "type": "tuple[tuple[str, float], ...]"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "from_mapping"
+      ]
+    },
+    "PortfolioProtocol": {
+      "fields": [
+        {
+          "name": "base_currency",
+          "type": "str"
+        },
+        {
+          "name": "initial_cash",
+          "type": "float"
+        },
+        {
+          "name": "policy",
+          "type": "ReferencePolicy"
+        },
+        {
+          "name": "cost_scenario",
+          "type": "CostParameters"
+        },
+        {
+          "name": "staleness",
+          "type": "StalenessPolicy"
+        },
+        {
+          "name": "declared_weights",
+          "type": "tuple[tuple[InstrumentId, float], ...]"
+        },
+        {
+          "name": "tolerances",
+          "type": "PortfolioTolerances"
+        },
+        {
+          "name": "schema_version",
+          "type": "int"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "declared_weights",
+        "fingerprint",
+        "from_mapping",
+        "schema_version",
+        "tolerances"
+      ]
+    },
+    "PortfolioResult": {
+      "fields": [
+        {
+          "name": "package_version",
+          "type": "str"
+        },
+        {
+          "name": "universe_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "panel_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "protocol_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "membership_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "fx_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "corporate_action_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "schedule_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "calendar_fingerprints",
+          "type": "tuple[tuple[str, str], ...]"
+        },
+        {
+          "name": "base_currency",
+          "type": "str"
+        },
+        {
+          "name": "initial_equity",
+          "type": "float"
+        },
+        {
+          "name": "terminal_equity",
+          "type": "float"
+        },
+        {
+          "name": "metrics",
+          "type": "PortfolioMetrics"
+        },
+        {
+          "name": "per_asset_contribution",
+          "type": "tuple[AssetTotal, ...]"
+        },
+        {
+          "name": "cost_total",
+          "type": "float"
+        },
+        {
+          "name": "num_fills",
+          "type": "int"
+        },
+        {
+          "name": "event_commitments",
+          "type": "tuple[EventCommitment, ...]"
+        },
+        {
+          "name": "run_result_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "final_state_fingerprint",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "from_mapping",
+        "per_currency_contribution",
+        "result_id"
+      ]
+    },
+    "PortfolioTarget": {
+      "fields": [
+        {
+          "name": "weights",
+          "type": "tuple[tuple[InstrumentId, float], ...]"
+        },
+        {
+          "name": "weight_tolerance",
+          "type": "float"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "fingerprint",
+        "from_mapping",
+        "gross_weight",
+        "instruments",
+        "require_subset_of",
+        "residual_cash_weight",
+        "weight_for",
+        "weight_tolerance"
+      ]
+    },
+    "TradingCalendar": {
+      "fields": [
+        {
+          "name": "calendar_id",
+          "type": "str"
+        },
+        {
+          "name": "kind",
+          "type": "str"
+        },
+        {
+          "name": "sessions",
+          "type": "tuple[Session, ...]"
+        },
+        {
+          "name": "source",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "fingerprint",
+        "from_mapping",
+        "is_open",
+        "session_containing"
+      ]
+    },
+    "UniverseSpec": {
+      "fields": [
+        {
+          "name": "base_currency",
+          "type": "str"
+        },
+        {
+          "name": "instruments",
+          "type": "tuple[InstrumentId, ...]"
+        },
+        {
+          "name": "calendars",
+          "type": "Mapping[str, TradingCalendar]"
+        },
+        {
+          "name": "bar_interval_seconds",
+          "type": "int"
+        },
+        {
+          "name": "max_staleness_seconds",
+          "type": "float"
+        },
+        {
+          "name": "membership_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "fx_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "corporate_action_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "rebalance_schedule_fingerprint",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "fingerprint",
+        "from_mapping",
+        "required_fx_pairs"
+      ]
+    },
+    "build_market_panel": {
+      "kind": "function",
+      "signature": "(frames: 'dict[InstrumentId, pd.DataFrame]') -> 'MarketPanel'"
+    },
+    "build_portfolio_result": {
+      "kind": "function",
+      "signature": "(run_result: 'PortfolioRunResult', metrics: 'PortfolioMetrics', universe: 'UniverseSpec', *, package_version: 'str' = '1.1.0') -> 'PortfolioResult'"
+    },
+    "build_reference_universe": {
+      "kind": "function",
+      "signature": "() -> 'ReferenceUniverse'"
+    },
+    "compute_portfolio_metrics": {
+      "kind": "function",
+      "signature": "(result: 'PortfolioRunResult', *, periods_per_year: 'float', risk_free_rate: 'float' = 0.0) -> 'PortfolioMetrics'"
+    },
+    "reference_protocol": {
+      "kind": "function",
+      "signature": "() -> 'PortfolioProtocol'"
+    },
+    "resume_portfolio_simulation": {
+      "kind": "function",
+      "signature": "(checkpoint: 'PortfolioCheckpoint', protocol: 'PortfolioProtocol', panel: 'MarketPanel', membership: 'MembershipSchedule', fx: 'FxEvidence', schedule: 'RebalanceSchedule', *, calendars: 'dict[str, TradingCalendar]', corporate_actions: 'CorporateActionSet | None' = None) -> 'ResumedRun'"
+    },
+    "run_portfolio_simulation": {
+      "kind": "function",
+      "signature": "(protocol: 'PortfolioProtocol', panel: 'MarketPanel', membership: 'MembershipSchedule', fx: 'FxEvidence', schedule: 'RebalanceSchedule', *, calendars: 'dict[str, TradingCalendar]', corporate_actions: 'CorporateActionSet | None' = None) -> 'PortfolioRunResult'"
+    },
+    "stream_portfolio_simulation": {
+      "kind": "function",
+      "signature": "(protocol: 'PortfolioProtocol', panel: 'MarketPanel', membership: 'MembershipSchedule', fx: 'FxEvidence', schedule: 'RebalanceSchedule', *, calendars: 'dict[str, TradingCalendar]', corporate_actions: 'CorporateActionSet | None' = None) -> 'Iterator[tuple[EventRecord, PortfolioCheckpoint]]'"
+    },
+    "validate_bar_frame": {
+      "kind": "function",
+      "signature": "(frame: 'pd.DataFrame', instrument: 'InstrumentId', *, allow_extra: 'bool' = False) -> 'pd.DataFrame'"
+    },
+    "verify_portfolio_result": {
+      "kind": "function",
+      "signature": "(result: 'PortfolioResult', universe: 'UniverseSpec', run_result: 'PortfolioRunResult') -> 'None'"
+    }
+  },
+  "snapshot_schema_version": 1,
+  "v1_0_symbols": {
+    "API_VERSION": {
+      "kind": "constant",
+      "type": "str",
+      "value": "1.0"
+    },
+    "AccountingError": {
+      "bases": [
+        "BacktestError"
+      ],
+      "category": "execution",
+      "code": "accounting_error",
+      "exit_code": 6,
+      "kind": "exception"
+    },
+    "BINARY_COST_SCENARIOS": {
+      "kind": "constant",
+      "type": "tuple",
+      "value": [
+        "base",
+        "stressed",
+        "severe"
+      ]
+    },
+    "BINARY_STRATEGY_KINDS": {
+      "kind": "constant",
+      "type": "tuple",
+      "value": [
+        "buy_and_hold",
+        "cash",
+        "moving_average_crossover",
+        "donchian_channel"
+      ]
+    },
+    "BINARY_STRATEGY_PARAMS": {
+      "kind": "constant",
+      "type": "dict",
+      "value": {
+        "buy_and_hold": {},
+        "cash": {},
+        "donchian_channel": {
+          "entry_window": 55,
+          "exit_window": 20
+        },
+        "moving_average_crossover": {
+          "fast_window": 20,
+          "slow_window": 50
+        }
+      }
+    },
+    "BacktestError": {
+      "bases": [
+        "EthResearchError"
+      ],
+      "category": "execution",
+      "code": "backtest_error",
+      "exit_code": 6,
+      "kind": "exception"
+    },
+    "BinaryBacktestSpec": {
+      "fields": [
+        {
+          "name": "initial_cash",
+          "type": "float"
+        },
+        {
+          "name": "context_bars",
+          "type": "int"
+        },
+        {
+          "name": "risk_free_rate",
+          "type": "float"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "context_bars",
+        "from_dict",
+        "initial_cash",
+        "risk_free_rate",
+        "to_dict"
+      ]
+    },
+    "CONFIG_SCHEMA_VERSION": {
+      "kind": "constant",
+      "type": "int",
+      "value": 1
+    },
+    "CanonicalDataset": {
+      "fields": [
+        {
+          "name": "frame",
+          "type": "pd.DataFrame"
+        },
+        {
+          "name": "fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "row_count",
+          "type": "int"
+        },
+        {
+          "name": "interval_seconds",
+          "type": "int"
+        },
+        {
+          "name": "start_time",
+          "type": "str"
+        },
+        {
+          "name": "end_time",
+          "type": "str"
+        },
+        {
+          "name": "manifest_sha256",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "identity"
+      ]
+    },
+    "CanonicalDatasetArtifacts": {
+      "fields": [
+        {
+          "name": "canonical_path",
+          "type": "str"
+        },
+        {
+          "name": "manifest_path",
+          "type": "str"
+        },
+        {
+          "name": "quality_report_path",
+          "type": "str"
+        },
+        {
+          "name": "fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "manifest_sha256",
+          "type": "str"
+        },
+        {
+          "name": "report",
+          "type": "ValidationReport"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": []
+    },
+    "CausalityError": {
+      "bases": [
+        "BacktestError"
+      ],
+      "category": "execution",
+      "code": "causality_error",
+      "exit_code": 6,
+      "kind": "exception"
+    },
+    "ChronologicalSplitSpec": {
+      "fields": [
+        {
+          "name": "train_fraction",
+          "type": "float"
+        },
+        {
+          "name": "validation_fraction",
+          "type": "float"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "from_dict",
+        "test_fraction",
+        "to_dict",
+        "train_fraction",
+        "validation_fraction"
+      ]
+    },
+    "ConfigurationError": {
+      "bases": [
+        "EthResearchError"
+      ],
+      "category": "input",
+      "code": "configuration_error",
+      "exit_code": 3,
+      "kind": "exception"
+    },
+    "CostSpec": {
+      "fields": [
+        {
+          "name": "scenario",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "from_dict",
+        "to_dict"
+      ]
+    },
+    "DataSplitResult": {
+      "fields": [
+        {
+          "name": "train",
+          "type": "ValidatedDataset"
+        },
+        {
+          "name": "validation",
+          "type": "ValidatedDataset"
+        },
+        {
+          "name": "test",
+          "type": "ValidatedDataset"
+        },
+        {
+          "name": "_splits",
+          "type": "DataSplits"
+        },
+        {
+          "name": "_interval",
+          "type": "pd.Timedelta"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "test_context",
+        "validation_context"
+      ]
+    },
+    "DatasetError": {
+      "bases": [
+        "EthResearchError"
+      ],
+      "category": "input",
+      "code": "dataset_error",
+      "exit_code": 4,
+      "kind": "exception"
+    },
+    "DatasetHandle": {
+      "bases": [
+        "Protocol"
+      ],
+      "kind": "class",
+      "methods": [
+        "fingerprint",
+        "frame",
+        "interval_seconds",
+        "row_count"
+      ]
+    },
+    "DatasetIntegrityError": {
+      "bases": [
+        "DatasetError"
+      ],
+      "category": "input",
+      "code": "dataset_integrity_error",
+      "exit_code": 4,
+      "kind": "exception"
+    },
+    "DatasetSchemaError": {
+      "bases": [
+        "DatasetError"
+      ],
+      "category": "input",
+      "code": "dataset_schema_error",
+      "exit_code": 4,
+      "kind": "exception"
+    },
+    "DatasetSpec": {
+      "fields": [
+        {
+          "name": "interval_seconds",
+          "type": "int"
+        },
+        {
+          "name": "assume_utc",
+          "type": "bool"
+        },
+        {
+          "name": "allow_extra_columns",
+          "type": "bool"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "allow_extra_columns",
+        "assume_utc",
+        "from_dict",
+        "interval",
+        "to_dict"
+      ]
+    },
+    "ENGINES": {
+      "kind": "constant",
+      "type": "tuple",
+      "value": [
+        "binary",
+        "fractional"
+      ]
+    },
+    "EthResearchError": {
+      "bases": [
+        "Exception"
+      ],
+      "category": "error",
+      "code": "eth_research_error",
+      "exit_code": 1,
+      "kind": "exception"
+    },
+    "FRACTIONAL_COST_SCENARIOS": {
+      "kind": "constant",
+      "type": "tuple",
+      "value": [
+        "compatibility_v1",
+        "causal_proxy_base",
+        "causal_proxy_stressed"
+      ]
+    },
+    "FRACTIONAL_STRATEGY_KINDS": {
+      "kind": "constant",
+      "type": "tuple",
+      "value": [
+        "cash",
+        "buy_and_hold",
+        "donchian_55_20",
+        "vol_target_buy_and_hold_30d_50pct",
+        "vol_target_donchian_55_20_30d_50pct"
+      ]
+    },
+    "FractionalBacktestSpec": {
+      "fields": [
+        {
+          "name": "initial_cash",
+          "type": "float"
+        },
+        {
+          "name": "context_bars",
+          "type": "int"
+        },
+        {
+          "name": "risk_free_rate",
+          "type": "float"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "context_bars",
+        "from_dict",
+        "initial_cash",
+        "risk_free_rate",
+        "to_dict"
+      ]
+    },
+    "FractionalStrategy": {
+      "fields": [
+        {
+          "name": "name",
+          "type": "str"
+        },
+        {
+          "name": "signal",
+          "type": "Strategy"
+        },
+        {
+          "name": "risk",
+          "type": "RiskConfig"
+        },
+        {
+          "name": "warmup_bars",
+          "type": "int"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": []
+    },
+    "OutputCollisionError": {
+      "bases": [
+        "EthResearchError"
+      ],
+      "category": "output",
+      "code": "output_collision_error",
+      "exit_code": 9,
+      "kind": "exception"
+    },
+    "ReceiptVerificationError": {
+      "bases": [
+        "EthResearchError"
+      ],
+      "category": "verification",
+      "code": "receipt_verification_error",
+      "exit_code": 8,
+      "kind": "exception"
+    },
+    "ResearchResult": {
+      "fields": [
+        {
+          "name": "result_schema_version",
+          "type": "int"
+        },
+        {
+          "name": "package_version",
+          "type": "str"
+        },
+        {
+          "name": "api_version",
+          "type": "str"
+        },
+        {
+          "name": "run_spec",
+          "type": "ResearchRunSpec"
+        },
+        {
+          "name": "dataset_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "dataset_row_count",
+          "type": "int"
+        },
+        {
+          "name": "evaluated_row_count",
+          "type": "int"
+        },
+        {
+          "name": "start_time",
+          "type": "str"
+        },
+        {
+          "name": "end_time",
+          "type": "str"
+        },
+        {
+          "name": "metrics",
+          "type": "tuple[tuple[str, MetricValue], ...]"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "from_dict",
+        "from_json_bytes",
+        "metric_map",
+        "result_sha256",
+        "to_dict",
+        "to_json_bytes"
+      ]
+    },
+    "ResearchRunSpec": {
+      "fields": [
+        {
+          "name": "engine",
+          "type": "str"
+        },
+        {
+          "name": "dataset",
+          "type": "DatasetSpec"
+        },
+        {
+          "name": "strategy",
+          "type": "StrategySpec"
+        },
+        {
+          "name": "cost",
+          "type": "CostSpec"
+        },
+        {
+          "name": "initial_cash",
+          "type": "float"
+        },
+        {
+          "name": "context_bars",
+          "type": "int"
+        },
+        {
+          "name": "risk_free_rate",
+          "type": "float"
+        },
+        {
+          "name": "split",
+          "type": "ChronologicalSplitSpec | None"
+        },
+        {
+          "name": "context_fingerprint",
+          "type": "str | None"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "context_fingerprint",
+        "from_dict",
+        "split",
+        "to_dict"
+      ]
+    },
+    "ResultValidationError": {
+      "bases": [
+        "EthResearchError"
+      ],
+      "category": "verification",
+      "code": "result_validation_error",
+      "exit_code": 7,
+      "kind": "exception"
+    },
+    "RunConfig": {
+      "fields": [
+        {
+          "name": "config_schema_version",
+          "type": "int"
+        },
+        {
+          "name": "dataset",
+          "type": "DatasetConfig"
+        },
+        {
+          "name": "engine",
+          "type": "str"
+        },
+        {
+          "name": "strategy",
+          "type": "StrategySpec"
+        },
+        {
+          "name": "costs",
+          "type": "CostSpec"
+        },
+        {
+          "name": "split",
+          "type": "SplitConfig"
+        },
+        {
+          "name": "run",
+          "type": "RunParamsConfig"
+        },
+        {
+          "name": "output",
+          "type": "OutputConfig"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "from_mapping"
+      ]
+    },
+    "RunReceipt": {
+      "fields": [
+        {
+          "name": "receipt_schema_version",
+          "type": "int"
+        },
+        {
+          "name": "package_version",
+          "type": "str"
+        },
+        {
+          "name": "api_version",
+          "type": "str"
+        },
+        {
+          "name": "run_id",
+          "type": "str"
+        },
+        {
+          "name": "engine",
+          "type": "str"
+        },
+        {
+          "name": "strategy",
+          "type": "StrategySpec"
+        },
+        {
+          "name": "cost_scenario",
+          "type": "str"
+        },
+        {
+          "name": "initial_cash",
+          "type": "float"
+        },
+        {
+          "name": "context_bars",
+          "type": "int"
+        },
+        {
+          "name": "risk_free_rate",
+          "type": "float"
+        },
+        {
+          "name": "dataset_fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "dataset_manifest_sha256",
+          "type": "str | None"
+        },
+        {
+          "name": "result_sha256",
+          "type": "str"
+        },
+        {
+          "name": "report_sha256",
+          "type": "str | None"
+        },
+        {
+          "name": "config_sha256",
+          "type": "str | None"
+        },
+        {
+          "name": "python_implementation",
+          "type": "str"
+        },
+        {
+          "name": "python_version",
+          "type": "str"
+        },
+        {
+          "name": "numpy_version",
+          "type": "str"
+        },
+        {
+          "name": "pandas_version",
+          "type": "str"
+        },
+        {
+          "name": "pyarrow_version",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "from_dict",
+        "from_json_bytes",
+        "receipt_sha256",
+        "to_dict",
+        "to_json_bytes"
+      ]
+    },
+    "Strategy": {
+      "bases": [
+        "ABC"
+      ],
+      "kind": "class",
+      "methods": [
+        "initial_target",
+        "name",
+        "target_positions"
+      ]
+    },
+    "StrategyError": {
+      "bases": [
+        "EthResearchError"
+      ],
+      "category": "input",
+      "code": "strategy_error",
+      "exit_code": 5,
+      "kind": "exception"
+    },
+    "StrategySpec": {
+      "fields": [
+        {
+          "name": "kind",
+          "type": "str"
+        },
+        {
+          "name": "params",
+          "type": "tuple[tuple[str, int], ...]"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "create",
+        "from_dict",
+        "param_dict",
+        "params",
+        "to_dict"
+      ]
+    },
+    "ValidatedDataset": {
+      "fields": [
+        {
+          "name": "frame",
+          "type": "pd.DataFrame"
+        },
+        {
+          "name": "fingerprint",
+          "type": "str"
+        },
+        {
+          "name": "row_count",
+          "type": "int"
+        },
+        {
+          "name": "interval_seconds",
+          "type": "int"
+        },
+        {
+          "name": "start_time",
+          "type": "str"
+        },
+        {
+          "name": "end_time",
+          "type": "str"
+        },
+        {
+          "name": "report",
+          "type": "ValidationReport"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "identity"
+      ]
+    },
+    "ValidationFinding": {
+      "fields": [
+        {
+          "name": "code",
+          "type": "str"
+        },
+        {
+          "name": "severity",
+          "type": "str"
+        },
+        {
+          "name": "count",
+          "type": "int"
+        },
+        {
+          "name": "description",
+          "type": "str"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "from_dict",
+        "to_dict"
+      ]
+    },
+    "ValidationReport": {
+      "fields": [
+        {
+          "name": "schema_version",
+          "type": "int"
+        },
+        {
+          "name": "row_count",
+          "type": "int"
+        },
+        {
+          "name": "interval_seconds",
+          "type": "int"
+        },
+        {
+          "name": "error_count",
+          "type": "int"
+        },
+        {
+          "name": "warning_count",
+          "type": "int"
+        },
+        {
+          "name": "findings",
+          "type": "tuple[ValidationFinding, ...]"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "from_dict",
+        "from_json_bytes",
+        "is_valid",
+        "to_dict",
+        "to_json_bytes"
+      ]
+    },
+    "build_binary_strategy": {
+      "kind": "function",
+      "signature": "(spec: 'StrategySpec') -> 'Strategy'"
+    },
+    "build_canonical_dataset": {
+      "kind": "function",
+      "signature": "(source_path: 'str | Path', output_dir: 'str | Path', *, symbol: 'str', venue: 'str', quote_asset: 'str', interval_seconds: 'int', source_description: 'str', assume_utc: 'bool' = False, allow_extra_columns: 'bool' = False, overwrite: 'bool' = False) -> 'CanonicalDatasetArtifacts'"
+    },
+    "build_fractional_strategy": {
+      "kind": "function",
+      "signature": "(spec: 'StrategySpec') -> 'FractionalStrategy'"
+    },
+    "build_receipt": {
+      "kind": "function",
+      "signature": "(result_bytes: 'bytes', *, dataset_manifest_sha256: 'str | None' = None, report_bytes: 'bytes | None' = None, config_bytes: 'bytes | None' = None) -> 'RunReceipt'"
+    },
+    "calculate_metrics": {
+      "kind": "function",
+      "signature": "(dataset: 'DatasetHandle', strategy: 'StrategySpec | Strategy', cost: 'CostSpec', *, initial_cash: 'float' = 10000.0, context: 'DatasetHandle | None' = None, risk_free_rate: 'float' = 0.0) -> 'dict[str, MetricValue]'"
+    },
+    "chronological_split": {
+      "kind": "function",
+      "signature": "(dataset: 'DatasetHandle', spec: 'ChronologicalSplitSpec') -> 'DataSplitResult'"
+    },
+    "generate_synthetic_dataset": {
+      "kind": "function",
+      "signature": "(*, n_periods: 'int' = 500, interval: 'str' = '1D', start: 'str' = '2020-01-01', start_price: 'float' = 1000.0, drift: 'float' = 0.0002, volatility: 'float' = 0.02, seed: 'int' = 0) -> 'ValidatedDataset'"
+    },
+    "list_binary_strategies": {
+      "kind": "function",
+      "signature": "() -> 'tuple[str, ...]'"
+    },
+    "list_fractional_strategies": {
+      "kind": "function",
+      "signature": "() -> 'tuple[str, ...]'"
+    },
+    "load_canonical_dataset": {
+      "kind": "function",
+      "signature": "(manifest_path: 'str | Path') -> 'CanonicalDataset'"
+    },
+    "load_config": {
+      "kind": "function",
+      "signature": "(raw: 'bytes', *, fmt: 'str') -> 'RunConfig'"
+    },
+    "load_config_file": {
+      "kind": "function",
+      "signature": "(path: 'str | Path') -> 'RunConfig'"
+    },
+    "publish_bundle": {
+      "kind": "function",
+      "signature": "(output_dir: 'str | Path', files: 'Mapping[str, bytes]', *, overwrite: 'bool' = False, completeness_marker: 'str | None' = None) -> 'dict[str, str]'"
+    },
+    "run_binary_backtest": {
+      "kind": "function",
+      "signature": "(dataset: 'DatasetHandle', strategy: 'StrategySpec | Strategy', cost: 'CostSpec', *, initial_cash: 'float' = 10000.0, context: 'DatasetHandle | None' = None, risk_free_rate: 'float' = 0.0, split: 'ChronologicalSplitSpec | None' = None) -> 'ResearchResult'"
+    },
+    "run_fractional_backtest": {
+      "kind": "function",
+      "signature": "(dataset: 'DatasetHandle', strategy: 'StrategySpec | FractionalStrategy', cost: 'CostSpec', *, initial_cash: 'float' = 10000.0, context: 'DatasetHandle | None' = None, risk_free_rate: 'float' = 0.0, split: 'ChronologicalSplitSpec | None' = None) -> 'ResearchResult'"
+    },
+    "validate_dataset": {
+      "kind": "function",
+      "signature": "(frame: 'pd.DataFrame', spec: 'DatasetSpec', *, require_clean: 'bool' = True) -> 'ValidatedDataset'"
+    },
+    "verify_run_receipt": {
+      "kind": "function",
+      "signature": "(receipt: 'RunReceipt', *, result_bytes: 'bytes', report_bytes: 'bytes | None' = None, config_bytes: 'bytes | None' = None) -> 'None'"
+    }
+  }
+}
