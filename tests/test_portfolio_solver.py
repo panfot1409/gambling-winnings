@@ -139,6 +139,42 @@ def test_solver_is_permutation_invariant() -> None:
         assert f.cost.total == r.cost.total
 
 
+def test_solver_is_permutation_invariant_for_many_assets() -> None:
+    # With >=3 assets a naive left-fold sum over the input order is order-sensitive at the ULP level
+    # (float addition is not associative), which would perturb the pre-trade equity, gross weight,
+    # and total cost and shift the bisection bracket. The solver must canonicalize the order so any
+    # reordering is *exactly* identical. The two-asset test above cannot catch this.
+    cost = CostParameters(
+        scenario="asym",
+        fee_rate=0.0007,
+        half_spread=0.0003,
+        base_slippage=0.0005,
+        impact_coefficient=0.2,
+        impact_cap=0.05,
+    )
+    specs = [
+        (_inst("S0-USD", "B00"), 91234.5, 0.11, 133.7, 2.3e12),
+        (_inst("S1-USD", "B01"), 17654.25, 0.19, 51.9, 8.1e11),
+        (_inst("S2-USD", "B02"), 250011.0, 0.07, 940.4, 5.5e13),
+        (_inst("S3-USD", "B03"), 3210.75, 0.23, 12.4, 1.9e10),
+        (_inst("S4-USD", "B04"), 634221.5, 0.05, 7788.0, 3.3e14),
+        (_inst("S5-USD", "B05"), 44120.0, 0.17, 205.5, 7.7e11),
+    ]
+    assets = [_asset(inst, bv, w, price=p, volume=v) for inst, bv, w, p, v in specs]
+    base_cash = 314454.1817052079
+    forward = solve_shared_cash(tuple(assets), base_cash=base_cash, params=cost)
+    for perm in [(2, 0, 1, 3, 5, 4), (5, 4, 3, 2, 1, 0), (1, 3, 5, 0, 2, 4)]:
+        reordered = solve_shared_cash(
+            tuple(assets[k] for k in perm), base_cash=base_cash, params=cost
+        )
+        assert reordered.equity_post == forward.equity_post  # exact, not merely close
+        assert reordered.total_cost == forward.total_cost
+        assert reordered.residual_cash == forward.residual_cash
+        assert {t.instrument.symbol: t.base_notional for t in reordered.trades} == {
+            t.instrument.symbol: t.base_notional for t in forward.trades
+        }
+
+
 def test_all_cash_target_sells_everything() -> None:
     result = solve_shared_cash((_asset(A, 500.0, 0.0, price=100.0),), base_cash=0.0, params=_ZERO)
     assert result.equity_post == pytest.approx(500.0, abs=1e-9)

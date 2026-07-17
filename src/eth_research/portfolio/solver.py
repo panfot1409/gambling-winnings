@@ -135,6 +135,13 @@ def solve_shared_cash(
     equity is non-positive, the target weights sum above one, or a post-solve invariant is violated.
     """
     require_non_negative_finite_float(base_cash, "solve.base_cash")
+    # Canonicalize the input order up front so the pre-trade-equity, gross-weight, and total-cost
+    # sums below are evaluated in a fixed order regardless of how the caller passed the assets.
+    # Floating-point addition is not associative, so without this a reordering of the same assets
+    # would perturb those sums (and hence the bisection bracket) at the ULP level, breaking the
+    # documented permutation invariance for callers that do not pre-sort. The engine already feeds
+    # inputs in canonical instrument-id order, so end-to-end runs are unchanged.
+    inputs = tuple(sorted(inputs, key=lambda item: item.instrument.instrument_id))
     equity_pre = base_cash + sum(item.base_value for item in inputs)
     if not equity_pre > 0.0:
         raise CanonicalError("solve: pre-trade equity must be positive")
