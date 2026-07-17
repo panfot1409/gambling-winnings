@@ -74,7 +74,9 @@ def test_session_list_open_and_containment() -> None:
     assert cal.is_open(_ts("2026-07-14T15:00:00")) is True
     assert cal.is_open(_ts("2026-07-14T21:00:00")) is False  # half-open [open, close)
     assert cal.is_open(_ts("2026-07-14T22:00:00")) is False
-    assert cal.session_containing(_ts("2026-07-15T14:00:00")).session_id == "d2"
+    session = cal.session_containing(_ts("2026-07-15T14:00:00"))
+    assert session is not None
+    assert session.session_id == "d2"
 
 
 def test_calendar_rejects_overlap_unsorted_and_duplicate_id() -> None:

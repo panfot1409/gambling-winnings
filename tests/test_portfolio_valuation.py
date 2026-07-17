@@ -55,7 +55,9 @@ _LENIENT = StalenessPolicy(max_staleness_seconds=10 * _HOUR)
 def test_latest_close_is_causal() -> None:
     frame = _frame()
     # at 02:30 the last completed bar closed at 02:00 with close 102.0
-    ct, close = latest_close_as_of(frame, pd.Timestamp("2026-07-14T02:30:00", tz="UTC"))
+    latest = latest_close_as_of(frame, pd.Timestamp("2026-07-14T02:30:00", tz="UTC"))
+    assert latest is not None
+    ct, close = latest
     assert close == 102.0
     assert ct == pd.Timestamp("2026-07-14T02:00:00", tz="UTC")
     # before any bar closes -> None

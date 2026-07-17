@@ -119,5 +119,7 @@ def test_fingerprint_is_stable_and_sensitive() -> None:
     assert first == bar_frame_fingerprint(_frame(), INST)
     assert len(first) == 64
     changed = _frame()
-    changed.loc[1, "close"] = changed.loc[1, "close"] + 0.01
+    old_close = changed.loc[1, "close"]
+    assert isinstance(old_close, float)  # narrow pandas Scalar so the arithmetic types
+    changed.loc[1, "close"] = old_close + 0.01
     assert bar_frame_fingerprint(changed, INST) != first

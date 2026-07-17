@@ -112,7 +112,9 @@ def test_build_then_verify_passes() -> None:
     result, run, _metrics = _built()
     verify_portfolio_result(result, _UNIVERSE, run)  # type: ignore[arg-type]
     assert len(result.result_id) == 64
-    assert result.per_currency_contribution == (("USD", pytest.approx(0.0)),)
+    contrib = dict(result.per_currency_contribution)
+    assert set(contrib) == {"USD"}
+    assert contrib["USD"] == pytest.approx(0.0)
 
 
 def test_result_is_deterministic() -> None:

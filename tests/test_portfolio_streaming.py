@@ -12,11 +12,15 @@ from eth_research.api.serialization import CanonicalError
 from eth_research.portfolio.calendar import TradingCalendar
 from eth_research.portfolio.corporate_actions import CorporateAction, CorporateActionSet
 from eth_research.portfolio.costs import CostParameters
-from eth_research.portfolio.engine import run_portfolio_simulation
+from eth_research.portfolio.engine import (
+    EventRecord,
+    PortfolioRunResult,
+    run_portfolio_simulation,
+)
 from eth_research.portfolio.fx import FxEvidence
 from eth_research.portfolio.identity import InstrumentId
 from eth_research.portfolio.membership import MembershipInterval, MembershipSchedule
-from eth_research.portfolio.panel import build_market_panel
+from eth_research.portfolio.panel import MarketPanel, build_market_panel
 from eth_research.portfolio.protocol import PortfolioProtocol
 from eth_research.portfolio.schedule import RebalanceSchedule
 from eth_research.portfolio.streaming import (
@@ -81,7 +85,7 @@ _SCHEDULE = RebalanceSchedule(
 )
 
 
-def _panel():
+def _panel() -> MarketPanel:
     return build_market_panel(
         {
             A: _moving([100.0, 105.0, 103.0, 108.0, 110.0], [105.0, 103.0, 108.0, 110.0, 112.0]),
@@ -100,13 +104,13 @@ def _protocol() -> PortfolioProtocol:
     )
 
 
-def _batch():
+def _batch() -> PortfolioRunResult:
     return run_portfolio_simulation(
         _protocol(), _panel(), _membership([A, B]), _FX, _SCHEDULE, calendars=_CAL
     )
 
 
-def _pairs():
+def _pairs() -> list[tuple[EventRecord, PortfolioCheckpoint]]:
     return list(
         stream_portfolio_simulation(
             _protocol(), _panel(), _membership([A, B]), _FX, _SCHEDULE, calendars=_CAL
