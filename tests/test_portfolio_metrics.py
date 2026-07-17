@@ -183,6 +183,44 @@ def test_single_event_ratios_are_none_not_nan() -> None:
     json.dumps(m.canonical(), allow_nan=False)
 
 
+def test_single_event_loss_reports_no_sortino_ratio() -> None:
+    # The n=1 case the flat-series test misses: a single LOSING event. Sortino's downside deviation
+    # uses a population mean and is finite for one sample, so without the n>=2 gate it would report
+    # a one-sample "ratio" while Sharpe / volatility are correctly None. Every dispersion ratio must
+    # be None for a single-period run, regardless of its sign.
+    panel = build_market_panel({S: _moving([100.0, 100.0, 100.0], [100.0, 90.0, 90.0])})
+    schedule = RebalanceSchedule(timestamps=(_ts("2026-07-14T01:00:00"),))
+    result = run_portfolio_simulation(
+        _protocol("equal_weight"), panel, _membership([S]), _FX, schedule, calendars=_CAL
+    )
+    assert len(result.events) == 1
+    assert result.terminal_equity < result.initial_equity  # a genuine loss (negative return)
+    m = compute_portfolio_metrics(result, periods_per_year=_PPY)
+    assert m.sharpe_ratio is None
+    assert m.sortino_ratio is None
+    assert m.annualized_volatility is None
+    json.dumps(m.canonical(), allow_nan=False)
+
+
+def test_absurd_annualized_return_is_reported_as_none() -> None:
+    # Annualizing a 2-hour run on an hourly basis (ppy=8766) extrapolates the per-period growth
+    # across a full year; even a ~10% move compounds to an astronomically large — though finite and
+    # JSON-safe — figure. That meaningless extrapolation is reported as None, not as a number, while
+    # the honest total return stays a normal finite value.
+    panel = build_market_panel({S: _moving([100.0, 100.0, 100.0], [105.0, 110.0, 110.0])})
+    schedule = RebalanceSchedule(
+        timestamps=(_ts("2026-07-14T01:00:00"), _ts("2026-07-14T02:00:00"))
+    )
+    result = run_portfolio_simulation(
+        _protocol("equal_weight"), panel, _membership([S]), _FX, schedule, calendars=_CAL
+    )
+    assert result.terminal_equity > result.initial_equity  # a real, finite gain
+    m = compute_portfolio_metrics(result, periods_per_year=_PPY)
+    assert m.total_return > 0.0  # the honest total return is finite and positive
+    assert m.annualized_return is None  # but its annualization is absurd -> None
+    json.dumps(m.canonical(), allow_nan=False)
+
+
 def test_metrics_round_trip_through_strict_json() -> None:
     panel = build_market_panel({S: _moving([100.0, 110.0, 121.0], [110.0, 121.0, 133.0])})
     schedule = RebalanceSchedule(

@@ -85,6 +85,35 @@ def _finite_or_none(value: float) -> float | None:
     return value if math.isfinite(value) else None
 
 
+#: A generous sanity ceiling on the reported annualized return. Annualizing a run that spans only a
+#: tiny fraction of a year projects its per-period growth across the whole year; for a very short
+#: run with a non-trivial move the projection is a meaningless extrapolation whose magnitude, while
+#: finite and JSON-safe, is absurd (e.g. a ~3-hour +4% run annualizes to ~1e54). The cap is
+#: deliberately loose — a million-fold annual return — so it never suppresses a plausible figure,
+#: only nonsense.
+_MAX_ANNUALIZED_ABS_RETURN = 1e6
+
+
+def _annualized_return(
+    terminal: float, initial: float, periods_per_year: float, n: int
+) -> float | None:
+    """The annualized return, or ``None`` when it is undefined or an absurd extrapolation.
+
+    Reports ``None`` rather than a non-finite, overflowing, or absurd-but-finite number (see
+    :data:`_MAX_ANNUALIZED_ABS_RETURN`), so the honest "undefined -> None" contract holds for a
+    short run whose annualization overshoots any economically meaningful magnitude.
+    """
+    try:
+        # base = terminal / initial is always >= 0 (equity is non-negative, initial cash positive),
+        # so the power is real; float() pins the type (``float ** float`` is ``Any`` to mypy).
+        candidate = float((terminal / initial) ** (periods_per_year / n) - 1.0)
+    except OverflowError:
+        return None
+    if not math.isfinite(candidate) or abs(candidate) > _MAX_ANNUALIZED_ABS_RETURN:
+        return None
+    return candidate
+
+
 @dataclass(frozen=True)
 class PortfolioMetrics:
     """A reconciled, canonical-JSON-safe descriptive summary of one portfolio run."""
@@ -248,18 +277,21 @@ def compute_portfolio_metrics(
     )
     returns = bar_returns(equity, initial)
 
+    # Dispersion ratios need at least two observations. Volatility and Sharpe self-nullify at n=1
+    # (std with ddof=1 is NaN), but Sortino's downside deviation uses a population mean that is
+    # finite for a single sample, so it MUST be gated here too — otherwise a one-event loss reports
+    # a one-sample "ratio", contradicting the "None for fewer than two events" contract.
     if n >= 2:
         annualized_volatility = _finite_or_none(
             float(returns.std(ddof=1)) * math.sqrt(periods_per_year)
         )
+        sharpe = _finite_or_none(sharpe_ratio(returns, periods_per_year, risk_free_rate))
+        sortino = _finite_or_none(sortino_ratio(returns, periods_per_year, risk_free_rate))
     else:
         annualized_volatility = None
-    try:
-        # Undefined for a short run with a large per-period move (the compounding overflows);
-        # reported as None rather than an absurd or non-finite number.
-        annualized_return = _finite_or_none((terminal / initial) ** (periods_per_year / n) - 1.0)
-    except OverflowError:
-        annualized_return = None
+        sharpe = None
+        sortino = None
+    annualized_return = _annualized_return(terminal, initial, periods_per_year, n)
 
     gross_exposures: list[float] = []
     cash_weights: list[float] = []
@@ -302,8 +334,8 @@ def compute_portfolio_metrics(
         total_return=total_return(equity, initial),
         annualized_return=annualized_return,
         annualized_volatility=annualized_volatility,
-        sharpe_ratio=_finite_or_none(sharpe_ratio(returns, periods_per_year, risk_free_rate)),
-        sortino_ratio=_finite_or_none(sortino_ratio(returns, periods_per_year, risk_free_rate)),
+        sharpe_ratio=sharpe,
+        sortino_ratio=sortino,
         max_drawdown=max_drawdown(equity, initial),
         num_events=n,
         num_fills=result.all_fills,
