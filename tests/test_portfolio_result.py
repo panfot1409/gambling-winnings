@@ -213,6 +213,60 @@ def test_from_mapping_rejects_metrics_equity_disagreeing_with_the_result() -> No
         PortfolioResult.from_mapping(payload)
 
 
+def test_verify_rejects_forged_calendar_fingerprints() -> None:
+    # The result's calendar_fingerprints must equal the run's — not be an unchecked free plug.
+    # Replacing them with valid-format lies (leaving the universe fingerprint intact) must be
+    # refused.
+    from dataclasses import replace
+
+    result, run, _metrics = _built()
+    forged = replace(result, calendar_fingerprints=((_CAL_ID, "a" * 64),))
+    with pytest.raises(CanonicalError, match="calendar fingerprints do not match the run"):
+        verify_portfolio_result(forged, _UNIVERSE, run)  # type: ignore[arg-type]
+
+
+def test_build_rejects_a_run_under_a_different_calendar() -> None:
+    # A run produced under one calendar must not be certified against a universe declaring another
+    # (same calendar_id, different source -> different fingerprint -> a materially different run).
+    # The membership / schedule / base all match, so only the calendar cross-check can catch it.
+    _result, run, metrics = _built()
+    other = UniverseSpec(
+        base_currency="USD",
+        instruments=(A, B),
+        calendars={_CAL_ID: TradingCalendar(_CAL_ID, _CAL_ID, (), "other")},
+        bar_interval_seconds=3600,
+        max_staleness_seconds=90000.0,
+        membership_fingerprint=_MEMBERSHIP.fingerprint,
+        fx_fingerprint=_FX.fingerprint,
+        corporate_action_fingerprint=_CA.fingerprint,
+        rebalance_schedule_fingerprint=_SCHEDULE.fingerprint,
+    )
+    with pytest.raises(CanonicalError, match="run calendars do not match the universe"):
+        build_portfolio_result(run, metrics, other)  # type: ignore[arg-type]
+
+
+def test_verify_rejects_a_relabeled_base_currency() -> None:
+    # The equity / PnL numbers are USD; relabeling the artifact's base_currency to EUR must not
+    # verify.
+    from dataclasses import replace
+
+    result, run, _metrics = _built()
+    forged = replace(result, base_currency="EUR")
+    with pytest.raises(CanonicalError, match="base currency does not match the run"):
+        verify_portfolio_result(forged, _UNIVERSE, run)  # type: ignore[arg-type]
+
+
+def test_verify_rejects_a_forged_package_version() -> None:
+    # package_version is bound provenance, not a free label: a result stamped with a foreign version
+    # must not verify against the running package.
+    from dataclasses import replace
+
+    result, run, _metrics = _built()
+    forged = replace(result, package_version="9.9.9-forged")
+    with pytest.raises(CanonicalError, match="package version does not match"):
+        verify_portfolio_result(forged, _UNIVERSE, run)  # type: ignore[arg-type]
+
+
 def test_verify_rejects_a_substituted_universe() -> None:
     result, run, _metrics = _built()
     other = UniverseSpec(

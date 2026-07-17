@@ -191,6 +191,27 @@ def test_resume_rejects_substituted_evidence() -> None:
         )
 
 
+def test_resume_rejects_substituted_calendars() -> None:
+    # Trading calendars govern tradability, so resuming a checkpoint captured under one calendar
+    # against a different one (same id, different source -> different fingerprint) is a materially
+    # different run. The checkpoint binds a calendars fingerprint and must reject the substitution,
+    # exactly as it rejects a substituted protocol / panel / membership / schedule / FX.
+    checkpoint = _pairs()[1][1]
+    other_cal = {
+        "continuous_24_7": TradingCalendar("continuous_24_7", "continuous_24_7", (), "other")
+    }
+    with pytest.raises(CanonicalError, match="does not match the supplied evidence"):
+        resume_portfolio_simulation(
+            checkpoint,
+            _protocol(),
+            _panel(),
+            _membership([A, B]),
+            _FX,
+            _SCHEDULE,
+            calendars=other_cal,
+        )
+
+
 def test_stream_fails_closed_on_in_window_corporate_action() -> None:
     actions = CorporateActionSet(
         actions=(

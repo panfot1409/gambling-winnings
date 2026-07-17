@@ -308,6 +308,40 @@ def test_engine_runs_when_actions_fall_outside_the_run_window() -> None:
     assert result.terminal_equity == pytest.approx(1000.0)
 
 
+def test_engine_refuses_a_split_in_the_terminal_marking_bar() -> None:
+    # The last event (03:00) marks trading instruments at *that bar's close* (04:00), so an action
+    # in the tail (03:00, 04:00] lands in the very bar that prices terminal equity. It falls after
+    # last_event yet inside the terminal marking bar, and must be refused — not silently accepted
+    # and marked off a post-action close, which would misstate terminal equity.
+    actions = CorporateActionSet(actions=(_split(A, "2026-07-14T03:30:00"),))
+    with pytest.raises(CanonicalError, match="does not apply corporate actions"):
+        run_portfolio_simulation(
+            _protocol("equal_weight"),
+            _two_asset_panel(),
+            _membership([A, B]),
+            _FX,
+            _SCHEDULE,
+            calendars=_CAL,
+            corporate_actions=actions,
+        )
+
+
+def test_engine_admits_a_split_just_past_the_terminal_marking_bar() -> None:
+    # 04:30 is past the terminal marking bar's close (04:00) — no bar the run marks is affected — so
+    # the refusal window ends exactly at the terminal close, not further, and the run is admitted.
+    actions = CorporateActionSet(actions=(_split(A, "2026-07-14T04:30:00"),))
+    result = run_portfolio_simulation(
+        _protocol("equal_weight"),
+        _two_asset_panel(),
+        _membership([A, B]),
+        _FX,
+        _SCHEDULE,
+        calendars=_CAL,
+        corporate_actions=actions,
+    )
+    assert result.terminal_equity == pytest.approx(1000.0)
+
+
 def test_result_carries_evidence_fingerprints() -> None:
     panel = _two_asset_panel()
     membership = _membership([A, B])

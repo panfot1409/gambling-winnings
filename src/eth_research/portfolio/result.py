@@ -365,6 +365,12 @@ def build_portfolio_result(
         raise CanonicalError("result: run membership fingerprint does not match the universe")
     if run_result.schedule_fingerprint != universe.rebalance_schedule_fingerprint:
         raise CanonicalError("result: run schedule fingerprint does not match the universe")
+    expected_calendars = tuple(
+        (calendar_id, universe.calendars[calendar_id].fingerprint)
+        for calendar_id in sorted(universe.calendars)
+    )
+    if run_result.calendar_fingerprints != expected_calendars:
+        raise CanonicalError("result: run calendars do not match the universe")
     per_asset = _aggregate_per_asset(run_result)
     result = PortfolioResult(
         package_version=package_version,
@@ -375,10 +381,7 @@ def build_portfolio_result(
         fx_fingerprint=universe.fx_fingerprint,
         corporate_action_fingerprint=universe.corporate_action_fingerprint,
         schedule_fingerprint=run_result.schedule_fingerprint,
-        calendar_fingerprints=tuple(
-            (calendar_id, universe.calendars[calendar_id].fingerprint)
-            for calendar_id in sorted(universe.calendars)
-        ),
+        calendar_fingerprints=run_result.calendar_fingerprints,
         base_currency=run_result.base_currency,
         initial_equity=run_result.initial_equity,
         terminal_equity=run_result.terminal_equity,
@@ -422,6 +425,25 @@ def verify_portfolio_result(
         raise CanonicalError("verify: FX fingerprint does not match the universe")
     if result.corporate_action_fingerprint != universe.corporate_action_fingerprint:
         raise CanonicalError("verify: corporate-action fingerprint does not match the universe")
+    # Bind the trading calendars end to end: the run must have been produced under the universe's
+    # calendars (they govern tradability, so a different calendar is a materially different run),
+    # and the result's own calendar_fingerprints must equal the run's. Without this, a run computed
+    # under one calendar could be certified against a universe declaring another, and the stored
+    # calendar_fingerprints field would be an unchecked free plug.
+    expected_calendars = tuple(
+        (calendar_id, universe.calendars[calendar_id].fingerprint)
+        for calendar_id in sorted(universe.calendars)
+    )
+    if run_result.calendar_fingerprints != expected_calendars:
+        raise CanonicalError("verify: run calendars do not match the universe")
+    if result.calendar_fingerprints != run_result.calendar_fingerprints:
+        raise CanonicalError("verify: calendar fingerprints do not match the run")
+    # The denomination and the producing package are bound provenance, not free labels: a USD run
+    # relabeled EUR, or a result stamped with a foreign package version, must not verify.
+    if result.base_currency != run_result.base_currency:
+        raise CanonicalError("verify: base currency does not match the run")
+    if result.package_version != M4B_PACKAGE_VERSION:
+        raise CanonicalError("verify: package version does not match the running package")
     if result.run_result_fingerprint != run_result.result_fingerprint:
         raise CanonicalError("verify: run-result fingerprint does not match the run")
     if result.final_state_fingerprint != run_result.final_state_fingerprint:

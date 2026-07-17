@@ -14,8 +14,8 @@ events already completed, and a domain-separated content hash over all of it. No
 no code is deserialized. :func:`resume_portfolio_simulation` reconstructs the carried state and
 replays the remaining events, producing a full canonical result *byte-identical* to the batch run —
 and it fails closed on a tampered hash, a mutated holding, a substituted protocol / panel /
-membership / schedule / FX, or an out-of-range event index, rather than silently resuming an
-inconsistent run.
+membership / schedule / FX / calendars, or an out-of-range event index, rather than silently
+resuming an inconsistent run.
 """
 
 from __future__ import annotations
@@ -68,6 +68,7 @@ _FINGERPRINT_FIELDS = (
     "membership_fingerprint",
     "schedule_fingerprint",
     "fx_fingerprint",
+    "calendars_fingerprint",
 )
 _CHECKPOINT_FIELDS = {
     "schema_version",
@@ -87,12 +88,30 @@ _CHECKPOINT_FIELDS = {
 }
 
 
+def _calendars_fingerprint(calendars: dict[str, TradingCalendar]) -> str:
+    """A single domain-separated hash over the sorted calendar fingerprints.
+
+    Trading calendars govern tradability, so resuming a checkpoint against different calendars is a
+    materially different run. Folding them into one bound fingerprint lets the checkpoint reject
+    that substitution the same way it rejects a substituted protocol / panel / membership / schedule
+    / FX.
+    """
+    return domain_hash(
+        "portfolio_calendars",
+        [
+            {"calendar_id": calendar_id, "fingerprint": calendars[calendar_id].fingerprint}
+            for calendar_id in sorted(calendars)
+        ],
+    )
+
+
 def _evidence_fingerprints(
     protocol: PortfolioProtocol,
     panel: MarketPanel,
     membership: MembershipSchedule,
     schedule: RebalanceSchedule,
     fx: FxEvidence,
+    calendars: dict[str, TradingCalendar],
 ) -> dict[str, str]:
     return {
         "protocol_fingerprint": protocol.fingerprint,
@@ -100,6 +119,7 @@ def _evidence_fingerprints(
         "membership_fingerprint": membership.fingerprint,
         "schedule_fingerprint": schedule.fingerprint,
         "fx_fingerprint": fx.fingerprint,
+        "calendars_fingerprint": _calendars_fingerprint(calendars),
     }
 
 
@@ -246,9 +266,10 @@ class PortfolioCheckpoint:
         membership: MembershipSchedule,
         schedule: RebalanceSchedule,
         fx: FxEvidence,
+        calendars: dict[str, TradingCalendar],
     ) -> None:
         """Fail closed unless every bound fingerprint matches the supplied evidence."""
-        expected = _evidence_fingerprints(protocol, panel, membership, schedule, fx)
+        expected = _evidence_fingerprints(protocol, panel, membership, schedule, fx, calendars)
         for name, value in expected.items():
             if self.fingerprints[name] != value:
                 raise CanonicalError(
@@ -303,7 +324,7 @@ def stream_portfolio_simulation(
     """
     _validate_calendars(calendars)
     _refuse_in_window_corporate_actions(corporate_actions, panel, schedule)
-    fingerprints = _evidence_fingerprints(protocol, panel, membership, schedule, fx)
+    fingerprints = _evidence_fingerprints(protocol, panel, membership, schedule, fx, calendars)
     carry = initial_carry(protocol)
     committed: list[dict[str, Any]] = []
     all_fills = 0
@@ -350,7 +371,8 @@ def resume_portfolio_simulation(
     """Resume from ``checkpoint`` and return a full canonical result identical to the batch run.
 
     Fails closed (``CanonicalError``) on a substituted protocol / panel / membership / schedule / FX
-    (fingerprint mismatch), a next-event index past the schedule, or an in-window corporate action.
+    / calendars (fingerprint mismatch), a next-event index past the schedule, or an in-window
+    corporate action.
     A tampered checkpoint is already rejected at parse time via
     :meth:`PortfolioCheckpoint.from_mapping`.
     """
@@ -358,7 +380,7 @@ def resume_portfolio_simulation(
         raise CanonicalError("resume: expected a PortfolioCheckpoint")
     _validate_calendars(calendars)
     _refuse_in_window_corporate_actions(corporate_actions, panel, schedule)
-    checkpoint.verify_against(protocol, panel, membership, schedule, fx)
+    checkpoint.verify_against(protocol, panel, membership, schedule, fx, calendars)
 
     events = schedule.events()
     start = checkpoint.next_event_index
@@ -379,12 +401,16 @@ def resume_portfolio_simulation(
     terminal_equity = (
         events_canonical[-1]["equity"] if events_canonical else checkpoint.initial_equity
     )
-    fingerprints = _evidence_fingerprints(protocol, panel, membership, schedule, fx)
+    fingerprints = _evidence_fingerprints(protocol, panel, membership, schedule, fx, calendars)
     canonical_result = {
         "protocol_fingerprint": fingerprints["protocol_fingerprint"],
         "panel_fingerprint": fingerprints["panel_fingerprint"],
         "membership_fingerprint": fingerprints["membership_fingerprint"],
         "schedule_fingerprint": fingerprints["schedule_fingerprint"],
+        "calendar_fingerprints": [
+            {"calendar_id": calendar_id, "fingerprint": calendars[calendar_id].fingerprint}
+            for calendar_id in sorted(calendars)
+        ],
         "base_currency": checkpoint.base_currency,
         "initial_equity": checkpoint.initial_equity,
         "terminal_equity": terminal_equity,

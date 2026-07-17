@@ -130,6 +130,7 @@ class PortfolioRunResult:
     panel_fingerprint: str
     membership_fingerprint: str
     schedule_fingerprint: str
+    calendar_fingerprints: tuple[tuple[str, str], ...]
     base_currency: str
     initial_equity: float
     terminal_equity: float
@@ -144,6 +145,10 @@ class PortfolioRunResult:
             "panel_fingerprint": self.panel_fingerprint,
             "membership_fingerprint": self.membership_fingerprint,
             "schedule_fingerprint": self.schedule_fingerprint,
+            "calendar_fingerprints": [
+                {"calendar_id": calendar_id, "fingerprint": fingerprint}
+                for calendar_id, fingerprint in self.calendar_fingerprints
+            ],
             "base_currency": self.base_currency,
             "initial_equity": self.initial_equity,
             "terminal_equity": self.terminal_equity,
@@ -355,17 +360,23 @@ def _refuse_in_window_corporate_actions(
     This engine does not yet *apply* corporate actions (see the module docstring). Instead of
     silently misstating quantities and cash, it refuses to run when ``corporate_actions`` holds an
     action whose application time — a split/reverse's ``effective_time`` or a cash action's
-    ``payment_time`` — falls within ``[first_event, last_event]`` for an instrument in the panel. A
-    set whose actions all fall outside the run window (or concern instruments not in the panel) is
-    accepted, and ``None`` is a no-op.
+    ``payment_time`` — falls within the run window for an instrument in the panel. The window's
+    upper bound is the *terminal marking bar's close*, not merely ``last_event``: an instrument
+    trading at the last event is marked at that bar's close (``last_event + bar_interval``), so an
+    action in the half-open tail ``(last_event, terminal_close]`` would land in the very bar that
+    prices terminal equity while escaping a ``[first_event, last_event]`` check. The bound is
+    therefore taken per-instrument as ``_bar_close_time_at(frame, last_event)`` when a bar opens at
+    ``last_event`` (else ``last_event``). A set whose actions all fall outside the window (or
+    concern instruments not in the panel) is accepted, and ``None`` is a no-op.
     """
     if corporate_actions is None or not corporate_actions.actions:
         return
-    panel_ids = {instrument.instrument_id for instrument in panel.instruments}
+    panel_by_id = {instrument.instrument_id: instrument for instrument in panel.instruments}
     events = schedule.events()
     first, last = events[0], events[-1]
     for action in corporate_actions.actions:
-        if action.instrument.instrument_id not in panel_ids:
+        instrument = panel_by_id.get(action.instrument.instrument_id)
+        if instrument is None:
             continue
         application: pd.Timestamp | None
         if action.action_type in ("split", "reverse_split"):
@@ -374,11 +385,13 @@ def _refuse_in_window_corporate_actions(
             application = action.payment_time
         if application is None:
             continue
-        if first <= application <= last:
+        terminal_close = _bar_close_time_at(panel.frame(instrument), last)
+        upper = terminal_close if terminal_close is not None else last
+        if first <= application <= upper:
             raise CanonicalError(
                 f"engine: corporate action {action.action_id!r} "
                 f"({action.action_type}) applies at {iso_utc(application)}, within the "
-                f"run window [{iso_utc(first)}, {iso_utc(last)}]. This engine does not "
+                f"run window [{iso_utc(first)}, {iso_utc(upper)}]. This engine does not "
                 f"apply corporate actions; restrict the schedule to a window without "
                 f"pending actions on panel instruments"
             )
@@ -540,6 +553,9 @@ def run_portfolio_simulation(
         panel_fingerprint=panel.fingerprint,
         membership_fingerprint=membership.fingerprint,
         schedule_fingerprint=schedule.fingerprint,
+        calendar_fingerprints=tuple(
+            (calendar_id, calendars[calendar_id].fingerprint) for calendar_id in sorted(calendars)
+        ),
         base_currency=protocol.base_currency,
         initial_equity=initial_equity,
         terminal_equity=terminal_equity,
