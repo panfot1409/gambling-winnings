@@ -6,9 +6,15 @@ Schedules are fixed evidence, never a live clock: there is no wall-clock read, n
 cron. A schedule may be given explicitly or generated deterministically from a trading calendar's
 session opens, so a run's rebalance cadence is reproducible and bound into its result fingerprint.
 
-M4B's honest contract is that a rebalance executes only at a common timestamp where every instrument
-whose target would change is tradable; the engine enforces that at run time and fails closed on a
-missing common event rather than improvising a partial-universe rebalance.
+M4B's honest contract is that a rebalance targets only the instruments *tradable at that event*:
+the active, open instruments with a bar opening at the timestamp and a causal FX rate. The reference
+policy is applied over that tradable set, so the engine never opens or resizes a position in an
+instrument it cannot price and fill causally. A held instrument whose market is closed at the event
+(or that has left the universe) is *carried and marked*, never force-traded: multi-venue portfolios
+routinely span markets that are shut at any given timestamp, and refusing to carry them would make
+multi-venue simulation impossible. The consequence is honest rather than hidden — a step at which
+some holdings cannot be rebalanced simply leaves those holdings untouched, and the resulting weights
+reflect that.
 """
 
 from __future__ import annotations
