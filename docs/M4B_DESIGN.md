@@ -144,11 +144,18 @@ before the execution bar — never the current bar's volume), and its square-roo
 parameters are validated at construction to be jointly contractive, which is exactly what lets the
 solver prove its fixed point is unique.
 
-**Mark-to-market with staleness.** After fills, each holding is marked to its *causally available*
-close — the close of the most recent bar whose `close_time ≤ τ` — translated to the base currency at
-the FX rate known by τ. A mark is never taken from a bar that has not yet closed, and a mark older
-than the `StalenessPolicy` bound is **refused** rather than silently carried. The ledger
-(`accounting.py`) holds quantities, not values; valuation supplies the causal marks, and
+**Mark-to-market with staleness.** After fills, each holding is marked at a bar close and translated
+to the base currency at the FX rate **as of that close** (the spec's "apply close FX" step). An
+instrument trading this step is marked at its own bar's `close[t]` — both the close price and the
+close-time FX — matching the accepted single-asset convention; a held-through instrument with no bar
+opening at τ is carried at the latest completed close at or before τ (and its close-time FX), while
+the `StalenessPolicy` still permits, else the mark is **refused**. Because the mark is a report taken
+*after* all fills and consumed only at the *next* event — by which time that close is in the past —
+it is causal for consumption and never an input to τ's own decision: the fills themselves price and
+convert at the FX as of the execution time τ. A consequence worth stating plainly is that a holding's
+end-of-step (and hence the run's terminal) value reflects the close-time price and FX of its final
+bar, exactly as an end-of-period mark-to-market NAV does — not the FX as of the last rebalance. The
+ledger (`accounting.py`) holds quantities, not values; valuation supplies the causal marks, and
 `PortfolioState.apply_fill` fails closed if a transition would take cash or any holding below zero
 beyond the pinned tolerance.
 
