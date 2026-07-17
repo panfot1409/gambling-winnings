@@ -41,16 +41,22 @@ assert that mutating any not-yet-knowable input leaves every output at and befor
     strictly before τ), and any FX-conversion cost — each reported separately.
 12. **Assert cash and holding invariants.** Base cash ≥ −tolerance; every holding quantity ≥
     −tolerance; equity = cash + Σ base position values; gross exposure ≤ 1 + tolerance.
-13. **Mark assets at causally available closes.** Value each holding at its close known by τ's
-    valuation time, converted at the close FX known by then.
-14. **Carry prior marks only when permitted.** For an instrument whose market is closed at τ (per its
-    calendar), carry the last mark only if the staleness policy still permits it; refuse an
-    over-stale mark rather than invent a price.
+13. **Mark each holding at its end-of-step close.** Value an instrument trading at τ at the close of
+    the very bar it trades into (the step's own bar, whose `close_time` is the end of the step),
+    exactly as the accepted single-asset engine marks bar *t* at `close[t]`. This end-of-step close
+    is a *report*: it is computed after all fills and is consumed only at the next event (step 18),
+    so it is never an input to τ's own decision and introduces no look-ahead.
+14. **Carry prior marks only when permitted.** A held-through instrument with no bar opening at τ (a
+    market closed at τ per its calendar, or one that has left the universe) is instead valued at its
+    latest completed close at or before τ — carried, not force-liquidated — and only if the staleness
+    policy still permits it; an over-stale mark is refused rather than invented.
 15. **Apply close FX.** Translate each local mark to the base currency at the causally available
     close FX rate.
 16. **Record attribution and commitments.** Decompose the equity change additively (local price P&L,
-    FX translation P&L, dividend/action cash, minus costs, plus a residual that is exactly zero
-    within tolerance) and append the event's domain-separated trace commitment.
+    FX translation P&L, dividend/action cash, minus costs, plus a residual). The decomposition is
+    additive by construction — the residual is the honest remainder, reported and never forced. For a
+    held-through step it is zero within tolerance; on a step that trades, it captures the open→close
+    execution move on the newly traded quantity. Append the event's domain-separated trace commitment.
 17. **Emit checkpoint.** Persist the post-event state (cash, holdings, marks, FX marks, cumulative
     costs/action-cash/attribution, prior-event hash) as a strict canonical checkpoint.
 18. **Only now may close information influence the future.** The close established at τ is a valid
