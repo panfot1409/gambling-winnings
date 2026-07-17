@@ -5,13 +5,14 @@ It binds — by fingerprint — every piece of evidence the run was produced aga
 market panel, the protocol, the membership schedule, the FX evidence, the corporate-action set, the
 rebalance schedule, and each calendar), together with the base currency, the initial and terminal
 equity, the descriptive metrics, the per-asset and per-currency attribution totals, the total cost,
-the fill count, and a size-bounded per-event state commitment (tau, equity, cash, state hash). Its
+the fill count, and a size-bounded trace commitment (a hash chain over every event, the event count,
+the first/last event identity, and bounded samples). Its
 ``result_id`` is a domain-separated content hash over all of that — deterministic and reproducible,
 with no wall-clock timestamp, no absolute path, and no reference to any gate, holdout, or split.
 
 :func:`build_portfolio_result` assembles the artifact from a run and its metrics, cross-checking
 that the run's own fingerprints agree with the bound universe. :func:`verify_portfolio_result` is
-the full-graph verifier: it re-derives the per-asset totals and event commitments from the run,
+the full-graph verifier: it re-derives the per-asset totals and the trace commitment from the run,
 re-checks every identity against the universe and the run, confirms the attribution roll-ups
 telescope to the equity change, and refuses a result edited to disagree with its evidence.
 Construction and parsing are symmetric and strict — :meth:`PortfolioResult.from_mapping` rejects
@@ -33,17 +34,20 @@ from eth_research.api.serialization import (
     require_str,
 )
 from eth_research.portfolio import M4B_PACKAGE_VERSION
-from eth_research.portfolio._time import iso_utc
 from eth_research.portfolio.currencies import require_currency_code
 from eth_research.portfolio.engine import PortfolioRunResult
 from eth_research.portfolio.metrics import PortfolioMetrics
+from eth_research.portfolio.trace import (
+    TraceCommitment,
+    build_trace_commitment,
+    verify_trace_commitment,
+)
 from eth_research.portfolio.universe import UniverseSpec
 from eth_research.portfolio.validation import domain_hash, exact_keys
 
 __all__ = [
     "RESULT_SCHEMA_VERSION",
     "AssetTotal",
-    "EventCommitment",
     "PortfolioResult",
     "build_portfolio_result",
     "verify_portfolio_result",
@@ -71,7 +75,7 @@ _RESULT_FIELDS = {
     "per_currency_contribution",
     "cost_total",
     "num_fills",
-    "event_commitments",
+    "trace_commitment",
     "run_result_fingerprint",
     "final_state_fingerprint",
 }
@@ -92,24 +96,6 @@ class AssetTotal:
             "quote_currency": self.quote_currency,
             "local_price_pnl": self.local_price_pnl,
             "fx_translation_pnl": self.fx_translation_pnl,
-        }
-
-
-@dataclass(frozen=True)
-class EventCommitment:
-    """A size-bounded commitment to one event: its time, equity, cash, and state hash."""
-
-    tau: str
-    equity: float
-    cash: float
-    state_fingerprint: str
-
-    def canonical(self) -> dict[str, Any]:
-        return {
-            "tau": self.tau,
-            "equity": self.equity,
-            "cash": self.cash,
-            "state_fingerprint": self.state_fingerprint,
         }
 
 
@@ -142,18 +128,6 @@ def _per_currency(per_asset: tuple[AssetTotal, ...]) -> tuple[tuple[str, float],
     return tuple(sorted(totals.items()))
 
 
-def _event_commitments(run_result: PortfolioRunResult) -> tuple[EventCommitment, ...]:
-    return tuple(
-        EventCommitment(
-            tau=iso_utc(event.tau),
-            equity=event.equity,
-            cash=event.cash,
-            state_fingerprint=event.state_fingerprint,
-        )
-        for event in run_result.events
-    )
-
-
 @dataclass(frozen=True)
 class PortfolioResult:
     """The immutable, fingerprinted, self-identifying record of one simulation run."""
@@ -174,7 +148,7 @@ class PortfolioResult:
     per_asset_contribution: tuple[AssetTotal, ...]
     cost_total: float
     num_fills: int
-    event_commitments: tuple[EventCommitment, ...]
+    trace_commitment: TraceCommitment
     run_result_fingerprint: str
     final_state_fingerprint: str
 
@@ -209,7 +183,7 @@ class PortfolioResult:
             ],
             "cost_total": self.cost_total,
             "num_fills": self.num_fills,
-            "event_commitments": [event.canonical() for event in self.event_commitments],
+            "trace_commitment": self.trace_commitment.canonical(),
             "run_result_fingerprint": self.run_result_fingerprint,
             "final_state_fingerprint": self.final_state_fingerprint,
         }
@@ -250,11 +224,8 @@ class PortfolioResult:
                 require_list(mapping["per_asset_contribution"], f"{field}.per_asset_contribution")
             )
         )
-        events = tuple(
-            _event_from_mapping(row, f"{field}.event_commitments[{i}]")
-            for i, row in enumerate(
-                require_list(mapping["event_commitments"], f"{field}.event_commitments")
-            )
+        trace_commitment = TraceCommitment.from_mapping(
+            mapping["trace_commitment"], f"{field}.trace_commitment"
         )
         result = cls(
             package_version=require_str(mapping["package_version"], f"{field}.package_version"),
@@ -292,7 +263,7 @@ class PortfolioResult:
             per_asset_contribution=per_asset,
             cost_total=require_finite_float(mapping["cost_total"], f"{field}.cost_total"),
             num_fills=require_int(mapping["num_fills"], f"{field}.num_fills"),
-            event_commitments=events,
+            trace_commitment=trace_commitment,
             run_result_fingerprint=require_sha256_hex(
                 mapping["run_result_fingerprint"], f"{field}.run_result_fingerprint"
             ),
@@ -343,19 +314,6 @@ def _asset_from_mapping(data: Any, field: str) -> AssetTotal:
         ),
         fx_translation_pnl=require_finite_float(
             mapping["fx_translation_pnl"], f"{field}.fx_translation_pnl"
-        ),
-    )
-
-
-def _event_from_mapping(data: Any, field: str) -> EventCommitment:
-    mapping = require_mapping(data, field)
-    exact_keys(mapping, {"tau", "equity", "cash", "state_fingerprint"}, field)
-    return EventCommitment(
-        tau=require_str(mapping["tau"], f"{field}.tau"),
-        equity=require_finite_float(mapping["equity"], f"{field}.equity"),
-        cash=require_finite_float(mapping["cash"], f"{field}.cash"),
-        state_fingerprint=require_sha256_hex(
-            mapping["state_fingerprint"], f"{field}.state_fingerprint"
         ),
     )
 
@@ -420,7 +378,7 @@ def build_portfolio_result(
         per_asset_contribution=per_asset,
         cost_total=metrics.total_cost,
         num_fills=run_result.all_fills,
-        event_commitments=_event_commitments(run_result),
+        trace_commitment=build_trace_commitment(run_result),
         run_result_fingerprint=run_result.result_fingerprint,
         final_state_fingerprint=run_result.final_state_fingerprint,
     )
@@ -435,8 +393,8 @@ def verify_portfolio_result(
 ) -> None:
     """Full-graph verify: fail closed unless the result agrees with the universe and the run.
 
-    Re-derives the per-asset totals and event commitments from ``run_result``, re-checks every bound
-    identity against ``universe`` and ``run_result``, and confirms the attribution roll-ups
+    Re-derives the per-asset totals and the trace commitment from ``run_result``, re-checks every
+    bound identity against ``universe`` and ``run_result``, and confirms the attribution roll-ups
     reconcile. Raises :class:`CanonicalError` on the first disagreement.
     """
     if result.universe_fingerprint != universe.fingerprint:
@@ -459,6 +417,5 @@ def verify_portfolio_result(
         raise CanonicalError("verify: final-state fingerprint does not match the run")
     if result.per_asset_contribution != _aggregate_per_asset(run_result):
         raise CanonicalError("verify: per-asset attribution does not match the run")
-    if result.event_commitments != _event_commitments(run_result):
-        raise CanonicalError("verify: event commitments do not match the run")
+    verify_trace_commitment(result.trace_commitment, run_result)
     _check_internal_consistency(result, "verify")

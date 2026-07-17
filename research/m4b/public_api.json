@@ -526,8 +526,8 @@
           "type": "int"
         },
         {
-          "name": "event_commitments",
-          "type": "tuple[EventCommitment, ...]"
+          "name": "trace_commitment",
+          "type": "TraceCommitment"
         },
         {
           "name": "run_result_fingerprint",
@@ -570,6 +570,41 @@
         "residual_cash_weight",
         "weight_for",
         "weight_tolerance"
+      ]
+    },
+    "TraceCommitment": {
+      "fields": [
+        {
+          "name": "schema_version",
+          "type": "int"
+        },
+        {
+          "name": "event_count",
+          "type": "int"
+        },
+        {
+          "name": "chain_hash",
+          "type": "str"
+        },
+        {
+          "name": "first",
+          "type": "EventDigest | None"
+        },
+        {
+          "name": "last",
+          "type": "EventDigest | None"
+        },
+        {
+          "name": "samples",
+          "type": "tuple[EventDigest, ...]"
+        }
+      ],
+      "frozen": true,
+      "kind": "dataclass",
+      "methods": [
+        "canonical",
+        "commitment_id",
+        "from_mapping"
       ]
     },
     "TradingCalendar": {
@@ -661,6 +696,10 @@
       "kind": "function",
       "signature": "() -> 'ReferenceUniverse'"
     },
+    "build_trace_commitment": {
+      "kind": "function",
+      "signature": "(run_result: 'PortfolioRunResult', *, max_samples: 'int' = 64) -> 'TraceCommitment'"
+    },
     "compute_portfolio_metrics": {
       "kind": "function",
       "signature": "(result: 'PortfolioRunResult', *, periods_per_year: 'float', risk_free_rate: 'float' = 0.0) -> 'PortfolioMetrics'"
@@ -688,6 +727,10 @@
     "verify_portfolio_result": {
       "kind": "function",
       "signature": "(result: 'PortfolioResult', universe: 'UniverseSpec', run_result: 'PortfolioRunResult') -> 'None'"
+    },
+    "verify_trace_commitment": {
+      "kind": "function",
+      "signature": "(commitment: 'TraceCommitment', run_result: 'PortfolioRunResult') -> 'None'"
     }
   },
   "snapshot_schema_version": 1,

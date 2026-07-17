@@ -46,6 +46,11 @@ from eth_research.portfolio.streaming import (
     stream_portfolio_simulation,
 )
 from eth_research.portfolio.targets import PortfolioTarget
+from eth_research.portfolio.trace import (
+    TraceCommitment,
+    build_trace_commitment,
+    verify_trace_commitment,
+)
 from eth_research.portfolio.universe import UniverseSpec
 
 __all__ = [
@@ -81,11 +86,13 @@ _M4B_SYMBOLS: dict[str, object] = {
     "PortfolioProtocol": PortfolioProtocol,
     "PortfolioResult": PortfolioResult,
     "PortfolioTarget": PortfolioTarget,
+    "TraceCommitment": TraceCommitment,
     "TradingCalendar": TradingCalendar,
     "UniverseSpec": UniverseSpec,
     "build_market_panel": build_market_panel,
     "build_portfolio_result": build_portfolio_result,
     "build_reference_universe": build_reference_universe,
+    "build_trace_commitment": build_trace_commitment,
     "compute_portfolio_metrics": compute_portfolio_metrics,
     "reference_protocol": reference_protocol,
     "resume_portfolio_simulation": resume_portfolio_simulation,
@@ -93,6 +100,7 @@ _M4B_SYMBOLS: dict[str, object] = {
     "stream_portfolio_simulation": stream_portfolio_simulation,
     "validate_bar_frame": validate_bar_frame,
     "verify_portfolio_result": verify_portfolio_result,
+    "verify_trace_commitment": verify_trace_commitment,
 }
 
 
