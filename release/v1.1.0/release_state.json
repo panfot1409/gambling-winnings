@@ -1,0 +1,24 @@
+{
+  "distribution_built": true,
+  "hardened": true,
+  "publication_gates": [
+    {
+      "cleared": false,
+      "detail": "no LICENSE file; choosing one is an external human decision (docs/V1_LICENSE_DECISION.md)",
+      "id": "license"
+    },
+    {
+      "cleared": false,
+      "detail": "a PyPI pending publisher must be configured by a human before any OIDC upload",
+      "id": "pypi_trusted_publisher"
+    },
+    {
+      "cleared": false,
+      "detail": "tests/test_workflow_security.py forbids id-token in any workflow; a live Trusted-Publishing workflow needs a reviewed relaxation (docs/V1_PUBLICATION_PIPELINE.md)",
+      "id": "governance_no_id_token_invariant"
+    }
+  ],
+  "published": false,
+  "schema_version": 1,
+  "version": "1.1.0"
+}
