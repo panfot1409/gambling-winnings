@@ -1,0 +1,134 @@
+name: M3F Replay
+
+# Fresh-clone reproducibility for the Milestone 3F verification & recovery layer.
+# The whole-graph freeze verifier re-derives every committed M3F artifact and proves
+# it rebuilds byte-exact; the disposable-clone recovery drill reconstructs the private
+# capsule and re-derives the honest governance state; and the genuinely independent
+# stdlib verifier runs with NO package install to prove it shares no common-mode code.
+# Because M3F evaluates nothing, there is no tolerance. No networking, no engine call,
+# no tracked-file mutation. The three sealed access ledgers stay byte-empty throughout.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "research/**"
+      - "src/eth_research/**"
+      - "tools/m3f_independent_verify.py"
+      - "tests/test_m3f_*.py"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/m3f-replay.yml"
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GATE_LEDGER: research/m3a/development_gate_access.jsonl
+  HOLDOUT_LEDGER: research/m2b/test_evaluations.jsonl
+  PROSPECTIVE_LEDGER: research/m3d/prospective_evaluations.jsonl
+  EMPTY_SHA: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+jobs:
+  authoritative-recovery:
+    # Reproduce under the exact authoritative runtime (CPython 3.12.3).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0 # full history: the catalog git-provenance recompute needs the accepted-main + source-freeze commits
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Install the authoritative CPython 3.12.3
+        run: uv python install 3.12.3
+      - name: Verify uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: M3F isolation + verifier tests must run (cannot silently skip)
+        run: |
+          uv run --no-sync --python 3.12.3 python -m pytest -q -p no:cacheprovider \
+            tests/test_m3f_validation.py tests/test_m3f_catalog.py \
+            tests/test_m3f_honest_state.py tests/test_m3f_inventories.py \
+            tests/test_m3f_audit.py tests/test_m3f_bug_log.py \
+            tests/test_m3f_independence.py tests/test_m3f_oracle.py \
+            tests/test_m3f_recovery.py tests/test_m3f_register.py
+      - name: All three sealed ledgers are byte-empty before
+        run: |
+          set -euo pipefail
+          for L in "$GATE_LEDGER" "$HOLDOUT_LEDGER" "$PROSPECTIVE_LEDGER"; do
+            test "$(sha256sum "$L" | cut -d' ' -f1)" = "$EMPTY_SHA"
+          done
+      - name: Whole-graph freeze verifier (every committed M3F artifact reproduces)
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.m3f.audit --repo-root . --deep
+      - name: Disposable-clone recovery drill (reconstruct + re-derive honest state)
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.m3f.recovery --repo-root . --deep
+      - name: Read-only freeze replay status
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.m3f.replay --repo-root . --check
+      - name: Semantic oracles over the accepted stack
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.m3f.oracle --repo-root . --check
+      - name: Replay mutated no tracked file
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
+      - name: All three sealed ledgers are byte-empty after
+        run: |
+          set -euo pipefail
+          for L in "$GATE_LEDGER" "$HOLDOUT_LEDGER" "$PROSPECTIVE_LEDGER"; do
+            test "$(sha256sum "$L" | cut -d' ' -f1)" = "$EMPTY_SHA"
+          done
+
+  compat-recovery:
+    # The rebuild is interpreter-independent: every committed M3F artifact reproduces
+    # byte-for-byte on each supported interpreter.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0 # full history: the catalog git-provenance recompute needs the accepted-main + source-freeze commits
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Verify uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
+      - name: Whole-graph freeze verifier
+        run: uv run --no-sync python -m eth_research.m3f.audit --repo-root . --deep
+      - name: Disposable-clone recovery drill
+        run: uv run --no-sync python -m eth_research.m3f.recovery --repo-root . --deep
+      - name: Replay mutated no tracked file
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
+
+  independent-verifier:
+    # The genuinely independent verifier runs with NO package install and NO
+    # third-party dependency — only the Python standard library. It must reach the
+    # same governance verdict through a separate code path, and eth_research must not
+    # even be importable in this job.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: eth_research must not be importable here (proves independence)
+        run: |
+          set -euo pipefail
+          if python3 -c "import eth_research" 2>/dev/null; then
+            echo "eth_research is importable — the independent job is not isolated" >&2
+            exit 1
+          fi
+          echo "confirmed: eth_research is not installed in this job"
+      - name: Independent stdlib verifier (standard library only)
+        run: python3 tools/m3f_independent_verify.py --repo-root . --json

@@ -1,0 +1,165 @@
+{
+  "direct_dependencies": [
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "pyarrow>=15"
+  ],
+  "direct_optional_dependency_groups": [
+    "dev"
+  ],
+  "locked_package_count": 21,
+  "locked_packages": [
+    {
+      "has_sdist_hash": true,
+      "name": "ast-serialize",
+      "source_kind": "registry",
+      "version": "0.6.0",
+      "wheel_entries": 34
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "colorama",
+      "source_kind": "registry",
+      "version": "0.4.6",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": false,
+      "name": "eth-research",
+      "source_kind": "editable",
+      "version": "0.9.0",
+      "wheel_entries": 0
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "iniconfig",
+      "source_kind": "registry",
+      "version": "2.3.0",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "librt",
+      "source_kind": "registry",
+      "version": "0.13.0",
+      "wheel_entries": 55
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "mypy",
+      "source_kind": "registry",
+      "version": "2.2.0",
+      "wheel_entries": 31
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "mypy-extensions",
+      "source_kind": "registry",
+      "version": "1.1.0",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "numpy",
+      "source_kind": "registry",
+      "version": "2.5.1",
+      "wheel_entries": 44
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "packaging",
+      "source_kind": "registry",
+      "version": "26.2",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "pandas",
+      "source_kind": "registry",
+      "version": "3.0.3",
+      "wheel_entries": 40
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "pandas-stubs",
+      "source_kind": "registry",
+      "version": "3.0.3.260530",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "pathspec",
+      "source_kind": "registry",
+      "version": "1.1.1",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "pluggy",
+      "source_kind": "registry",
+      "version": "1.6.0",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "pyarrow",
+      "source_kind": "registry",
+      "version": "25.0.0",
+      "wheel_entries": 29
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "pygments",
+      "source_kind": "registry",
+      "version": "2.20.0",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "pytest",
+      "source_kind": "registry",
+      "version": "9.1.1",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "python-dateutil",
+      "source_kind": "registry",
+      "version": "2.9.0.post0",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "ruff",
+      "source_kind": "registry",
+      "version": "0.15.21",
+      "wheel_entries": 18
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "six",
+      "source_kind": "registry",
+      "version": "1.17.0",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "typing-extensions",
+      "source_kind": "registry",
+      "version": "4.16.0",
+      "wheel_entries": 2
+    },
+    {
+      "has_sdist_hash": true,
+      "name": "tzdata",
+      "source_kind": "registry",
+      "version": "2026.3",
+      "wheel_entries": 2
+    }
+  ],
+  "lockfile_sha256": "599faa00e4a2c7fcad89a5d6c94f158a83177cb55042028cee5a10064bbe0d50",
+  "provenance_note": "lock reproducibility is not binary provenance or signature verification; any license metadata is package-declared, never a legal-approval inference",
+  "pyproject_sha256": "5fdf4d4cb5f43d24bf5dfef8d5b698547ef5c87c520773bcc629883053764600",
+  "python_requirement": ">=3.12",
+  "schema_version": 1
+}

@@ -509,13 +509,18 @@ src/eth_research/
     m3a-replay.yml  # M3A results reproduce byte-for-byte; both access ledgers byte-empty
     m3b-replay.yml  # M3B dual-state reproduce byte-for-byte; both ledgers byte-empty
     m3d-replay.yml  # M3D prospective cohort rebuilds byte-exact; three ledgers byte-empty
+    m3e-replay.yml  # M3E review-only update facility reproduces byte-exact; no proposal
+    m3f-replay.yml  # M3F freeze verifier + recovery drill + independent stdlib verifier
     # (write-capable acquisition workflows are retired: all data is frozen)
 .github/scripts/
     verify_m3a_registry.py # CI gate: the registry terminal event binds the published bytes
+tools/
+    m3f_independent_verify.py # standard-library-only freeze verifier (imports no eth_research)
 research/m2b/       # committable provenance records, frozen contracts, raw bytes, ledger
 research/m3a/       # M3A partition, walk-forward protocol, registry, results, report, gate ledger
 research/m3b/       # M3B fractional protocol, registry, results, report, run-001 manifest
 research/m3d/       # M3D research-history governance + frozen prospective ETH-USD cohort (immature)
+research/m3f/       # M3F freeze catalog, honest state, inventories, recovery capsule manifest + drill
 tests/              # unit, hand-calculated ledger, and look-ahead regression tests
 examples/           # runnable end-to-end example
 docs/PLAN.md        # milestone plan
@@ -530,6 +535,14 @@ docs/M3D_PLAN.md    # Milestone 3D prospective-evidence governance plan (data-on
 docs/M3D_ACQUISITION.md # M3D prospective cohort acquisition record
 docs/M3D_PROSPECTIVE_PROTOCOL.md # M3D cohort protocol + 365-observation maturity rule
 docs/M3D_THREAT_MODEL.md # M3D threats to "evaluated nothing" + controls
+docs/M3F_PLAN.md    # Milestone 3F independent verification + recovery + supply-chain plan
+docs/M3F_THREAT_MODEL.md # M3F assets, adversary, controls, and residual risks
+docs/M3F_FREEZE_CATALOG_SPEC.md # M3F freeze catalog schema + verification
+docs/M3F_RECOVERY_RUNBOOK.md # M3F recovery capsule reconstruction procedure
+docs/M3F_SUPPLY_CHAIN_AUDIT.md # M3F workflow + dependency supply-chain closure
+docs/M3F_BUG_LOG.md # M3F reproduced defects (failing-test-first) + fixes
+docs/M3F_FINDINGS.md # M3F three-auditor red-team findings + fixes + honest negatives
+docs/M3F_TERMINAL_AUDIT.md # M3F terminal verified-state audit + verdict
 docs/REMEDIATION.md # Milestone 1 correctness remediation record
 ```
 
@@ -555,6 +568,8 @@ See [docs/PLAN.md](docs/PLAN.md) for the milestone plan,
 [docs/M3A_PLAN.md](docs/M3A_PLAN.md) for the development research laboratory,
 [docs/M3B_PLAN.md](docs/M3B_PLAN.md) for the fractional execution-risk
 laboratory, [docs/M3D_PLAN.md](docs/M3D_PLAN.md) for the data-only
-prospective-evidence governance facility, and
+prospective-evidence governance facility,
+[docs/M3F_PLAN.md](docs/M3F_PLAN.md) for the independent verification, hermetic
+recovery, and supply-chain closure layer, and
 [docs/REMEDIATION.md](docs/REMEDIATION.md) for the Milestone 1 correctness
 remediation record.
