@@ -55,7 +55,7 @@ from eth_research.portfolio.targets import PortfolioTarget
 from eth_research.portfolio.validation import domain_hash
 from eth_research.portfolio.valuation import mark_instrument
 
-__all__ = ["EventRecord", "PortfolioRunResult", "run_portfolio_simulation"]
+__all__ = ["EventRecord", "HoldingValue", "PortfolioRunResult", "run_portfolio_simulation"]
 
 # When an instrument has no completed prior bar at ``tau``, its lagged (participation) dollar volume
 # is unknown. A large finite proxy makes the participation rate ~0, so the liquidity-impact cost
@@ -72,8 +72,26 @@ class _ExecRef:
 
 
 @dataclass(frozen=True)
+class HoldingValue:
+    """One instrument's post-event holding: local quantity and end-of-step base value."""
+
+    instrument_id: str
+    quote_currency: str
+    quantity: float
+    base_value: float
+
+    def canonical(self) -> dict[str, Any]:
+        return {
+            "instrument_id": self.instrument_id,
+            "quote_currency": self.quote_currency,
+            "quantity": self.quantity,
+            "base_value": self.base_value,
+        }
+
+
+@dataclass(frozen=True)
 class EventRecord:
-    """The recorded outcome of one rebalance event: equity, cash, fills, and attribution."""
+    """The recorded outcome of one rebalance event: equity, cash, holdings, and attribution."""
 
     tau: pd.Timestamp
     equity: float
@@ -82,10 +100,13 @@ class EventRecord:
     total_cost: float
     fills: tuple[Fill, ...]
     attribution: StepAttribution
+    holdings: tuple[HoldingValue, ...]
+    max_staleness_seconds: float
+    stale_mark_count: int
     state_fingerprint: str
 
     def canonical(self) -> dict[str, Any]:
-        """The canonical, JSON-safe event mapping (fills reduced to a count)."""
+        """The canonical, JSON-safe event mapping (fills reduced to a count; holdings inlined)."""
         return {
             "tau": iso_utc(self.tau),
             "equity": self.equity,
@@ -94,6 +115,9 @@ class EventRecord:
             "total_cost": self.total_cost,
             "fills_count": len(self.fills),
             "attribution": self.attribution.canonical(),
+            "holdings": [holding.canonical() for holding in self.holdings],
+            "max_staleness_seconds": self.max_staleness_seconds,
+            "stale_mark_count": self.stale_mark_count,
             "state_fingerprint": self.state_fingerprint,
         }
 
@@ -268,8 +292,8 @@ def _mark_holdings(
     protocol: PortfolioProtocol,
     instruments: dict[str, InstrumentId],
     tau: pd.Timestamp,
-) -> tuple[dict[str, float], dict[str, float], dict[str, float]]:
-    """Mark every instrument in ``instruments``: base value per unit, local close, FX.
+) -> tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float]]:
+    """Mark every instrument in ``instruments``: base value per unit, local close, FX, staleness.
 
     An instrument trading this step (a bar opens at ``tau``) is marked at *that bar's close* — the
     end-of-step valuation the accepted engine uses for bar ``t`` — so a single-asset run reproduces
@@ -280,6 +304,7 @@ def _mark_holdings(
     marks: dict[str, float] = {}
     local_close: dict[str, float] = {}
     fx_rates: dict[str, float] = {}
+    staleness: dict[str, float] = {}
     for instrument_id, instrument in instruments.items():
         frame = panel.frame(instrument)
         bar_close_time = _bar_close_time_at(frame, tau)
@@ -295,7 +320,8 @@ def _mark_holdings(
         marks[instrument_id] = mark.base_value_per_unit
         local_close[instrument_id] = mark.local_close
         fx_rates[instrument_id] = mark.fx_rate
-    return marks, local_close, fx_rates
+        staleness[instrument_id] = mark.staleness_seconds
+    return marks, local_close, fx_rates, staleness
 
 
 def _refuse_in_window_corporate_actions(
@@ -398,8 +424,12 @@ def run_portfolio_simulation(
         to_mark = dict(held_pre_instruments)
         for position in state.positions:
             to_mark[position.instrument.instrument_id] = position.instrument
-        marks, local_close, fx_rates = _mark_holdings(panel, fx, protocol, to_mark, tau)
+        marks, local_close, fx_rates, staleness = _mark_holdings(panel, fx, protocol, to_mark, tau)
         equity = state.equity(marks)
+        currency_of = {
+            instrument_id: instrument.quote_currency
+            for instrument_id, instrument in to_mark.items()
+        }
 
         attribution = attribute_step(
             equity_before=prev_equity,
@@ -412,7 +442,21 @@ def run_portfolio_simulation(
             fx_before=prev_fx,
             fx_after=fx_rates,
             total_cost=total_cost,
+            currency_of=currency_of,
         )
+
+        holdings = tuple(
+            HoldingValue(
+                instrument_id=position.instrument.instrument_id,
+                quote_currency=position.instrument.quote_currency,
+                quantity=position.quantity,
+                base_value=position.quantity * marks[position.instrument.instrument_id],
+            )
+            for position in state.positions
+        )
+        held_staleness = [staleness[p.instrument.instrument_id] for p in state.positions]
+        max_staleness = max(held_staleness) if held_staleness else 0.0
+        stale_count = sum(1 for value in held_staleness if value > 0.0)
 
         events.append(
             EventRecord(
@@ -423,6 +467,9 @@ def run_portfolio_simulation(
                 total_cost=total_cost,
                 fills=tuple(event_fills),
                 attribution=attribution,
+                holdings=holdings,
+                max_staleness_seconds=max_staleness,
+                stale_mark_count=stale_count,
                 state_fingerprint=state.fingerprint,
             )
         )
