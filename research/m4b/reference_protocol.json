@@ -1,0 +1,33 @@
+{
+  "package_version": "1.1.0",
+  "protocol": {
+    "base_currency": "USD",
+    "cost_scenario": {
+      "base_slippage": 0.0005,
+      "fee_rate": 0.001,
+      "fx_conversion_rate": 0.0,
+      "half_spread": 0.0,
+      "impact_cap": 0.0,
+      "impact_coefficient": 0.0,
+      "scenario": "compatibility_v1"
+    },
+    "declared_weights": [],
+    "initial_cash": 120000.0,
+    "policy": "equal_weight",
+    "schema_version": 1,
+    "staleness": {
+      "max_staleness_seconds": 259200.0
+    },
+    "tolerances": {
+      "cash": 1e-06,
+      "max_iterations": 100,
+      "no_trade": 1e-09,
+      "notional": 1e-06,
+      "quantity": 1e-12,
+      "solver": 1e-12,
+      "weight": 1e-09
+    }
+  },
+  "protocol_fingerprint": "82fa4c956664a4b11d8bba4c861724fb81325fe02c23a8a29350d0d964c507c6",
+  "registration_schema_version": 1
+}

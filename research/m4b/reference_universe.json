@@ -1,0 +1,71 @@
+{
+  "calendar_fingerprints": [
+    {
+      "calendar_id": "continuous_24_7",
+      "fingerprint": "8a4e8d0535443c46bed2edd1a667604149c861ed725ca3899cdcfea42c898477"
+    },
+    {
+      "calendar_id": "xsyn_equity",
+      "fingerprint": "3ce719f663c800bba1888d1e855acc226f8c921fd2b2f9eadcb085a6f6a549ca"
+    }
+  ],
+  "corporate_action_fingerprint": "e5e5d8f1fe66b7677fe69d2b90468c21204a6dad50904676710d50bcf0acba27",
+  "fx_fingerprint": "56cc4921e76c6a22dac7e4fa4c09389c03b952d18392e56cc2ed26afa9fa142d",
+  "membership_fingerprint": "03a41a3285eb070eceb8cca904bf5b6c8c6931a484aabd54e453661f7d5e4cde",
+  "package_version": "1.1.0",
+  "panel_fingerprint": "37ab7f50fb3f6d2c57cea87b1171dcaf3039b4bbe641cdf97b39c3354081fad6",
+  "rebalance_schedule_fingerprint": "a7f633898ffbfb82cf08f6773bf78c1573a343446337f88e98ad5680419555dc",
+  "registration_schema_version": 1,
+  "universe_fingerprint": "4962e3c11884e4135f77d6eae138abf1efe7211a54090b0e2f11717a11bc7b48",
+  "universe_schema_version": 1,
+  "universe_spec": {
+    "bar_interval_seconds": 3600,
+    "base_currency": "USD",
+    "calendars": {
+      "continuous_24_7": "8a4e8d0535443c46bed2edd1a667604149c861ed725ca3899cdcfea42c898477",
+      "xsyn_equity": "3ce719f663c800bba1888d1e855acc226f8c921fd2b2f9eadcb085a6f6a549ca"
+    },
+    "corporate_action_fingerprint": "e5e5d8f1fe66b7677fe69d2b90468c21204a6dad50904676710d50bcf0acba27",
+    "fx_fingerprint": "56cc4921e76c6a22dac7e4fa4c09389c03b952d18392e56cc2ed26afa9fa142d",
+    "instruments": [
+      {
+        "asset_class": "crypto_spot",
+        "base_asset": "ETH",
+        "calendar_id": "continuous_24_7",
+        "instrument_type": "spot",
+        "price_unit": "USD",
+        "quantity_unit": "ETH",
+        "quote_currency": "USD",
+        "symbol": "ETH-USD",
+        "venue": "synthetic"
+      },
+      {
+        "asset_class": "cash_equity",
+        "base_asset": "BLEU",
+        "calendar_id": "xsyn_equity",
+        "instrument_type": "spot",
+        "price_unit": "EUR",
+        "quantity_unit": "BLEU",
+        "quote_currency": "EUR",
+        "symbol": "BLEU-EUR",
+        "venue": "synthetic"
+      },
+      {
+        "asset_class": "cash_equity",
+        "base_asset": "ACME",
+        "calendar_id": "xsyn_equity",
+        "instrument_type": "spot",
+        "price_unit": "USD",
+        "quantity_unit": "ACME",
+        "quote_currency": "USD",
+        "symbol": "ACME-USD",
+        "venue": "synthetic"
+      }
+    ],
+    "max_staleness_seconds": 259200.0,
+    "membership_fingerprint": "03a41a3285eb070eceb8cca904bf5b6c8c6931a484aabd54e453661f7d5e4cde",
+    "provenance_algorithm_id": "eth_research.portfolio.domain-sha256.v1",
+    "rebalance_schedule_fingerprint": "a7f633898ffbfb82cf08f6773bf78c1573a343446337f88e98ad5680419555dc",
+    "schema_version": 1
+  }
+}

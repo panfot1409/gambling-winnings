@@ -55,6 +55,10 @@ jobs:
         run: uv run --no-sync --python 3.12.3 python -m eth_research.portfolio.replay --check
       - name: The v1.1 public API snapshot is current and additive over v1.0
         run: uv run --no-sync --python 3.12.3 python -m eth_research.portfolio.public_api --check
+      - name: The v1.1 registration artifacts are current (reference identity, manifest, freeze)
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.portfolio.registration --check
+      - name: The offline CLI reference is current (pinned to CPython 3.12)
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.portfolio.cli_reference --check
       - name: All three sealed ledgers are byte-empty throughout
         run: |
           for ledger in "$GATE_LEDGER" "$HOLDOUT_LEDGER" "$PROSPECTIVE_LEDGER"; do

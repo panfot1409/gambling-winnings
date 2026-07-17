@@ -1,0 +1,78 @@
+usage: eth-research-portfolio [-h] {universe,portfolio} ...
+
+Offline M4B portfolio tools: inspect/validate a universe, run/verify results.
+
+positional arguments:
+  {universe,portfolio}
+    universe            inspect or validate a research universe
+    portfolio           run or verify a portfolio simulation
+
+options:
+  -h, --help            show this help message and exit
+
+
+usage: eth-research-portfolio universe [-h] {inspect,validate} ...
+
+positional arguments:
+  {inspect,validate}
+    inspect           print the synthetic reference universe identity
+    validate          re-validate a canonical UniverseSpec
+
+options:
+  -h, --help          show this help message and exit
+
+
+usage: eth-research-portfolio universe inspect [-h] [--full] [--json]
+
+options:
+  -h, --help  show this help message and exit
+  --full      print the full canonical UniverseSpec
+  --json      emit deterministic canonical JSON
+
+
+usage: eth-research-portfolio universe validate [-h] (--in PATH | --demo)
+                                                [--json]
+
+options:
+  -h, --help  show this help message and exit
+  --in PATH   a canonical UniverseSpec JSON file (binds only the reference
+              calendars offline)
+  --demo      validate the built-in synthetic reference universe
+  --json      emit deterministic canonical JSON
+
+
+usage: eth-research-portfolio portfolio [-h] {demo,run,verify} ...
+
+positional arguments:
+  {demo,run,verify}
+    demo             run the synthetic reference universe end to end
+    run              alias of 'demo': run the synthetic reference universe end
+                     to end
+    verify           verify a canonical PortfolioResult JSON file
+
+options:
+  -h, --help         show this help message and exit
+
+
+usage: eth-research-portfolio portfolio demo [-h] [--full] [--json]
+
+options:
+  -h, --help  show this help message and exit
+  --full      print the full canonical result
+  --json      emit deterministic canonical JSON
+
+
+usage: eth-research-portfolio portfolio run [-h] [--full] [--json]
+
+options:
+  -h, --help  show this help message and exit
+  --full      print the full canonical result
+  --json      emit deterministic canonical JSON
+
+
+usage: eth-research-portfolio portfolio verify [-h] --result RESULT [--json]
+
+options:
+  -h, --help       show this help message and exit
+  --result RESULT  path to a canonical PortfolioResult JSON file
+  --json           emit deterministic canonical JSON

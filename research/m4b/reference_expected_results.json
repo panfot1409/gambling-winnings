@@ -1,0 +1,17 @@
+{
+  "base_currency": "USD",
+  "cost_total": 300.30842426973504,
+  "event_count": 3,
+  "final_state_fingerprint": "889a2fa3af6efa3cc200a4699932a5aa22cf30a3ce3738b4075aa6312902cd4e",
+  "initial_equity": 120000.0,
+  "num_fills": 5,
+  "package_version": "1.1.0",
+  "protocol_fingerprint": "82fa4c956664a4b11d8bba4c861724fb81325fe02c23a8a29350d0d964c507c6",
+  "registration_schema_version": 1,
+  "result_id": "1ae39105c44dee034771c5d5ddbddfb0bc273131350ff5c45821021d88c96f4b",
+  "result_schema_version": 1,
+  "run_result_fingerprint": "638c5aa3a9d552a9e7de5de6617c745b3d36c994a4cd1146cd714db16b4179eb",
+  "terminal_equity": 125276.83556294517,
+  "trace_commitment_id": "8451093f91963e4a1ca83c320ab717307ae6778c42507826fc5b6f10ab2cab0d",
+  "universe_fingerprint": "4962e3c11884e4135f77d6eae138abf1efe7211a54090b0e2f11717a11bc7b48"
+}
