@@ -18,14 +18,16 @@ strictly in the past), so it is never a decision input and introduces no look-ah
 instrument with no bar opening at ``tau`` (a closed market, or one that has left the universe) is
 instead marked at its latest completed close at or before ``tau`` — carried, not force-liquidated.
 
-**Stated limitation — corporate actions are not applied here.** Timeline steps 3 and 4 (split and
-reverse-split quantity adjustments, and dividend / delisting cash payments) are deliberately *out of
-scope* for this engine. The corporate-action models exist (:mod:`eth_research.portfolio`'s
-``corporate_actions``) but this engine neither adjusts held quantities for splits nor credits
-dividend/delisting cash; a run over instruments with pending actions would misstate quantities and
-cash. Applying them causally is deferred to a later milestone. Relatedly, an instrument that is held
-but has left the active membership universe (and has no bar opening at ``tau``) is *carried and
-marked*, not force-liquidated, at that event.
+**Stated limitation — corporate actions are refused, not mis-stated.** Timeline steps 3 and 4
+(split / reverse-split quantity adjustments, and dividend / delisting cash payments) are
+deliberately deferred: applying them causally — in particular attributing a split's value change
+exactly, when raw prices halve while quantity doubles — is a later milestone. Rather than
+*silently* misstate quantities and cash, this engine **fails closed**: pass the run's
+:class:`CorporateActionSet` and, if any action's application time (a split/reverse's
+``effective_time``, or a cash action's ``payment_time``) falls within the schedule's event window
+for a panel instrument, the run is refused with a clear error. A run whose window carries no such
+action proceeds normally. Relatedly, an instrument held but gone from the active membership
+universe (no bar opening at ``tau``) is *carried and marked*, not force-liquidated, at that event.
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ from eth_research.portfolio._time import iso_utc
 from eth_research.portfolio.accounting import Fill, PortfolioState
 from eth_research.portfolio.attribution import StepAttribution, attribute_step
 from eth_research.portfolio.calendar import TradingCalendar
+from eth_research.portfolio.corporate_actions import CorporateActionSet
 from eth_research.portfolio.fx import FxEvidence
 from eth_research.portfolio.identity import InstrumentId
 from eth_research.portfolio.information import AsOfView
@@ -295,6 +298,45 @@ def _mark_holdings(
     return marks, local_close, fx_rates
 
 
+def _refuse_in_window_corporate_actions(
+    corporate_actions: CorporateActionSet | None,
+    panel: MarketPanel,
+    schedule: RebalanceSchedule,
+) -> None:
+    """Fail closed on any corporate action that would apply within the run window.
+
+    This engine does not yet *apply* corporate actions (see the module docstring). Instead of
+    silently misstating quantities and cash, it refuses to run when ``corporate_actions`` holds an
+    action whose application time — a split/reverse's ``effective_time`` or a cash action's
+    ``payment_time`` — falls within ``[first_event, last_event]`` for an instrument in the panel. A
+    set whose actions all fall outside the run window (or concern instruments not in the panel) is
+    accepted, and ``None`` is a no-op.
+    """
+    if corporate_actions is None or not corporate_actions.actions:
+        return
+    panel_ids = {instrument.instrument_id for instrument in panel.instruments}
+    events = schedule.events()
+    first, last = events[0], events[-1]
+    for action in corporate_actions.actions:
+        if action.instrument.instrument_id not in panel_ids:
+            continue
+        application: pd.Timestamp | None
+        if action.action_type in ("split", "reverse_split"):
+            application = action.effective_time
+        else:
+            application = action.payment_time
+        if application is None:
+            continue
+        if first <= application <= last:
+            raise CanonicalError(
+                f"engine: corporate action {action.action_id!r} "
+                f"({action.action_type}) applies at {iso_utc(application)}, within the "
+                f"run window [{iso_utc(first)}, {iso_utc(last)}]. This engine does not "
+                f"apply corporate actions; restrict the schedule to a window without "
+                f"pending actions on panel instruments"
+            )
+
+
 def run_portfolio_simulation(
     protocol: PortfolioProtocol,
     panel: MarketPanel,
@@ -303,12 +345,15 @@ def run_portfolio_simulation(
     schedule: RebalanceSchedule,
     *,
     calendars: dict[str, TradingCalendar],
+    corporate_actions: CorporateActionSet | None = None,
 ) -> PortfolioRunResult:
     """Run the causal multi-asset rebalance over ``schedule`` and return a fingerprinted result.
 
-    Corporate-action application (splits, dividends, delisting cash) is out of scope — see the
-    module docstring. Raises :class:`CanonicalError` if a required calendar is missing or a holding
-    cannot be causally marked (for example an over-stale mark) at some event.
+    Corporate-action *application* (splits, dividends, delisting cash) is out of scope; when a
+    ``corporate_actions`` set is supplied the engine fails closed on any action applying within the
+    run window rather than silently misstating (see the module docstring). Raises
+    :class:`CanonicalError` if a required calendar is missing, an in-window corporate action is
+    present, or a holding cannot be causally marked (for example an over-stale mark) at some event.
     """
     if not isinstance(calendars, dict):
         raise CanonicalError(
@@ -317,6 +362,7 @@ def run_portfolio_simulation(
     for calendar_id, calendar in calendars.items():
         if not isinstance(calendar, TradingCalendar):
             raise CanonicalError(f"engine: calendars[{calendar_id!r}] must be a TradingCalendar")
+    _refuse_in_window_corporate_actions(corporate_actions, panel, schedule)
 
     tolerances = protocol.tolerances
     state = PortfolioState.opening(

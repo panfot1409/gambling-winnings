@@ -16,12 +16,16 @@ assert that mutating any not-yet-knowable input leaves every output at and befor
    closed before any accounting.
 2. **Determine membership known by τ.** Resolve the set of instruments whose membership interval is
    active at τ *and* whose governing knowledge time is ≤ τ. Future listings/removals are invisible.
-3. **Apply corporate actions effective before the open.** Splits/reverse-splits with an effective
-   time strictly before τ's open adjust the *held quantities* (never past signals). Only actions
-   whose knowledge time is ≤ τ are visible to any decision.
-4. **Apply cash payments due before the open.** Dividends and delisting cash-outs whose payment time
-   is strictly before τ's open credit base-currency cash (converted at a causal FX rate), before the
-   tradable set is priced.
+3. **Corporate-action quantity adjustments (deferred; refused in-window).** Applying splits/reverse-
+   splits to *held quantities* — and, in particular, attributing a split's value change exactly when
+   raw prices halve while quantity doubles — is deferred to a later milestone. Rather than silently
+   misstate, the engine **fails closed**: if the supplied corporate-action set contains a split or
+   reverse-split whose effective time falls within the run's event window for a panel instrument, the
+   run is refused. A window without such an action proceeds normally.
+4. **Corporate-action cash payments (deferred; refused in-window).** Likewise, dividend and delisting
+   cash-outs are not credited; a cash action whose payment time falls within the run window for a
+   panel instrument causes the run to be refused rather than credited late or approximately. Both
+   guards preserve the causal, never-silently-wrong contract until full application lands.
 5. **Establish the tradable set.** Intersect the membership-active instruments with those that have
    a valid open bar at τ and a valid causal FX rate. An instrument missing either is not tradable at
    τ.

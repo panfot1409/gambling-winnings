@@ -7,7 +7,9 @@ from collections.abc import Sequence
 import pandas as pd
 import pytest
 
+from eth_research.api.serialization import CanonicalError
 from eth_research.portfolio.calendar import TradingCalendar
+from eth_research.portfolio.corporate_actions import CorporateAction, CorporateActionSet
 from eth_research.portfolio.costs import CostParameters
 from eth_research.portfolio.engine import run_portfolio_simulation
 from eth_research.portfolio.fx import FxEvidence
@@ -229,6 +231,81 @@ def test_held_through_step_has_zero_attribution_residual() -> None:
     assert hold.local_price_pnl == pytest.approx(110.0)  # 10 * (121 - 110)
     assert hold.fx_translation_pnl == pytest.approx(0.0)
     assert abs(hold.residual) < 1e-9
+
+
+def _split(instrument: InstrumentId, effective: str) -> CorporateAction:
+    return CorporateAction(
+        instrument=instrument,
+        action_id="split-1",
+        action_type="split",
+        knowledge_time=_ts("2026-07-14T00:00:00"),
+        effective_time=_ts(effective),
+        payment_time=None,
+        ratio=2.0,
+        cash_amount=None,
+        currency=None,
+        source="test",
+    )
+
+
+def _dividend(instrument: InstrumentId, payment: str) -> CorporateAction:
+    return CorporateAction(
+        instrument=instrument,
+        action_id="div-1",
+        action_type="cash_dividend",
+        knowledge_time=_ts("2026-07-14T00:00:00"),
+        effective_time=_ts(payment),
+        payment_time=_ts(payment),
+        ratio=None,
+        cash_amount=0.5,
+        currency="USD",
+        source="test",
+    )
+
+
+def test_engine_refuses_a_split_inside_the_run_window() -> None:
+    # A 2:1 split effective at 02:00 falls inside the schedule window [01:00, 03:00]: the engine
+    # does not apply corporate actions and must refuse rather than silently misstate quantities.
+    actions = CorporateActionSet(actions=(_split(A, "2026-07-14T02:00:00"),))
+    with pytest.raises(CanonicalError, match="does not apply corporate actions"):
+        run_portfolio_simulation(
+            _protocol("equal_weight"),
+            _two_asset_panel(),
+            _membership([A, B]),
+            _FX,
+            _SCHEDULE,
+            calendars=_CAL,
+            corporate_actions=actions,
+        )
+
+
+def test_engine_refuses_a_cash_payment_inside_the_run_window() -> None:
+    actions = CorporateActionSet(actions=(_dividend(A, "2026-07-14T02:00:00"),))
+    with pytest.raises(CanonicalError, match="does not apply corporate actions"):
+        run_portfolio_simulation(
+            _protocol("equal_weight"),
+            _two_asset_panel(),
+            _membership([A, B]),
+            _FX,
+            _SCHEDULE,
+            calendars=_CAL,
+            corporate_actions=actions,
+        )
+
+
+def test_engine_runs_when_actions_fall_outside_the_run_window() -> None:
+    # A split effective at 09:00 is after the last event (03:00): outside the window, so accepted.
+    actions = CorporateActionSet(actions=(_split(A, "2026-07-14T09:00:00"),))
+    result = run_portfolio_simulation(
+        _protocol("equal_weight"),
+        _two_asset_panel(),
+        _membership([A, B]),
+        _FX,
+        _SCHEDULE,
+        calendars=_CAL,
+        corporate_actions=actions,
+    )
+    assert result.terminal_equity == pytest.approx(1000.0)
 
 
 def test_result_carries_evidence_fingerprints() -> None:
