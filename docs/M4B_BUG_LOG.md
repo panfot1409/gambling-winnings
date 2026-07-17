@@ -54,3 +54,94 @@ every sum is order-independent. End-to-end runs are byte-identical (the replay v
 and result checks still pass, and the reference `result_id` is unchanged). A six-asset regression test
 in `tests/test_portfolio_solver.py` asserts three reorderings reproduce the equity, cost, residual,
 and per-asset notionals exactly.
+
+## §41 independent red teams
+
+Three independent read-only red teams (accounting/causality, provenance/forgery,
+security/governance/isolation) were run against the pre-freeze package. The accounting core held to
+machine precision under a 400-run randomized multi-asset fuzz (worst relative equity-identity error
+2.7e-16; cash and quantities never negative; gross exposure ≤ 1; hold-step residual exactly 0), and
+the security/isolation/additivity boundary held (668-file manifest identical before/after all
+probes, three sealed ledgers byte-empty, M4A snapshot unchanged, v1.1 API byte-additive over v1.0).
+Seven genuine but non-hard-stop findings were fixed; each carries a regression test that fails on the
+pre-fix code. Note the fixes changed the reference `result_id` (calendar binding widens the run
+canonical; the absurd-annualization guard nulls a metric), which is expected and captured freshly by
+the R-phase `reference_expected_results.json`.
+
+### R-B1 — the full-graph verifier and the checkpoint did not bind trading calendars (HIGH) — FIXED
+
+Calendars govern tradability, yet `PortfolioRunResult` did not carry them, `verify_portfolio_result`
+never reconciled the result's `calendar_fingerprints`, and the checkpoint's `verify_against` omitted
+them. Two facets reproduced: (A) a result's `calendar_fingerprints` was a free plug — arbitrary
+valid-format lies verified; (D) a run computed under calendar C1 was certified against a universe
+declaring a different calendar C2 (same `calendar_id`, different sessions), whose own re-run yields a
+different terminal equity (125647.35 vs the certified 125276.84). The same root let an honest
+checkpoint be resumed against different calendars and silently diverge.
+
+**Fix:** `PortfolioRunResult` gains a `calendar_fingerprints` field folded into its canonical form
+(so `run_result_fingerprint` binds the calendars that governed the run); `build_portfolio_result`
+cross-checks the run's calendars against the universe (as it already did for membership/schedule);
+`verify_portfolio_result` reconciles run-vs-universe and result-vs-run calendars; and the checkpoint
+binds a combined `calendars_fingerprint` that `verify_against` checks, so a resume under different
+calendars is refused. Batch = streaming = resume stays byte-identical (the resume canonical gains the
+same calendar list). Regression tests in `tests/test_portfolio_result.py` and
+`tests/test_portfolio_streaming.py`.
+
+### R-B2 — verify left `base_currency` and `package_version` unbound (MEDIUM) — FIXED
+
+`verify_portfolio_result` never compared the result's stored `base_currency` or `package_version` to
+the run / running package, so a USD run relabeled `EUR` (numbers physically USD) and a result stamped
+with any package version both verified. **Fix:** verify now binds `result.base_currency` to the run
+and `result.package_version` to the running `M4B_PACKAGE_VERSION`. Regression tests in
+`tests/test_portfolio_result.py`.
+
+### R-A1 — the corporate-action refusal window missed the terminal marking bar (MEDIUM) — FIXED
+
+The fail-closed window was `[first_event, last_event]`, but an instrument trading at the last event
+is marked at *that bar's close* (`last_event + bar_interval`). An action effective in the tail
+`(last_event, terminal_close]` was therefore neither refused nor applied, yet landed in the bar that
+prices terminal equity — defeating the "never silently misstate" guarantee for the terminal bar
+(a 2:1 split at 03:30 on a bar closing 04:00 flipped from refused at 03:00 to silently accepted,
+marking terminal equity off the halved close). **Fix:** the refusal upper bound is taken per
+instrument as `_bar_close_time_at(frame, last_event)` (the terminal marking-bar close) when a bar
+opens at the last event, else `last_event`. The reference run is unaffected (its actions fall past the
+terminal close). Regression tests in `tests/test_portfolio_engine.py` (refused in-tail; admitted just
+past the terminal bar).
+
+### R-A2 — `sortino_ratio` was finite for a single-event run (LOW) — FIXED
+
+Volatility and Sharpe self-nullify at `n=1` (sample std is NaN), but Sortino's downside deviation
+uses a population mean and is finite for one sample, so a single-event *loss* reported a one-sample
+"ratio" — contradicting the "None for fewer than two events" contract (the existing n=1 test used a
+flat, zero-return series that masked it). **Fix:** Sharpe and Sortino are gated on `n >= 2` alongside
+volatility. Regression test in `tests/test_portfolio_metrics.py` (single-event loss).
+
+### R-A3 — `annualized_return` emitted absurd-but-finite values (LOW) — FIXED
+
+`(terminal/initial) ** (periods_per_year/n) - 1` was guarded only against overflow / non-finite
+results, so a short run with a modest move produced an astronomically large yet finite figure (the
+reference universe's own artifact carried `annualized_return ≈ 4.08e54`), exactly the "absurd number"
+the code's comment claimed to suppress. **Fix:** a `_annualized_return` helper reports `None` when the
+magnitude exceeds a documented, deliberately loose sanity ceiling (`_MAX_ANNUALIZED_ABS_RETURN =
+1e6`), so a meaningless extrapolation is `None` rather than a number, while any plausible figure is
+preserved. Regression test in `tests/test_portfolio_metrics.py`.
+
+### R-C1 — the offline-tests firewall scanned by filename prefix, missing a portfolio test (LOW–MED) — FIXED
+
+`test_portfolio_tests_import_no_network_or_ml_client` iterated `glob("test_portfolio_*.py")`, so
+`tests/test_m4b_consumer_e2e.py` (which imports `subprocess` to install a wheel) was never scanned —
+the guard enforced "files named `test_portfolio_*` are offline", not "portfolio tests are offline".
+**Fix:** the scan now covers every `tests/test_*.py` that structurally exercises the portfolio package
+(a real `eth_research.portfolio` import *or* a portfolio import inside a driver string — comments do
+not count, so a governance test that only names the path is not swept in), with a narrow explicit
+allowlist letting the installed-consumer E2E import `subprocess` and nothing else forbidden.
+
+### R-C2 — the AST firewall's docstring overclaimed; no indirection lint (INFO/LOW) — FIXED
+
+The firewall docstring said the AST scan proved "structurally that the package cannot reach" a
+network / dynamic execution, but a lexical allow/deny scan cannot model `getattr(os, "sys"+"tem")`,
+`importlib.__dict__["import_module"]`, or value-indirection (the shipped source is clean — verified —
+so this was wording, not a live escape). **Fix:** the docstring now frames the AST scan as a
+best-effort lint with the import-closure as the load-bearing structural proof, and a new
+`test_portfolio_runtime_has_no_capability_indirection` flags `getattr` on a sensitive module and any
+`__dict__[...]` / `__builtins__` access across the package.
