@@ -257,24 +257,34 @@ def _apply_event_trades(
         params=protocol.cost_scenario,
         tolerances=protocol.tolerances,
     )
-    fills: list[Fill] = []
+    pending: list[Fill] = []
     for trade in result.trades:
         if trade.side == "hold":
             continue
         ref = refs[trade.instrument.instrument_id]
-        fill = Fill(
-            event_id=f"{tau.isoformat()}:{trade.instrument.instrument_id[:8]}",
-            event_time=tau,
-            instrument=trade.instrument,
-            side=trade.side,
-            local_quantity=trade.local_quantity,
-            fill_price=ref.open_price,
-            fx_rate=ref.fx_rate,
-            base_notional=trade.base_notional,
-            cost=trade.cost,
+        pending.append(
+            Fill(
+                event_id=f"{tau.isoformat()}:{trade.instrument.instrument_id[:8]}",
+                event_time=tau,
+                instrument=trade.instrument,
+                side=trade.side,
+                local_quantity=trade.local_quantity,
+                fill_price=ref.open_price,
+                fx_rate=ref.fx_rate,
+                base_notional=trade.base_notional,
+                cost=trade.cost,
+            )
         )
+    # Apply sells before buys. The solved net is cash-safe (residual >= 0), but applying a buy
+    # before its funding sell would dip intermediate cash below zero on a cash-neutral rebalance.
+    # Selling first only raises cash; buying then lowers it monotonically to the non-negative
+    # residual, so every intermediate state stays cash-safe regardless of the solver's trade order.
+    for fill in sorted(
+        pending, key=lambda f: (0 if f.side == "sell" else 1, f.instrument.instrument_id)
+    ):
         state = state.apply_fill(fill)
-        fills.append(fill)
+    # Record fills in canonical instrument order, independent of application or input order.
+    fills = sorted(pending, key=lambda f: f.instrument.instrument_id)
     return state, fills, result.total_cost
 
 
@@ -324,6 +334,17 @@ def _mark_holdings(
     return marks, local_close, fx_rates, staleness
 
 
+def _validate_calendars(calendars: dict[str, TradingCalendar]) -> None:
+    """Fail closed unless ``calendars`` is a mapping of calendar_id to TradingCalendar."""
+    if not isinstance(calendars, dict):
+        raise CanonicalError(
+            "engine: calendars must be a mapping of calendar_id to TradingCalendar"
+        )
+    for calendar_id, calendar in calendars.items():
+        if not isinstance(calendar, TradingCalendar):
+            raise CanonicalError(f"engine: calendars[{calendar_id!r}] must be a TradingCalendar")
+
+
 def _refuse_in_window_corporate_actions(
     corporate_actions: CorporateActionSet | None,
     panel: MarketPanel,
@@ -363,6 +384,125 @@ def _refuse_in_window_corporate_actions(
             )
 
 
+@dataclass(frozen=True)
+class StepCarry:
+    """The loop-carried state that fully determines the remaining events.
+
+    This is the entire mutable context threaded between rebalance events: the accounting state and
+    the previous event's marks / local closes / FX legs / equity (the attribution baseline). Because
+    it fully determines every future event, serializing it is what lets a checkpoint resume a run
+    byte-for-byte (see :mod:`eth_research.portfolio.streaming`).
+    """
+
+    state: PortfolioState
+    prev_marks: dict[str, float]
+    prev_local_close: dict[str, float]
+    prev_fx: dict[str, float]
+    prev_equity: float
+
+
+def initial_carry(protocol: PortfolioProtocol) -> StepCarry:
+    """The opening carry: an all-cash state and empty attribution baseline."""
+    return StepCarry(
+        state=PortfolioState.opening(
+            protocol.base_currency, protocol.initial_cash, tolerances=protocol.tolerances
+        ),
+        prev_marks={},
+        prev_local_close={},
+        prev_fx={},
+        prev_equity=protocol.initial_cash,
+    )
+
+
+def run_event(
+    protocol: PortfolioProtocol,
+    panel: MarketPanel,
+    membership: MembershipSchedule,
+    fx: FxEvidence,
+    calendars: dict[str, TradingCalendar],
+    tau: pd.Timestamp,
+    carry: StepCarry,
+) -> tuple[EventRecord, StepCarry]:
+    """Execute one causal rebalance event at ``tau`` from ``carry``, returning the record and carry.
+
+    This is the single accounting core shared by the batch engine and the streaming / resume driver,
+    so all three produce byte-identical events from the same carried state.
+    """
+    state = carry.state
+    view = AsOfView.at(panel, membership, fx, tau)
+    held_pre = {
+        position.instrument.instrument_id: position.quantity for position in state.positions
+    }
+    held_pre_instruments = {
+        position.instrument.instrument_id: position.instrument for position in state.positions
+    }
+
+    tradable = _tradable_set(view, calendars, protocol.base_currency)
+    target = build_target(protocol, tradable)
+    target.require_subset_of(tradable)
+
+    inputs, refs = _build_solve_inputs(view, state, tradable, target, protocol.base_currency)
+    state, event_fills, total_cost = _apply_event_trades(state, inputs, refs, tau, protocol)
+
+    to_mark = dict(held_pre_instruments)
+    for position in state.positions:
+        to_mark[position.instrument.instrument_id] = position.instrument
+    marks, local_close, fx_rates, staleness = _mark_holdings(panel, fx, protocol, to_mark, tau)
+    equity = state.equity(marks)
+    currency_of = {
+        instrument_id: instrument.quote_currency for instrument_id, instrument in to_mark.items()
+    }
+
+    attribution = attribute_step(
+        equity_before=carry.prev_equity,
+        equity_after=equity,
+        held_quantities=held_pre,
+        marks_before=carry.prev_marks,
+        marks_after=marks,
+        local_close_before=carry.prev_local_close,
+        local_close_after=local_close,
+        fx_before=carry.prev_fx,
+        fx_after=fx_rates,
+        total_cost=total_cost,
+        currency_of=currency_of,
+    )
+
+    holdings = tuple(
+        HoldingValue(
+            instrument_id=position.instrument.instrument_id,
+            quote_currency=position.instrument.quote_currency,
+            quantity=position.quantity,
+            base_value=position.quantity * marks[position.instrument.instrument_id],
+        )
+        for position in state.positions
+    )
+    held_staleness = [staleness[p.instrument.instrument_id] for p in state.positions]
+    max_staleness = max(held_staleness) if held_staleness else 0.0
+    stale_count = sum(1 for value in held_staleness if value > 0.0)
+
+    record = EventRecord(
+        tau=tau,
+        equity=equity,
+        cash=state.base_cash,
+        positions_count=len(state.positions),
+        total_cost=total_cost,
+        fills=tuple(event_fills),
+        attribution=attribution,
+        holdings=holdings,
+        max_staleness_seconds=max_staleness,
+        stale_mark_count=stale_count,
+        state_fingerprint=state.fingerprint,
+    )
+    new_carry = StepCarry(
+        state=state,
+        prev_marks=marks,
+        prev_local_close=local_close,
+        prev_fx=fx_rates,
+        prev_equity=equity,
+    )
+    return record, new_carry
+
+
 def run_portfolio_simulation(
     protocol: PortfolioProtocol,
     panel: MarketPanel,
@@ -381,100 +521,18 @@ def run_portfolio_simulation(
     :class:`CanonicalError` if a required calendar is missing, an in-window corporate action is
     present, or a holding cannot be causally marked (for example an over-stale mark) at some event.
     """
-    if not isinstance(calendars, dict):
-        raise CanonicalError(
-            "engine: calendars must be a mapping of calendar_id to TradingCalendar"
-        )
-    for calendar_id, calendar in calendars.items():
-        if not isinstance(calendar, TradingCalendar):
-            raise CanonicalError(f"engine: calendars[{calendar_id!r}] must be a TradingCalendar")
+    _validate_calendars(calendars)
     _refuse_in_window_corporate_actions(corporate_actions, panel, schedule)
 
-    tolerances = protocol.tolerances
-    state = PortfolioState.opening(
-        protocol.base_currency, protocol.initial_cash, tolerances=tolerances
-    )
     initial_equity = protocol.initial_cash
-
-    prev_marks: dict[str, float] = {}
-    prev_local_close: dict[str, float] = {}
-    prev_fx: dict[str, float] = {}
-    prev_equity = initial_equity
-
+    carry = initial_carry(protocol)
     events: list[EventRecord] = []
     all_fills = 0
 
     for tau in schedule.events():
-        view = AsOfView.at(panel, membership, fx, tau)
-        held_pre = {
-            position.instrument.instrument_id: position.quantity for position in state.positions
-        }
-        held_pre_instruments = {
-            position.instrument.instrument_id: position.instrument for position in state.positions
-        }
-
-        tradable = _tradable_set(view, calendars, protocol.base_currency)
-        target = build_target(protocol, tradable)
-        target.require_subset_of(tradable)
-
-        inputs, refs = _build_solve_inputs(view, state, tradable, target, protocol.base_currency)
-        state, event_fills, total_cost = _apply_event_trades(state, inputs, refs, tau, protocol)
-        all_fills += len(event_fills)
-
-        to_mark = dict(held_pre_instruments)
-        for position in state.positions:
-            to_mark[position.instrument.instrument_id] = position.instrument
-        marks, local_close, fx_rates, staleness = _mark_holdings(panel, fx, protocol, to_mark, tau)
-        equity = state.equity(marks)
-        currency_of = {
-            instrument_id: instrument.quote_currency
-            for instrument_id, instrument in to_mark.items()
-        }
-
-        attribution = attribute_step(
-            equity_before=prev_equity,
-            equity_after=equity,
-            held_quantities=held_pre,
-            marks_before=prev_marks,
-            marks_after=marks,
-            local_close_before=prev_local_close,
-            local_close_after=local_close,
-            fx_before=prev_fx,
-            fx_after=fx_rates,
-            total_cost=total_cost,
-            currency_of=currency_of,
-        )
-
-        holdings = tuple(
-            HoldingValue(
-                instrument_id=position.instrument.instrument_id,
-                quote_currency=position.instrument.quote_currency,
-                quantity=position.quantity,
-                base_value=position.quantity * marks[position.instrument.instrument_id],
-            )
-            for position in state.positions
-        )
-        held_staleness = [staleness[p.instrument.instrument_id] for p in state.positions]
-        max_staleness = max(held_staleness) if held_staleness else 0.0
-        stale_count = sum(1 for value in held_staleness if value > 0.0)
-
-        events.append(
-            EventRecord(
-                tau=tau,
-                equity=equity,
-                cash=state.base_cash,
-                positions_count=len(state.positions),
-                total_cost=total_cost,
-                fills=tuple(event_fills),
-                attribution=attribution,
-                holdings=holdings,
-                max_staleness_seconds=max_staleness,
-                stale_mark_count=stale_count,
-                state_fingerprint=state.fingerprint,
-            )
-        )
-        prev_marks, prev_local_close, prev_fx = marks, local_close, fx_rates
-        prev_equity = equity
+        record, carry = run_event(protocol, panel, membership, fx, calendars, tau, carry)
+        events.append(record)
+        all_fills += len(record.fills)
 
     terminal_equity = events[-1].equity if events else initial_equity
     return PortfolioRunResult(
@@ -487,5 +545,5 @@ def run_portfolio_simulation(
         terminal_equity=terminal_equity,
         events=tuple(events),
         all_fills=all_fills,
-        final_state_fingerprint=state.fingerprint,
+        final_state_fingerprint=carry.state.fingerprint,
     )
