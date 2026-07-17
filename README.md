@@ -552,8 +552,9 @@ src/eth_research/
     m3d-replay.yml  # M3D prospective cohort rebuilds byte-exact; three ledgers byte-empty
     m3e-replay.yml  # M3E review-only update facility reproduces byte-exact; no proposal
     m3f-replay.yml  # M3F freeze verifier + recovery drill + independent stdlib verifier
-    m4a-release-candidate.yml # M4A read-only RC gate: public API/CLI, packaging, snapshots
-    # (write-capable acquisition workflows are retired: all data is frozen)
+    m4b-replay.yml  # M4B portfolio replay + additive public-API/registration checks (byte-exact)
+    release-dry-run.yml # v1.1.0 read-only release proof: build + SBOM + checksums + scan (no publish)
+    # (the M4A release-candidate gate is retired at v1.1; write-capable acquisition workflows too)
 .github/scripts/
     verify_m3a_registry.py # CI gate: the registry terminal event binds the published bytes
 tools/

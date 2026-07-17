@@ -14,12 +14,6 @@
       "version": "0.4.6"
     },
     {
-      "name": "eth-research",
-      "purl": "pkg:pypi/eth-research@1.1.0",
-      "type": "library",
-      "version": "1.1.0"
-    },
-    {
       "name": "iniconfig",
       "purl": "pkg:pypi/iniconfig@2.3.0",
       "type": "library",
@@ -130,11 +124,18 @@
   ],
   "metadata": {
     "component": {
+      "description": "offline, research-only ETH trading-strategy research toolkit",
       "name": "eth-research",
       "purl": "pkg:pypi/eth-research@1.1.0",
       "type": "application",
       "version": "1.1.0"
-    }
+    },
+    "properties": [
+      {
+        "name": "components:scope",
+        "value": "locked runtime and dev/build environment (uv.lock); the distributed wheel declares only numpy, pandas, pyarrow at runtime"
+      }
+    ]
   },
   "specVersion": "1.5",
   "version": 1

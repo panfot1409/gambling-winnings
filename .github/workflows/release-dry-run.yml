@@ -1,11 +1,14 @@
 name: Release Dry Run
 
 # Publication-adjacent, read-only proof that the v1.1.0 distribution is buildable, private-data-safe,
-# reproducible, and that the committed release evidence (manifest, SBOM, state) is current — without
-# publishing anything. It uploads no artifact, references no secret, requests no OIDC token, and
-# reaches no host but the pinned uv installer. This is the maximum release automation compatible with the
-# repository's workflow-security invariant (tests/test_workflow_security.py); the actual PyPI
-# Trusted-Publishing workflow is a documented template, not a live workflow (docs/V1_PUBLICATION_PIPELINE.md).
+# and byte-for-byte deterministic on a single runner, and that the committed release evidence
+# (manifest, SBOM, state) is current — without publishing anything. It uploads no artifact, references
+# no secret, and requests no OIDC token. Its only network egress is the toolchain fetch: checkout from
+# GitHub, the hash-pinned uv wheel and the locked dependency wheels from PyPI, and CPython from
+# python-build-standalone. (The workflow-security host allowlist is a text-grep over the YAML, not a
+# runtime egress control.) This is the maximum release automation compatible with that invariant
+# (tests/test_workflow_security.py); the actual PyPI Trusted-Publishing workflow is a documented
+# template, not a live workflow (docs/V1_PUBLICATION_PIPELINE.md).
 
 on:
   push:

@@ -1,12 +1,13 @@
 """GA packaging metadata is present, self-consistent, and honest about the license gate.
 
-These lock in the v1.1.0 general-availability packaging metadata added on ``release/v1.1.0-ga``:
-project URLs, PyPI classifiers, keywords, authors, a research/simulation-framed description, and the
-deliberate publication guards. Critically, they assert that **no license classifier or license field**
-is declared — choosing a license is an external human decision (``docs/V1_LICENSE_DECISION.md``) — and
-that the ``Private :: Do Not Upload`` guard is present so the unlicensed package cannot be pushed to
-public PyPI by accident. The package version stays exactly ``1.1.0`` (this is release packaging, not a
-code bump).
+These lock in the v1.1.0 general-availability packaging metadata added on
+``release/v1.1.0-ga``: project URLs, PyPI classifiers, keywords, authors, a
+research/simulation-framed description, and the deliberate publication guards.
+Critically, they assert that **no license classifier or license field** is declared
+— choosing a license is an external human decision (``docs/V1_LICENSE_DECISION.md``)
+— and that the ``Private :: Do Not Upload`` guard is present so the unlicensed
+package cannot reach public PyPI by accident. The version stays exactly ``1.1.0``
+(release packaging, not a code bump).
 """
 
 from __future__ import annotations
@@ -54,7 +55,8 @@ def test_keywords_and_authors_present() -> None:
     proj = _project()
     assert "ethereum" in proj["keywords"]
     assert len(proj["keywords"]) >= 5
-    assert proj["authors"] and all("name" in a for a in proj["authors"])
+    assert proj["authors"]
+    assert all("name" in a for a in proj["authors"])
 
 
 def test_expected_classifiers_present() -> None:

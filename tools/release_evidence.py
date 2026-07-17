@@ -6,8 +6,9 @@ Emits three canonical-JSON artifacts under ``release/<version>/``:
 * ``release_manifest.json`` — the release identity: package name/version, the distribution *source*
   members (``src/eth_research/**``) with content hashes and a tree digest, the runtime dependency
   set, the governed-state neutrality digest (every ``research/`` artifact hashed), and the sealed
-  ledger triple. All fields are a pure function of the committed source, so the artifact regenerates
-  byte-for-byte and drift fails closed.
+  ledger triple. Every field is a function of the **tracked** source in a clean checkout — the tool
+  hashes the working tree (filtering ``__pycache__``), so generate/verify from a clean tree; an
+  untracked file under ``src/`` or ``research/`` shifts a digest and drift then fails closed.
 * ``sbom.cdx.json`` — a minimal CycloneDX 1.5 software bill of materials derived from ``uv.lock``.
 * ``release_state.json`` — the honest publication posture: built and hardened, **not published**,
   with the exact external gates that keep publication closed.
@@ -114,6 +115,9 @@ def build_manifest(repo_root: Path) -> dict[str, object]:
 
 
 def build_sbom(repo_root: Path) -> dict[str, object]:
+    # metadata.component is the subject (the distributed package); components[] enumerates the
+    # locked environment from uv.lock (runtime + dev/build tools), excluding the subject itself.
+    # The wheel's own declared runtime surface is only numpy/pandas/pyarrow (see the manifest).
     return {
         "bomFormat": "CycloneDX",
         "specVersion": "1.5",
@@ -124,11 +128,20 @@ def build_sbom(repo_root: Path) -> dict[str, object]:
                 "name": "eth-research",
                 "version": VERSION,
                 "purl": f"pkg:pypi/eth-research@{VERSION}",
-            }
+                "description": "offline, research-only ETH trading-strategy research toolkit",
+            },
+            "properties": [
+                {
+                    "name": "components:scope",
+                    "value": "locked runtime and dev/build environment (uv.lock); the distributed "
+                    "wheel declares only numpy, pandas, pyarrow at runtime",
+                }
+            ],
         },
         "components": [
             {"type": "library", "name": p["name"], "version": p["version"], "purl": p["purl"]}
             for p in _locked_packages(repo_root)
+            if p["name"] != "eth-research"
         ],
     }
 

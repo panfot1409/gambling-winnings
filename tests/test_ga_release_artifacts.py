@@ -3,8 +3,8 @@
 ``tools/release_evidence.py`` deterministically regenerates ``release/v1.1.0/`` from the committed
 source; these tests prove the committed bytes match, that GA hardening changed no ``research/``
 artifact (the governed-state digest reproduces), that the sealed ledgers stay byte-empty, and that
-the release state records the package as built/hardened but **not** published with the three external
-gates open.
+the release state records the package as built/hardened but **not** published, with the three
+external gates open.
 """
 
 from __future__ import annotations
@@ -22,7 +22,8 @@ def _load_tool() -> object:
     spec = importlib.util.spec_from_file_location(
         "release_evidence", REPO_ROOT / "tools" / "release_evidence.py"
     )
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -60,6 +61,9 @@ def test_state_is_honestly_unpublished_with_open_gates() -> None:
 def test_sbom_covers_the_runtime_dependencies() -> None:
     sbom = json.loads((REPO_ROOT / "release/v1.1.0/sbom.cdx.json").read_bytes())
     assert sbom["bomFormat"] == "CycloneDX"
+    # The subject is metadata.component; components[] are the locked dependencies (not the root).
+    assert sbom["metadata"]["component"]["name"] == "eth-research"
     names = {c["name"] for c in sbom["components"]}
-    for dep in ("numpy", "pandas", "pyarrow", "eth-research"):
+    for dep in ("numpy", "pandas", "pyarrow"):
         assert dep in names, dep
+    assert "eth-research" not in names  # the root is not double-listed as its own dependency
