@@ -22,7 +22,14 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from eth_research.api.serialization import CanonicalError
+from eth_research.api.serialization import (
+    CanonicalError,
+    require_finite_float,
+    require_int,
+    require_list,
+    require_mapping,
+    require_str,
+)
 from eth_research.metrics import (
     bar_returns,
     max_drawdown,
@@ -30,11 +37,47 @@ from eth_research.metrics import (
     sortino_ratio,
     total_return,
 )
+from eth_research.portfolio.validation import exact_keys
 
 if TYPE_CHECKING:
     from eth_research.portfolio.engine import PortfolioRunResult
 
 __all__ = ["PortfolioMetrics", "compute_portfolio_metrics"]
+
+_OPTIONAL_METRICS = (
+    "annualized_return",
+    "annualized_volatility",
+    "sharpe_ratio",
+    "sortino_ratio",
+)
+_INT_METRICS = ("num_events", "num_fills", "stale_mark_events")
+_FLOAT_METRICS = (
+    "initial_equity",
+    "terminal_equity",
+    "total_return",
+    "max_drawdown",
+    "total_cost",
+    "cost_drag",
+    "total_traded_notional",
+    "turnover",
+    "average_gross_exposure",
+    "average_cash_weight",
+    "average_max_weight",
+    "average_hhi",
+    "average_held_assets",
+    "max_staleness_seconds",
+    "cumulative_local_price_pnl",
+    "cumulative_fx_translation_pnl",
+    "cumulative_action_cash",
+    "cumulative_cost",
+    "cumulative_residual",
+)
+_METRIC_FIELDS = {
+    *_OPTIONAL_METRICS,
+    *_INT_METRICS,
+    *_FLOAT_METRICS,
+    "per_currency_contribution",
+}
 
 
 def _finite_or_none(value: float) -> float | None:
@@ -108,6 +151,70 @@ class PortfolioMetrics:
                 for currency, value in self.per_currency_contribution
             ],
         }
+
+    @classmethod
+    def from_mapping(cls, data: Any, *, field: str = "portfolio_metrics") -> PortfolioMetrics:
+        """Rebuild from a canonical mapping, rejecting unknown/missing keys and NaN/Infinity."""
+        mapping = require_mapping(data, field)
+        exact_keys(mapping, _METRIC_FIELDS, field)
+
+        def _f(name: str) -> float:
+            return require_finite_float(mapping[name], f"{field}.{name}")
+
+        def _i(name: str) -> int:
+            return require_int(mapping[name], f"{field}.{name}")
+
+        def _opt(name: str) -> float | None:
+            value = mapping[name]
+            return None if value is None else require_finite_float(value, f"{field}.{name}")
+
+        rows = require_list(
+            mapping["per_currency_contribution"], f"{field}.per_currency_contribution"
+        )
+        per_currency: list[tuple[str, float]] = []
+        for index, row in enumerate(rows):
+            entry = require_mapping(row, f"{field}.per_currency_contribution[{index}]")
+            exact_keys(
+                entry,
+                {"currency", "fx_translation_pnl"},
+                f"{field}.per_currency_contribution[{index}]",
+            )
+            per_currency.append(
+                (
+                    require_str(entry["currency"], f"{field}...[{index}].currency"),
+                    require_finite_float(entry["fx_translation_pnl"], f"{field}...[{index}].fx"),
+                )
+            )
+
+        return cls(
+            initial_equity=_f("initial_equity"),
+            terminal_equity=_f("terminal_equity"),
+            total_return=_f("total_return"),
+            annualized_return=_opt("annualized_return"),
+            annualized_volatility=_opt("annualized_volatility"),
+            sharpe_ratio=_opt("sharpe_ratio"),
+            sortino_ratio=_opt("sortino_ratio"),
+            max_drawdown=_f("max_drawdown"),
+            num_events=_i("num_events"),
+            num_fills=_i("num_fills"),
+            total_cost=_f("total_cost"),
+            cost_drag=_f("cost_drag"),
+            total_traded_notional=_f("total_traded_notional"),
+            turnover=_f("turnover"),
+            average_gross_exposure=_f("average_gross_exposure"),
+            average_cash_weight=_f("average_cash_weight"),
+            average_max_weight=_f("average_max_weight"),
+            average_hhi=_f("average_hhi"),
+            average_held_assets=_f("average_held_assets"),
+            stale_mark_events=_i("stale_mark_events"),
+            max_staleness_seconds=_f("max_staleness_seconds"),
+            cumulative_local_price_pnl=_f("cumulative_local_price_pnl"),
+            cumulative_fx_translation_pnl=_f("cumulative_fx_translation_pnl"),
+            cumulative_action_cash=_f("cumulative_action_cash"),
+            cumulative_cost=_f("cumulative_cost"),
+            cumulative_residual=_f("cumulative_residual"),
+            per_currency_contribution=tuple(per_currency),
+        )
 
 
 def compute_portfolio_metrics(

@@ -14,7 +14,7 @@ from eth_research.portfolio.engine import run_portfolio_simulation
 from eth_research.portfolio.fx import FxEvidence
 from eth_research.portfolio.identity import InstrumentId
 from eth_research.portfolio.membership import MembershipInterval, MembershipSchedule
-from eth_research.portfolio.metrics import compute_portfolio_metrics
+from eth_research.portfolio.metrics import PortfolioMetrics, compute_portfolio_metrics
 from eth_research.portfolio.panel import build_market_panel
 from eth_research.portfolio.protocol import PortfolioProtocol
 from eth_research.portfolio.schedule import RebalanceSchedule
@@ -181,6 +181,23 @@ def test_single_event_ratios_are_none_not_nan() -> None:
     assert m.annualized_volatility is None
     # canonical form must be strict-JSON-safe (no NaN/Infinity).
     json.dumps(m.canonical(), allow_nan=False)
+
+
+def test_metrics_round_trip_through_strict_json() -> None:
+    panel = build_market_panel({S: _moving([100.0, 110.0, 121.0], [110.0, 121.0, 133.0])})
+    schedule = RebalanceSchedule(
+        timestamps=(
+            _ts("2026-07-14T00:00:00"),
+            _ts("2026-07-14T01:00:00"),
+            _ts("2026-07-14T02:00:00"),
+        )
+    )
+    result = run_portfolio_simulation(
+        _protocol("equal_weight"), panel, _membership([S]), _FX, schedule, calendars=_CAL
+    )
+    m = compute_portfolio_metrics(result, periods_per_year=_PPY)
+    restored = PortfolioMetrics.from_mapping(json.loads(json.dumps(m.canonical(), allow_nan=False)))
+    assert restored == m
 
 
 def test_metrics_reject_bad_periods_per_year() -> None:
