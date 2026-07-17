@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software in academic or research work, please cite it using the metadata below.
+  Note: this is a research-only, offline toolkit and makes no alpha claim; see README.md and
+  docs/V1_LIMITATIONS.md.
+title: "eth-research: an offline, reproducible toolkit for ETH trading-strategy research"
+abstract: >-
+  A research-only Python toolkit for developing and evaluating Ethereum trading research on historical
+  OHLCV data. It runs fully offline with deterministic, canonically-hashed artifacts; it has no live
+  trading, exchange/wallet connectivity, network access, leverage, shorting, or derivatives, and makes
+  no alpha claim. As of v1.1.0 the repository ships no LICENSE, so it is not cleared for public
+  redistribution (see docs/V1_LICENSE_DECISION.md).
+type: software
+authors:
+  - name: "The eth-research maintainers"
+version: "1.1.0"
+repository-code: "https://github.com/panfot1409/gambling-winnings"
+keywords:
+  - ethereum
+  - backtesting
+  - quantitative-research
+  - reproducible-research
+  - offline
