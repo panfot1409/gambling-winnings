@@ -7,9 +7,16 @@ name: M4A Release Candidate
 # published, released, tagged, or pushed; no secret or market host is referenced; the
 # default token is read-only.
 
+# This workflow verifies the FROZEN Milestone 4A 1.0.0 release candidate: exact version,
+# pinned public-API / CLI / distribution snapshots, and untouched governance state. On the
+# stacked Milestone 4B branch the package evolves additively (version 1.1.0, new public
+# symbols, new CLI subcommands, new package files), so those frozen-state checks no longer
+# hold there — the m4b-replay workflow governs the M4B branch instead. Skip this workflow on
+# the M4B branch (push) and on a PR whose base is the M4A branch (the stacked M4B PR); the
+# accepted M4A branch keeps its own unchanged copy and the M4A PR (base M3F) still runs.
 on:
   push:
-    branches: ["**"]
+    branches-ignore: ["claude/m4b-multi-asset-portfolio-simulator"]
     paths:
       - "src/eth_research/**"
       - "tests/test_api_*.py"
@@ -26,6 +33,7 @@ on:
       - "pyproject.toml"
       - ".github/workflows/m4a-release-candidate.yml"
   pull_request:
+    branches-ignore: ["claude/m4a-offline-research-platform-rc"]
 
 permissions:
   contents: read

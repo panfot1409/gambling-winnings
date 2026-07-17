@@ -6,4 +6,4 @@ and no leverage. It operates exclusively on historical data loaded from
 local files.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

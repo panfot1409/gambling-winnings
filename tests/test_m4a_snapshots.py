@@ -8,13 +8,22 @@ from pathlib import Path
 import pytest
 
 import eth_research
-from eth_research.m4a import cli_reference, public_api
+from eth_research.m4a import M4A_PACKAGE_VERSION, cli_reference, public_api
 
 REPO = Path(eth_research.__file__).resolve().parents[2]
 # The RC snapshots (argparse help text especially) are rendered by a specific CPython; the
 # committed artifacts are pinned to the authoritative interpreter.
 _PINNED = sys.version_info[:2] == cli_reference.PINNED_PYTHON
-_skip = pytest.mark.skipif(not _PINNED, reason="RC snapshots are pinned to CPython 3.12")
+# The frozen M4A public-API / CLI snapshots capture the *1.0.0* release candidate. A later
+# milestone stacked on M4A (e.g. M4B at 1.1.0) additively extends the public surface and the
+# CLI, so a rebuild-vs-frozen check is expected to differ there — it is a development snapshot
+# governed by its own milestone, not a re-verification of the frozen M4A RC. Guard on both the
+# interpreter and the running version so these drift checks assert only where they apply.
+_IS_M4A_RC = eth_research.__version__ == M4A_PACKAGE_VERSION
+_skip = pytest.mark.skipif(
+    not (_PINNED and _IS_M4A_RC),
+    reason="M4A RC snapshots are pinned to CPython 3.12 and the 1.0.0 release candidate",
+)
 
 
 def test_public_api_snapshot_is_self_consistent() -> None:

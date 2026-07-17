@@ -1,0 +1,180 @@
+{
+  "layer": "portfolio",
+  "member_count": 34,
+  "package": "eth-research",
+  "portfolio_members": [
+    {
+      "path": "eth_research/portfolio/__init__.py",
+      "sha256": "622868ba8bb91c95eb5a23b1814dd56c5626d8763f7d2987e129c5be80fe2a8c",
+      "size": 1359
+    },
+    {
+      "path": "eth_research/portfolio/_time.py",
+      "sha256": "29157797cfff1e82c37cd1b341392067aa69915bdccf9e11e8b2482b74913207",
+      "size": 2566
+    },
+    {
+      "path": "eth_research/portfolio/accounting.py",
+      "sha256": "05aa065f2b24420a656ae97519dc19173cb423a3050bf44e7df268607606cfc8",
+      "size": 8457
+    },
+    {
+      "path": "eth_research/portfolio/attribution.py",
+      "sha256": "39ead4b29beb0a6ec4880930de0eda816c5631a7a4868fadd69e1f1a3ffe24d1",
+      "size": 7215
+    },
+    {
+      "path": "eth_research/portfolio/bars.py",
+      "sha256": "7c5540b77cd40f4da3d06400acc000452cce54e4cf77e1f40e9db4f2f201fc7d",
+      "size": 7140
+    },
+    {
+      "path": "eth_research/portfolio/calendar.py",
+      "sha256": "0f605e8b4c6687f6c6b61139e4f3c068599ce8012de7b305a21d4837dbff4d9e",
+      "size": 12306
+    },
+    {
+      "path": "eth_research/portfolio/cli.py",
+      "sha256": "802f2f14a63ea30e151e8c282ac752a417589516167917dddfd281f9de8190e9",
+      "size": 12883
+    },
+    {
+      "path": "eth_research/portfolio/cli_reference.py",
+      "sha256": "d4295c9c4525b7e1b31670bba027e2d24c80b83ce98af2ad73a28f37d50e6a43",
+      "size": 3544
+    },
+    {
+      "path": "eth_research/portfolio/corporate_actions.py",
+      "sha256": "9ef49a0293740a6158a7d2d58964db4d28805141b86b69faccc502d91cb1e874",
+      "size": 12847
+    },
+    {
+      "path": "eth_research/portfolio/costs.py",
+      "sha256": "4affb5df1d9015d01c79ef8665ffbae16c6f3c09814f09a04306123dc708fd2c",
+      "size": 8286
+    },
+    {
+      "path": "eth_research/portfolio/currencies.py",
+      "sha256": "b533f1e7710671925bf06ea8c9136703c05c62917e514bc8d579739c26b5ae41",
+      "size": 1917
+    },
+    {
+      "path": "eth_research/portfolio/engine.py",
+      "sha256": "2258a067a64315c8c918fbd86d61a902bf5d871a66d09c814fa4e96679ed92d0",
+      "size": 24287
+    },
+    {
+      "path": "eth_research/portfolio/fx.py",
+      "sha256": "c777295f964beb35e96cd94d8b049bdc70cd6d1244afb2ac2c93696290e72503",
+      "size": 13104
+    },
+    {
+      "path": "eth_research/portfolio/identity.py",
+      "sha256": "8bdf0d48b82c4b9eb706803169a03dee0d4a52c52aaeb59f7cc1e64947cca7a3",
+      "size": 6159
+    },
+    {
+      "path": "eth_research/portfolio/information.py",
+      "sha256": "161ffa00b44e06a668d8103d215be363592b73ec5d22655fffe3afe9b9c99819",
+      "size": 5501
+    },
+    {
+      "path": "eth_research/portfolio/membership.py",
+      "sha256": "4183c05f72a06e0d5babc1e75b33d159c5cd21551b5903fc5646c4f6ae664998",
+      "size": 10668
+    },
+    {
+      "path": "eth_research/portfolio/metrics.py",
+      "sha256": "1c713260730ba1001c35c02cf4c882fd859eb8675ada0932cbe3f7493f390c18",
+      "size": 14614
+    },
+    {
+      "path": "eth_research/portfolio/panel.py",
+      "sha256": "981d14dc1ee124eb1159451f0d63c83605c146287490d2406daf8cc1f01b2b53",
+      "size": 4228
+    },
+    {
+      "path": "eth_research/portfolio/protocol.py",
+      "sha256": "1db10af740215fe20d26e5d5224b497d3e345a763c1c81512183ffaad62df3ec",
+      "size": 11104
+    },
+    {
+      "path": "eth_research/portfolio/public_api.py",
+      "sha256": "eb007c96648912c9fefbb853aeb7733106ec7367064c4d9906c53cf3972b68e3",
+      "size": 8086
+    },
+    {
+      "path": "eth_research/portfolio/reference.py",
+      "sha256": "501191a5ea6e0da8ad7419e123bc4ee9ebe52b0d27395cbe595dac997a1dcc96",
+      "size": 17785
+    },
+    {
+      "path": "eth_research/portfolio/registration.py",
+      "sha256": "201712903219be580b4a1b479dbec14b79f33013ee5a01adef99cfb572e6e0d4",
+      "size": 13519
+    },
+    {
+      "path": "eth_research/portfolio/replay.py",
+      "sha256": "81e0c301386ef1cce5bc1bd63292c9a77bc91b9f5d4273fa0389d5ea0095c8d9",
+      "size": 6630
+    },
+    {
+      "path": "eth_research/portfolio/result.py",
+      "sha256": "2165e21eb9e1567fe98f602cf5b223d2a0cc5f1bca545c6833cb965586a1b32e",
+      "size": 22482
+    },
+    {
+      "path": "eth_research/portfolio/scenarios.py",
+      "sha256": "d1736e2bd5fae0ea72f30139a9960ec200dce02009e0dcfc8a4f2a5300ea0c30",
+      "size": 5525
+    },
+    {
+      "path": "eth_research/portfolio/schedule.py",
+      "sha256": "f09512f044f470a5cce6c74393407fe2d9aaf2f64bd55737371aeb06293deb35",
+      "size": 4542
+    },
+    {
+      "path": "eth_research/portfolio/solver.py",
+      "sha256": "7269309f1ccb80f9013b2b4581f67c790265ca9583864900edb1816a3666d2ff",
+      "size": 10981
+    },
+    {
+      "path": "eth_research/portfolio/streaming.py",
+      "sha256": "a6b7e12b27164bb5232e651921f60791ad7995704806125b0438ef209c4de970",
+      "size": 17462
+    },
+    {
+      "path": "eth_research/portfolio/targets.py",
+      "sha256": "ce3c19a1e6c7b0bbc723a18e4da8b210087af88934bfb58bc4a7cb3d884774e8",
+      "size": 7212
+    },
+    {
+      "path": "eth_research/portfolio/tolerances.py",
+      "sha256": "225c23f855f872e924a03e3ec052064a85bf6f0f410279f0cb4abb19789b902b",
+      "size": 2040
+    },
+    {
+      "path": "eth_research/portfolio/trace.py",
+      "sha256": "bd80d8aa712e665a597d705c7c83dd02a31d74ab4694d740281e0c3f079ef682",
+      "size": 11079
+    },
+    {
+      "path": "eth_research/portfolio/universe.py",
+      "sha256": "7d757cd60be9f41501a8648bbfd549b3d3e509c5bef4e31275e68b5b41e7b77b",
+      "size": 8797
+    },
+    {
+      "path": "eth_research/portfolio/validation.py",
+      "sha256": "2b8fa5cdb9b0e88a42a287f6920a1b4c7a0e2151285dd5b547120d612dcda67c",
+      "size": 4798
+    },
+    {
+      "path": "eth_research/portfolio/valuation.py",
+      "sha256": "0ab230b9443c2d1d6735106a90a6abe9bf4f1454aed0eeba441d377dd1bb643e",
+      "size": 4388
+    }
+  ],
+  "portfolio_tree_sha256": "e44126fa8c700505dfa5bb00840aabfefc0750a4b3368656d12b4733ce7d301f",
+  "registration_schema_version": 1,
+  "version": "1.1.0"
+}
