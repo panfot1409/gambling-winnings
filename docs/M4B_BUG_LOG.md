@@ -145,3 +145,20 @@ so this was wording, not a live escape). **Fix:** the docstring now frames the A
 best-effort lint with the import-closure as the load-bearing structural proof, and a new
 `test_portfolio_runtime_has_no_capability_indirection` flags `getattr` on a sensitive module and any
 `__dict__[...]` / `__builtins__` access across the package.
+
+## §42 Q — post-freeze red team of the registration surface
+
+After the R-phase registration landed, a post-freeze adversarial pass over the new
+`eth_research.portfolio.registration` verifier confirmed its drift detection holds — a changed
+accepted-M4A artifact, an edited portfolio member, and a non-empty sealed ledger are each caught as
+`RegistrationDriftError`. One robustness gap was found and fixed.
+
+### R-Q1 — a deleted bound artifact raised a raw `OSError` instead of drift (LOW) — FIXED
+
+`build_source_freeze` binds artifacts it does not itself build (the public-API snapshot, the CLI
+reference, the accepted M4A artifacts, the sealed ledgers). Deleting one of those made `verify`
+raise a raw `FileNotFoundError` rather than the fail-closed `RegistrationDriftError` its contract
+promises. **Fix:** a `_bound_sha256` helper wraps every bound read so a missing/unreadable bound
+artifact surfaces as `RegistrationDriftError`. The `verify` loop already fail-closed on the five
+built artifacts; this extends the same guarantee to the additionally-bound ones. Regression test in
+`tests/test_portfolio_registration.py` (`test_registration_missing_bound_artifact_fails_closed`).

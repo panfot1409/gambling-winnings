@@ -125,3 +125,13 @@ def test_registration_drift_is_detected(tmp_path: Path) -> None:
 def test_registration_missing_artifact_fails_closed(tmp_path: Path) -> None:
     with pytest.raises(registration.RegistrationDriftError):
         registration.verify(tmp_path)
+
+
+def test_registration_missing_bound_artifact_fails_closed(tmp_path: Path) -> None:
+    # A bound artifact the source-freeze hashes but does not itself build (the public-API snapshot /
+    # CLI reference / accepted M4A artifacts / ledgers) must surface as RegistrationDriftError when
+    # deleted, not as a raw OSError — a missing bound artifact is drift, not a crash.
+    root = _mirror(tmp_path)
+    (root / "research/m4b/public_api.json").unlink()
+    with pytest.raises(registration.RegistrationDriftError):
+        registration.verify(root)

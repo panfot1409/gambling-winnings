@@ -207,10 +207,23 @@ def build_distribution_manifest(repo_root: Path) -> dict[str, Any]:
     }
 
 
+def _bound_sha256(repo_root: Path, rel: str) -> str:
+    """The sha256 of a bound artifact, failing closed as drift if it is missing/unreadable.
+
+    ``build_source_freeze`` binds artifacts beyond the five it also builds (the public-API snapshot,
+    the CLI reference, the accepted M4A artifacts, the sealed ledgers), so a raw ``OSError`` here
+    must surface as :class:`RegistrationDriftError`: a missing bound artifact is drift, not a crash.
+    """
+    try:
+        return sha256_hex((repo_root / rel).read_bytes())
+    except OSError as exc:
+        raise RegistrationDriftError(f"bound artifact missing/unreadable: {rel}: {exc}") from exc
+
+
 def build_source_freeze(repo_root: Path) -> dict[str, Any]:
-    ledgers = {rel: sha256_hex((repo_root / rel).read_bytes()) for rel in SEALED_LEDGERS}
-    m4b_hashes = {rel: sha256_hex((repo_root / rel).read_bytes()) for rel in _M4B_FROZEN_ARTIFACTS}
-    m4a_hashes = {rel: sha256_hex((repo_root / rel).read_bytes()) for rel in M4A_ACCEPTED_ARTIFACTS}
+    ledgers = {rel: _bound_sha256(repo_root, rel) for rel in SEALED_LEDGERS}
+    m4b_hashes = {rel: _bound_sha256(repo_root, rel) for rel in _M4B_FROZEN_ARTIFACTS}
+    m4a_hashes = {rel: _bound_sha256(repo_root, rel) for rel in M4A_ACCEPTED_ARTIFACTS}
     return {
         "registration_schema_version": REGISTRATION_SCHEMA_VERSION,
         "package": "eth-research",

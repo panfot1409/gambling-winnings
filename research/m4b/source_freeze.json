@@ -11,7 +11,7 @@
   },
   "m4b_frozen_artifacts": {
     "research/m4b/cli_reference.txt": "32039cbc5a9a3ea4bfc1b86f85a6fc288cece182c865f4ce2354e687fb49293b",
-    "research/m4b/distribution_manifest.json": "815961660cd57ad26daf5d9bbbd796760fb9c09c5fa6a057cd92e173f1bd8683",
+    "research/m4b/distribution_manifest.json": "df43ea33b5ab7b4513b0518111d2bf1729dc540799cad986d24f1a08a9ea2f8c",
     "research/m4b/public_api.json": "006d433281dc1a29680a93944d929d92924184807a473e66e98c341eb91a5a75",
     "research/m4b/reference_expected_results.json": "f7afd088403db6a85049fbc5b74f0f95c157c47a97e2efe4a9296164ffaa30c1",
     "research/m4b/reference_protocol.json": "83f46bff6747d558070f107fcafd08113185a47aa2c1a4a2e51a71975208f2e5",

@@ -110,8 +110,8 @@
     },
     {
       "path": "eth_research/portfolio/registration.py",
-      "sha256": "afb4c5ce7dec41ca353ee88b1761849dc534518ba872c187b57280de4a0f39eb",
-      "size": 12910
+      "sha256": "201712903219be580b4a1b479dbec14b79f33013ee5a01adef99cfb572e6e0d4",
+      "size": 13519
     },
     {
       "path": "eth_research/portfolio/replay.py",
@@ -174,7 +174,7 @@
       "size": 4388
     }
   ],
-  "portfolio_tree_sha256": "0d29e747158e871459081ba502ed0a831c95aefe6e7593f46cd6ce00aa086400",
+  "portfolio_tree_sha256": "e44126fa8c700505dfa5bb00840aabfefc0750a4b3368656d12b4733ce7d301f",
   "registration_schema_version": 1,
   "version": "1.1.0"
 }
