@@ -162,14 +162,14 @@ RELEASE_LIFECYCLE = (
 # has been delivered through the access-controlled Actions artifact. ``--check`` fails closed unless
 # the committed ``release_state.json`` matches this constant.
 #
-# Advanced to ``shipped`` after the private-GA merge (MPGA) went to ``main`` with all required CI
-# terminal-green, and the deterministic private payload was built and delivered on an independent
-# GitHub runner via the dispatch-only ``private-release-build.yml`` to this PRIVATE repository's own
-# access-controlled Actions artifact store, then verified member-exact against the committed manifest
-# and the reproducible-build canonical identities. ``shipped`` marks that private delivery occurred;
-# it does NOT mean any public publication — ``published`` stays false and every public channel stays
-# closed. The durable install channel is the immutable merge commit (git+ssh commit-pin); the Actions
-# artifact is a re-buildable convenience copy, not the source of truth.
+# Advanced to ``shipped`` after the private-GA merge (MPGA) reached ``main`` with all required
+# CI terminal-green and the deterministic private payload was built and delivered on an
+# independent GitHub runner, via the dispatch-only ``private-release-build.yml``, to this PRIVATE
+# repository's own access-controlled Actions artifact store, then verified member-exact against
+# the committed manifest and the reproducible-build canonical identities. ``shipped`` marks that
+# private delivery occurred; it does NOT mean any public publication — ``published`` stays false
+# and every public channel stays closed. The durable install channel is the immutable merge
+# commit (git+ssh commit-pin); the Actions artifact is a re-buildable convenience copy.
 RELEASE_STATE = "shipped"
 
 
