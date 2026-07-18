@@ -1,0 +1,40 @@
+{
+  "accepted_distribution_channels": [
+    "private_repository_git_commit",
+    "private_actions_artifact",
+    "private_github_release_if_tagged"
+  ],
+  "artifact_retention_expectation": "30_days",
+  "build_environment_contract": {
+    "builder": "uv",
+    "python": "3.12.3",
+    "source_date_epoch": "1735689600"
+  },
+  "distribution_classification": "private",
+  "forbidden_distribution_channels": [
+    "public_pypi",
+    "test_pypi",
+    "public_github_release",
+    "public_package_registry",
+    "anonymous_object_storage"
+  ],
+  "license_present": false,
+  "maximum_bundle_bytes": 52428800,
+  "open_source_claim_allowed": false,
+  "private_actions_artifact_allowed": true,
+  "private_github_release_allowed_if_tagged": true,
+  "private_repository_install_allowed": true,
+  "project_name": "eth-research",
+  "public_github_release_allowed": false,
+  "public_package_registry_allowed": false,
+  "public_pypi_allowed": false,
+  "repository_visibility_required": "private",
+  "required_governed_state_digest": "b2077eaf18ad21f47f5978c5ced7c419a100c6ff2b89a9dd21a47f94b36bf7c2",
+  "required_ledger_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "required_source_commit": null,
+  "required_tree_sha256": null,
+  "schema_version": "1",
+  "test_pypi_allowed": false,
+  "threat_model_revision": "1",
+  "version": "1.1.0"
+}

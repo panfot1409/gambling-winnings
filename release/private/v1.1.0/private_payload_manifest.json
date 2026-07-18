@@ -1,0 +1,41 @@
+{
+  "governed_state_digest": "b2077eaf18ad21f47f5978c5ced7c419a100c6ff2b89a9dd21a47f94b36bf7c2",
+  "ledger_sha256": {
+    "research/m2b/test_evaluations.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "research/m3a/development_gate_access.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "research/m3d/prospective_evaluations.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "members": [
+    {
+      "filename": "PRIVATE_INSTALL.md",
+      "sha256": "f8f20a850a73808869b4b1f0de84da7bdd94d834740818e57b92e19329c3d318"
+    },
+    {
+      "filename": "SHA256SUMS",
+      "sha256": "93237fee99285358a07109cc8cd2bbf3c245ea508ebbb51d5dc4dbe47944b874"
+    },
+    {
+      "filename": "eth_research-1.1.0-py3-none-any.whl",
+      "sha256": "f2f8df773de06a412851382c968cfc2b0195eadb3954b42e07ce1a68ff3a3843"
+    },
+    {
+      "filename": "eth_research-1.1.0.tar.gz",
+      "sha256": "042b672f3bea3dc886ec2fef3113aecaa1c99aec694d7629142a14f8806d2ce7"
+    },
+    {
+      "filename": "provenance.json",
+      "sha256": "43abe83e23a82ea7d9cb0dcaa4320e6bbf77203b2d9dfcb8dfc6d6fb524da5b5"
+    },
+    {
+      "filename": "sbom.cdx.json",
+      "sha256": "7fd0396afbf4e642d724ea2a90ae3d25d108de5540f472fc1e73eecc11fa2731"
+    }
+  ],
+  "payload_filename": "eth-research-1.1.0-private-payload.tar",
+  "policy_sha256": "22f42d7854eec8a8f59fc37b2e1fd85e027d337d0b03ce006797c227f2e1a081",
+  "project_name": "eth-research",
+  "schema_version": "1",
+  "source_member_count": 215,
+  "source_tree_digest": "bebe55b3fdbb7a3768d1ca70a33e8f64b42adaab2826406db15ebd6606be5615",
+  "version": "1.1.0"
+}

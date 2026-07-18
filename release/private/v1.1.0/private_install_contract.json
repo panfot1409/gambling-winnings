@@ -1,0 +1,55 @@
+{
+  "channels": [
+    {
+      "branch_or_tag_pin_allowed": false,
+      "id": "A",
+      "name": "private_git_commit_pin",
+      "reproducibility_pin": "full_40_hex_commit_sha",
+      "requires_repository_authorization": true,
+      "steps": [
+        "Authenticate to the private repository over SSH.",
+        "pip install \"eth-research @ git+ssh://git@github.com/panfot1409/gambling-winnings.git@<FULL_40_HEX_SHA>\"",
+        "Third-party dependencies resolve from the caller's configured indexes."
+      ],
+      "transport": "git+ssh"
+    },
+    {
+      "id": "B",
+      "install_project_wheel_with_no_deps": true,
+      "name": "private_wheel_payload",
+      "steps": [
+        "Download the access-controlled payload artifact (eth-research-1.1.0-private-payload.tar).",
+        "Verify the payload SHA-256 against the run receipt / registered manifest.",
+        "Verify SHA256SUMS for every payload member.",
+        "Unpack the payload into a scratch directory.",
+        "Create a clean virtual environment.",
+        "Install the pinned runtime dependencies (numpy, pandas, pyarrow).",
+        "Install the project wheel with --no-deps (it needs no index).",
+        "Run 'eth-research doctor' / 'version' and exercise the public API."
+      ],
+      "transport": "private_actions_artifact"
+    }
+  ],
+  "project_name": "eth-research",
+  "public_index_install": false,
+  "required_runtime_dependencies": [
+    {
+      "locked_version": "2.5.1",
+      "name": "numpy",
+      "specifier": "numpy>=1.26"
+    },
+    {
+      "locked_version": "3.0.3",
+      "name": "pandas",
+      "specifier": "pandas>=2.2"
+    },
+    {
+      "locked_version": "25.0.0",
+      "name": "pyarrow",
+      "specifier": "pyarrow>=15"
+    }
+  ],
+  "schema_version": "1",
+  "version": "1.1.0",
+  "wheel_is_standalone": false
+}
