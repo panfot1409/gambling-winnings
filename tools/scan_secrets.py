@@ -16,8 +16,13 @@ Detectors (each reports a REDACTED fingerprint only — never the raw match):
 * ``aws_secret_access_key`` — an exactly-40-char base64 run that is high-entropy AND mixes
   upper/lower/digit AND is not pure hex (so a 64-hex SHA-256 digest, a 40-hex git SHA, or a
   wheel ``RECORD`` url-safe-base64 hash — which is 43 chars and uses ``-``/``_`` — never trips).
-* ``github_token`` — ``gh[pousr]_`` + 36+ base62.
-* ``slack_token`` — ``xox[baprs]-`` tokens.
+* ``github_token`` — legacy ``gh[pousr]_`` + 36+ base62.
+* ``github_finegrained_token`` — current ``github_pat_…`` fine-grained PAT (also inside a
+  ``git+https://x-access-token:<token>@github.com`` remote).
+* ``gitlab_token`` — ``glpat-…`` personal access token.
+* ``google_api_key`` — ``AIza`` + 35 key chars.
+* ``stripe_key`` — ``sk_live_``/``rk_live_`` live secret keys.
+* ``slack_token`` / ``slack_app_token`` — ``xox[baprs]-`` and ``xapp-`` tokens.
 * ``secret_assignment`` — ``password``/``secret``/``api_key``/``token``-style assignments to a
   quoted, whitespace-free, non-placeholder, credential-shaped literal.
 
@@ -48,6 +53,11 @@ _BEGIN = _D5 + "BEGIN "
 _PRIVATE_KEY = "PRIVATE" + " " + "KEY"
 _AKIA = "A" + "KIA"
 _ASIA = "A" + "SIA"
+_GH_PAT = "github" + "_pat_"  # GitHub fine-grained PAT prefix
+_GLPAT = "gl" + "pat-"  # GitLab PAT prefix
+_AIZA = "AI" + "za"  # Google API key prefix
+_LIVE = "_live_"  # Stripe live-key infix
+_XAPP = "xa" + "pp-"  # Slack app-level token prefix
 
 # --------------------------------------------------------------------------- #
 # structural detector patterns                                                 #
@@ -57,6 +67,13 @@ _PGP_RE = re.compile(_BEGIN + "PGP " + _PRIVATE_KEY + " BLOCK" + _D5)
 _AWS_KEY_ID_RE = re.compile(r"\b(?:" + _AKIA + "|" + _ASIA + r")[0-9A-Z]{16}\b")
 _GITHUB_TOKEN_RE = re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b")
 _SLACK_TOKEN_RE = re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")
+# GitHub fine-grained PAT (``github_pat_…``) — the current format, distinct from the legacy ``ghp_``
+# family; matched even inside a ``git+https://x-access-token:<token>@github.com`` remote.
+_GITHUB_FINEGRAINED_RE = re.compile(r"\b" + _GH_PAT + r"[A-Za-z0-9_]{36,}\b")
+_GITLAB_TOKEN_RE = re.compile(r"\b" + _GLPAT + r"[A-Za-z0-9_-]{20,}\b")
+_GOOGLE_API_KEY_RE = re.compile(_AIZA + r"[0-9A-Za-z_-]{35}")
+_STRIPE_KEY_RE = re.compile(r"\b(?:sk|rk)" + _LIVE + r"[0-9A-Za-z]{20,}\b")
+_SLACK_APP_TOKEN_RE = re.compile(r"\b" + _XAPP + r"[0-9A-Za-z-]{10,}\b")
 
 # A *maximal* base64-family run (standard ``+/`` plus url-safe ``-_``), matched greedily so a
 # longer blob is never sliced into a spurious 40-window. :func:`_is_aws_secret` then requires the
@@ -183,7 +200,12 @@ _STRUCTURAL: tuple[tuple[str, re.Pattern[str], Callable[[str], bool] | None], ..
     ("aws_access_key_id", _AWS_KEY_ID_RE, None),
     ("aws_secret_access_key", _B64_RUN_RE, _is_aws_secret),
     ("github_token", _GITHUB_TOKEN_RE, None),
+    ("github_finegrained_token", _GITHUB_FINEGRAINED_RE, None),
+    ("gitlab_token", _GITLAB_TOKEN_RE, None),
+    ("google_api_key", _GOOGLE_API_KEY_RE, None),
+    ("stripe_key", _STRIPE_KEY_RE, None),
     ("slack_token", _SLACK_TOKEN_RE, None),
+    ("slack_app_token", _SLACK_APP_TOKEN_RE, None),
 )
 
 

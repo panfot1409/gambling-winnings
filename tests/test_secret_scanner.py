@@ -105,6 +105,15 @@ _PLANTED: tuple[tuple[str, str, str], ...] = (
         _a("gh", "p", "_") + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8",
         "github_token",
     ),
+    (
+        "github_finegrained",
+        _a("github", "_pat_") + "11ABCDEF012345678_abcdefghijklmnopqrstuvwxyz0123456789",
+        "github_finegrained_token",
+    ),
+    ("gitlab", _a("gl", "pat-") + "Ab3xY7zQ9mNp2Kr5Ws8T", "gitlab_token"),
+    ("google", _a("AI", "za") + "SyD-abcdefghijklmnopqrstuvwxyz01234", "google_api_key"),
+    ("stripe", _a("sk", "_live_") + "51AbCdEfGhIjKlMnOpQr", "stripe_key"),
+    ("slack_app", _a("xa", "pp-") + "1-A2b3C4d5E6f7G8h9", "slack_app_token"),
     ("slack", _a("xo", "xb", "-") + "2f3a4b5c6d7e8f9a0b1c2d3e", "slack_token"),
     (
         "assign_api_key",

@@ -25,16 +25,23 @@ The authoritative runtime is pinned to:
 
 ## Pure function of the source
 
-The wheel and the sdist are a **pure function** of exactly three inputs:
+The **wheel** is a pure function of exactly three inputs:
 
 - `src/eth_research/**` (the runtime package, including `py.typed`),
 - `pyproject.toml`,
 - `README.md`.
 
-Nothing else in the repository can change them. `tests/`, `tools/`, `docs/`, `research/`, the
-lockfile, the CI YAML, and every dotfile are excluded from the sdist by the anchored
-`tool.hatch.build.targets.sdist.only-include` allowlist and are irrelevant to the wheel. The
-private payload tar is in turn a pure, normalized function (sorted members, `mtime=0`, mode
+The **sdist** is a pure function of those three inputs **plus the repository-root `.gitignore`**:
+hatchling always injects that one benign support file into the sdist regardless of the anchored
+`tool.hatch.build.targets.sdist.only-include` allowlist (see the note at `pyproject.toml`), and the
+distribution scanner allowlists exactly that single extra file. `tests/`, `tools/`, `docs/`,
+`research/`, the lockfile, the CI YAML, and every *other* dotfile are excluded and are irrelevant to
+both artifacts. One consequence worth stating plainly: editing the root `.gitignore` changes the
+sdist (and therefore the payload) even though it leaves the wheel unchanged — the `@slow`
+reproduce-from-manifest guard catches exactly that drift. Nothing else in the repository can change
+either artifact.
+
+The private payload tar is in turn a pure, normalized function (sorted members, `mtime=0`, mode
 `0644`, uid/gid `0`) of the wheel bytes and sdist bytes plus the deterministically rendered SBOM,
 install guide, provenance, `SHA256SUMS`, and manifest — see `assemble_members` /
 `normalized_tar_bytes` in `tools/private_release.py`.

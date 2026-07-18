@@ -153,3 +153,33 @@ def test_two_independent_builds_yield_byte_identical_artifacts() -> None:
     assert payload_a == payload_b, "payload is not byte-identical across two independent builds"
     # The payload is a pure function of the wheel+sdist bytes: identical inputs -> identical output.
     assert TOOL.assemble_payload_bytes(REPO, wheel_a, sdist_a) == payload_a
+
+
+# --------------------------------------------------------------------------- #
+# (d) the doc honestly accounts for the root .gitignore as a 4th sdist input   #
+# --------------------------------------------------------------------------- #
+def test_reproducibility_doc_names_gitignore_as_the_sdist_extra_input() -> None:
+    # hatchling always ships the repo-root ``.gitignore`` in the sdist, so the sdist is a function
+    # of four inputs, not three. The doc must say so and must not claim every dotfile is excluded.
+    text = DOC_PATH.read_text(encoding="utf-8")
+    assert ".gitignore" in text, "the doc must name the root .gitignore as an sdist input"
+    assert "every dotfile are excluded" not in text, "the doc still overclaims dotfile exclusion"
+
+
+@pytest.mark.slow
+def test_sdist_contains_the_root_gitignore_input() -> None:
+    # Prove the reality the doc now documents: the built sdist carries the root ``.gitignore``.
+    import io
+    import tarfile
+
+    if not _uv_available():
+        pytest.skip("uv/git required for the deterministic build")
+    try:
+        _wheel, sdist = TOOL._build_wheel_and_sdist(REPO)
+    except FileNotFoundError:  # pragma: no cover
+        pytest.skip("uv is not available")
+    except subprocess.CalledProcessError as exc:  # pragma: no cover
+        pytest.skip(f"build unavailable (offline?): {exc.stderr}")
+    with tarfile.open(fileobj=io.BytesIO(sdist), mode="r:gz") as tf:
+        roots = {name.split("/", 1)[1] for name in tf.getnames() if "/" in name}
+    assert ".gitignore" in roots, f"expected the root .gitignore in the sdist; got {sorted(roots)}"

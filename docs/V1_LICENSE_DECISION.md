@@ -2,9 +2,9 @@
 > The owner decided to keep the project private, so the "public publication" framing below is
 > historical. The operative facts are unchanged and still hold: **no `LICENSE` exists and this program
 > does not choose one.** Under a private-distribution model no public license is required; public
-> redistribution remains unauthorized by project metadata regardless. The "steps to clear this gate"
-> at the end describe the *abandoned* public route and must not be executed. See
-> `docs/V1_PRIVATE_GA_PLAN.md` and `docs/V1_PRIVATE_DISTRIBUTION.md`.
+> redistribution remains unauthorized by project metadata regardless. Any prior "steps to clear this
+> gate" that described the *abandoned* public route have been **removed** so no public-publication
+> runbook remains in this file. See `docs/V1_PRIVATE_GA_PLAN.md` and `docs/V1_PRIVATE_DISTRIBUTION.md`.
 
 # V1 license decision — external human gate
 
@@ -56,19 +56,17 @@ is unregistered/available as of the check). This program will **not** register a
 the name, or upload anything under it — registration is part of the same publication decision that the
 license gate governs.
 
-## Exact steps for the maintainer to clear this gate
+## Public publication is abandoned (no runbook here)
 
-1. **Choose** a license appropriate to the project's intent (e.g. a permissive `MIT` / `Apache-2.0`,
-   or a copyleft `GPL-3.0-or-later` — this is the owner's call, and note the research-only,
-   no-warranty posture the project already documents).
-2. Add a top-level **`LICENSE`** file with the full license text and the correct copyright line.
-3. Declare it in `pyproject.toml`:
-   - `license = "MIT"` (SPDX expression) — or the chosen SPDX id, and/or a
-     `license-files = ["LICENSE"]` entry;
-   - add the matching `License :: OSI Approved :: ...` **classifier**.
-4. Re-run the release pipeline: the `publish-release.yml` workflow and the PyPI Trusted-Publishing
-   path become eligible only once a license is present and the PyPI trusted publisher is configured
-   (see `docs/V1_PUBLICATION_PIPELINE.md`).
+An earlier draft of this memo ended with step-by-step instructions to add a license and re-enable a
+public PyPI upload. Because the owner decided to keep the project **private**, that public route is
+**abandoned and must not be executed**, and the actionable runbook has been **removed** so no
+public-publication instructions remain in this file — mirroring the neutralization of
+`docs/V1_PUBLICATION_PIPELINE.md`. There is no longer a `publish-release.yml` workflow or any
+Trusted-Publishing path in the repository.
 
-Until step 1–3 are done by a human, the package remains **built, hardened, and shippable in every
-respect except the license**, and public publication stays intentionally closed.
+Choosing a license remains solely the copyright holder's decision and is **not** required for the
+private distribution the project actually ships. If the owner ever revisits public distribution,
+that is a fresh decision taken outside this program. The package is built, hardened, and privately
+shippable today; public publication stays intentionally closed. See
+`docs/V1_PRIVATE_DISTRIBUTION.md`.

@@ -95,6 +95,10 @@ jobs:
         run: |
           set -euo pipefail
           uv python install 3.12.3
+      - name: Install CPython 3.13 for the fresh-consumer matrix
+        run: |
+          set -euo pipefail
+          uv python install 3.13
       - name: Verify uv.lock matches pyproject.toml
         run: |
           set -euo pipefail
@@ -114,21 +118,45 @@ jobs:
           set -euo pipefail
           uv run --no-sync --python 3.12.3 python tools/release_evidence.py --check --repo-root .
           uv run --no-sync --python 3.12.3 python tools/private_release.py --check --repo-root .
-      - name: The private payload is byte-deterministic (frozen-state verifiers + double build)
+      - name: The private payload is byte-deterministic and reproduces the committed manifest
         run: |
           set -euo pipefail
+          # Double-build self-consistency (two builds equal each other) + frozen-state verifiers.
           uv run --no-sync --python 3.12.3 python tools/private_release.py verify --repo-root .
+          # A fresh build must ALSO equal the COMMITTED manifest members, not merely itself. This
+          # slow guard re-derives the wheel+sdist and compares to release/private/v1.1.0/*; fail if
+          # it is skipped/deselected rather than passed.
+          node="tests/test_private_release.py::test_committed_manifest_binary_hashes_reproduce_from_build"
+          out=$(uv run --no-sync --python 3.12.3 pytest "$node" -rsxX -o addopts="" 2>&1) \
+            || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -qE "[0-9]+ passed" || { echo "FAIL: manifest fidelity did not pass"; exit 1; }
+          if echo "$out" | grep -qiE "skipped|deselected|xfailed|no tests ran"; then
+            echo "FAIL: committed-manifest fidelity was skipped on the authoritative runtime"
+            exit 1
+          fi
       - name: Build the deterministic private payload into dist_private/
         run: |
           set -euo pipefail
           uv run --no-sync --python 3.12.3 python tools/private_release.py build --repo-root . --out-dir dist_private
-      - name: Consumer matrix (installed-wheel end-to-end), if present
+      - name: Fresh-consumer install matrix must execute (never skip)
+        # The §9 two-channel consumer matrix (wheel/sdist/commit x {3.12.3, 3.13}, out-of-tree,
+        # --no-deps) and the installed-wheel E2Es must actually run here. A renamed/removed file or
+        # an all-skipped run is a failure, not a silent pass; 3.13 is installed above so no cell
+        # skips for a missing interpreter.
         run: |
           set -euo pipefail
-          if [ -f tests/test_consumer_e2e.py ]; then
-            uv run --no-sync --python 3.12.3 pytest -q -p no:cacheprovider tests/test_consumer_e2e.py
-          else
-            echo "no consumer matrix present; skipping"
+          test -f tests/test_private_consumer_matrix.py \
+            || { echo "FAIL: the §9 private consumer matrix is missing"; exit 1; }
+          out=$(uv run --no-sync --python 3.12.3 pytest -rsxX -o addopts="" \
+            tests/test_private_consumer_matrix.py \
+            tests/test_consumer_e2e.py \
+            tests/test_m4b_consumer_e2e.py 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -qE "[0-9]+ passed" || { echo "FAIL: consumer matrix did not pass"; exit 1; }
+          if echo "$out" | grep -qiE "skipped|deselected|no tests ran"; then
+            echo "FAIL: a consumer proof was skipped on the authoritative runtime"
+            exit 1
           fi
       - name: Emit the dynamic release receipt into the output dir (never committed)
         run: |
