@@ -584,7 +584,7 @@
       },
       {
         "path": "eth_research/m3e/verify_m3e_program.py",
-        "sha256": "55036983d19be8bb7775307d4b6acd66164f20851870f8747832ab62c746a603"
+        "sha256": "b00b49cdcbbc68674db5f025d05f6193c517820b1d66c30acae7a0aee1f3810c"
       },
       {
         "path": "eth_research/m3f/__init__.py",
@@ -640,7 +640,7 @@
       },
       {
         "path": "eth_research/m3f/workflow_inventory.py",
-        "sha256": "d3023cb50006e3c7e21d250f9d6029a120b93a2daef3208e13da8ad65dececbf"
+        "sha256": "136c8e9f06a308678958f46358b3b931627a66a6c15b05c548757cfa94672c6e"
       },
       {
         "path": "eth_research/m4a/__init__.py",
@@ -863,7 +863,7 @@
         "sha256": "90dc07f8d24aa37a363c8f8c85dc6cc2c8ad84ad64cce409a0e8408f42efa52b"
       }
     ],
-    "tree_digest": "bebe55b3fdbb7a3768d1ca70a33e8f64b42adaab2826406db15ebd6606be5615"
+    "tree_digest": "6fa22c564f3a15817f7c948d38feb5fdd779a8079f8a0aa3080056e85568b272"
   },
   "generated_by": "tools/release_evidence.py",
   "governed_state": {

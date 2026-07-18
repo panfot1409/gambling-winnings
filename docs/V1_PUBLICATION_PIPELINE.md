@@ -1,80 +1,36 @@
-# V1 publication pipeline
+# V1 publication pipeline — SUPERSEDED (public route abandoned)
 
-This describes how `eth-research` v1.1.0 would be published, and the **three independent gates** that
-currently keep public publication closed. The GA hardening builds and verifies everything that does
-*not* require crossing those gates.
+> **⛔ SUPERSEDED (2026-07-18).** The owner decided to **keep the project private**. The public
+> publication pipeline this document previously described — a PyPI Trusted-Publishing (OIDC) workflow
+> and a public GitHub Release — is **abandoned and must not be executed.** The actionable OIDC workflow
+> template and the "steps to publish to PyPI" runbook have been **removed** from this file so no
+> public-publication vector remains here. The authoritative path is now private distribution.
 
-## The three publication gates (all must be cleared by a human)
+## What this used to be (historical, non-actionable)
 
-1. **License gate.** No `LICENSE` exists and this program will not choose one
-   (`docs/V1_LICENSE_DECISION.md`). Distributing a package with no license grants users no rights.
-2. **PyPI Trusted-Publishing gate.** Publishing to PyPI without a long-lived token requires a human to
-   configure a **pending publisher** on PyPI (project name, owner, repo, workflow filename,
-   environment) before the first upload. This cannot be done from the repository.
-3. **Governance gate (repository-internal).** The repository's own security tests
-   (`tests/test_workflow_security.py`, `tests/test_m3f_inventories.py`) assert that **no** workflow may
-   grant `contents: write`, request an **`id-token`** permission, reference a **secret**, or upload an
-   artifact — and that every workflow references only the `astral.sh` host with SHA-pinned actions.
-   PyPI Trusted Publishing needs `permissions: id-token: write` and the `pypa/gh-action-pypi-publish`
-   action, both of which the current invariant forbids. Activating a live publish workflow therefore
-   requires a **reviewed relaxation of that invariant** — a deliberate governance decision, not an
-   automated edit.
+During the earlier public-GA program, this document proposed publishing `eth-research` to the public
+PyPI index via an OIDC Trusted-Publishing workflow, gated behind three prerequisites (a chosen license,
+a configured index publisher, and a governance relaxation to permit an `id-token` workflow). None of
+that was ever executed: no public index publisher was configured, no license was chosen, and no
+publication workflow was ever made live. The three annotated tags were never pushed (organization
+tag-write policy returned HTTP 403).
 
-Because of gate 3, the OIDC publish workflow below is shipped as a **template**, not as a live
-`.github/workflows/*.yml`. The dry-run workflow, which needs none of those permissions, ships live.
+## Why it is abandoned
 
-## What ships live: `release-dry-run.yml` (read-only)
+The owner's governing decision is to keep the repository and its distribution **private**. Public
+publication of any kind is now prohibited (see `docs/V1_PRIVATE_GA_PLAN.md` §31 and the standing
+public-publication kill switch enforced by the test suite). There is therefore no public pipeline to
+document.
 
-A `contents: read` workflow that builds the wheel + sdist on the authoritative runtime, runs the
-private-data distribution scanner, computes SHA-256 checksums, generates an SBOM, and proves the
-double build is byte-identical — and **uploads nothing, publishes nothing, needs no secret or
-id-token**. This is the maximum publication-adjacent automation compatible with the governance
-invariant, and it continuously proves the release is buildable and clean.
+## The private replacement
 
-## Template (NOT active): OIDC Trusted-Publishing workflow
+- **`docs/V1_PRIVATE_DISTRIBUTION.md`** — the private distribution model and the two authorized
+  channels (immutable Git commit pin; access-controlled private wheel payload).
+- **`docs/V1_PRIVATE_RELEASE_OPERATIONS.md`** — how the private release is built, delivered, and
+  verified.
+- **`docs/V1_PRIVATE_RELEASE_THREAT_MODEL.md`** — the privacy/leakage threat model.
+- **`.github/workflows/private-release-build.yml`** — a dispatch-only, least-privilege workflow that
+  builds and uploads the payload as a **private** GitHub Actions artifact (no public destination, no
+  `id-token`, no secret, no upload to any index).
 
-Activate this only after gates 1–3 are cleared. It is intentionally **not** under
-`.github/workflows/` so it cannot run — and cannot violate the tested invariant — until a maintainer
-chooses to enable it and adjusts the security test to permit exactly this one workflow.
-
-```yaml
-# .github/workflows/publish-release.yml  — TEMPLATE, do not enable without clearing gates 1-3
-name: Publish release
-on:
-  push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
-permissions:
-  contents: read
-  id-token: write            # OIDC for PyPI Trusted Publishing (forbidden by current governance test)
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2 (SHA-pinned)
-      - name: Install uv (hash-pinned wheel)
-        run: |
-          python3 -m venv "$RUNNER_TEMP/uvenv"
-          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
-          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
-      - name: Build
-        run: uv build
-      - name: Scan distribution (must be private-data-safe)
-        run: uv run --no-sync python tools/scan_distribution.py dist/*.whl dist/*.tar.gz
-      - name: Publish to PyPI via Trusted Publishing
-        uses: pypa/gh-action-pypi-publish@<PIN-TO-40-HEX-SHA>   # requires a reviewed pin
-        # No password/token: OIDC only. Requires a PyPI pending publisher configured for this repo.
-```
-
-## Maintainer runbook to actually publish
-
-1. Clear gate 1 — add a `LICENSE` and declare it in `pyproject.toml` (`docs/V1_LICENSE_DECISION.md`).
-2. Clear gate 2 — create the PyPI project + pending publisher bound to this repo and
-   `publish-release.yml`.
-3. Clear gate 3 — copy the template to `.github/workflows/publish-release.yml`, pin
-   `pypa/gh-action-pypi-publish` to a reviewed 40-hex SHA, and update `tests/test_workflow_security.py`
-   to allow `id-token: write` **only** for that one workflow (with a comment justifying it).
-4. Push the annotated `v1.1.0` tag → the workflow builds, scans, and publishes via OIDC.
-5. Verify with `pip install eth-research==1.1.0` in a clean environment (`docs/REPRODUCIBILITY.md`).
-
-Until all three are cleared, `release_state.json` records the release as **built and hardened but not
-published**, which is the honest terminal state of this program.
+No public index, public registry, or public GitHub Release is part of the private pipeline.

@@ -256,6 +256,17 @@ def _scan_m3e_imports(repo_root: str | Path) -> None:
         raise M3EValidationError(f"m3e imports non-allowlisted or network modules: {offenders}")
 
 
+# The single authorized private-repo release-artifact channel. This exact basename may upload a
+# workflow artifact (the closed, access-controlled dist_private/ payload to the PRIVATE repo's own
+# Actions artifact store); every OTHER workflow still fails closed on any artifact upload. The
+# exemption is narrow and effectively conditional: this scanner refuses that same file for any write
+# grant, secret reference, push, PR-merge verb, Coinbase host, or missing permissions block via the
+# checks ABOVE this line, each of which fails independently before the upload check is reached — so
+# the file is exempt from the upload ban only while it stays otherwise least-privilege. Mirrors
+# eth_research.m3f.workflow_inventory.check_inventory; see tests/test_private_workflow_security.py.
+_PRIVATE_RELEASE_UPLOAD_BASENAME = "private-release-build.yml"
+
+
 def _no_unsafe_workflow(repo_root: str | Path) -> None:
     workflows = Path(repo_root) / ".github/workflows"
     files = sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")])
@@ -285,7 +296,9 @@ def _no_unsafe_workflow(repo_root: str | Path) -> None:
             raise M3EValidationError(
                 f"{path.name} merges, undrafts, retargets, or auto-merges a PR"
             )
-        if "upload-artifact" in text or "upload-pages-artifact" in text:
+        uploads_pages = "upload-pages-artifact" in text
+        uploads_artifact = "upload-artifact" in text
+        if uploads_pages or (uploads_artifact and path.name != _PRIVATE_RELEASE_UPLOAD_BASENAME):
             raise M3EValidationError(f"{path.name} uploads a workflow artifact")
 
 

@@ -26,6 +26,12 @@ REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 CI = WORKFLOWS / "ci.yml"
 
+# The single authorized private-repo release-artifact channel (basename only). Every other
+# workflow must upload nothing; the exception is enforced conditionally in
+# eth_research.m3f.workflow_inventory.check_inventory and exhaustively probed in
+# tests/test_private_workflow_security.py.
+ARTIFACT_UPLOAD_ALLOWLIST = {"private-release-build.yml"}
+
 # Only the uv installer host may appear, and only in read-only workflows.
 ALLOWED_HOSTS = {"astral.sh"}
 _URL_RE = re.compile(r"https://([A-Za-z0-9.\-]+)")
@@ -130,9 +136,75 @@ class TestSupplyChainHardening:
             assert "secrets." not in path.read_text(encoding="utf-8"), f"{path.name} uses a secret"
 
     def test_no_artifact_upload(self) -> None:
-        # No workflow may upload artifacts (which could exfiltrate market data).
+        # No workflow may upload artifacts (which could exfiltrate market data) EXCEPT the single
+        # allowlisted private-release payload builder, which uploads only the closed, access-
+        # controlled dist_private/ directory to this PRIVATE repo's own Actions artifact store
+        # (see src/eth_research/m3f/workflow_inventory.py::check_inventory and
+        # tests/test_private_workflow_security.py). Every OTHER workflow still uploads nothing.
         for path in _all_workflow_files():
-            assert "upload-artifact" not in path.read_text(encoding="utf-8")
+            if path.name in ARTIFACT_UPLOAD_ALLOWLIST:
+                continue
+            assert "upload-artifact" not in path.read_text(encoding="utf-8"), (
+                f"{path.name} uploads an artifact but is not the allowlisted builder"
+            )
+
+    def test_exactly_one_workflow_uploads_and_it_is_the_allowlisted_one(self) -> None:
+        uploaders = {
+            path.name
+            for path in _all_workflow_files()
+            if "upload-artifact" in path.read_text(encoding="utf-8")
+        }
+        assert uploaders == ARTIFACT_UPLOAD_ALLOWLIST
+
+    def test_allowlisted_uploader_keeps_every_other_protection(self) -> None:
+        # The check_inventory exception is CONDITIONAL: the allowlisted workflow must remain
+        # contents:read, request no OIDC token, reference no secret, and stay fully SHA-pinned.
+        path = WORKFLOWS / "private-release-build.yml"
+        text = path.read_text(encoding="utf-8")
+        assert "contents: write" not in text
+        assert "write-all" not in text
+        assert "id-token" not in text
+        assert "secrets." not in text
+        assert "secrets:" not in text
+        assert re.search(r"^permissions:\n\s+contents:\s*read\b", text, re.MULTILINE)
+        refs = _USES_RE.findall(text)
+        assert refs, "the private-release builder must pin at least one action"
+        for ref in refs:
+            assert _SHA_PIN_RE.match(ref), f"{ref} is not pinned to a 40-hex SHA"
+
+    def test_check_inventory_rejects_renamed_or_regressed_uploader(self) -> None:
+        # A copy under any other basename (evil.yml, a .yaml twin) or the allowlisted basename with
+        # any protection regressed is STILL rejected by the package's fail-closed scanner.
+        from eth_research.m3f.workflow_inventory import check_inventory
+
+        def _entry(path: str, **overrides: object) -> dict[str, object]:
+            base: dict[str, object] = {
+                "path": path,
+                "has_real_permissions_block": True,
+                "can_write_contents": False,
+                "references_secrets": False,
+                "contacts_market_host": False,
+                "uploads_artifact": True,
+                "piped_installer": False,
+                "can_push": False,
+                "can_merge_or_release_or_tag": False,
+                "uses_all_sha_pinned": True,
+            }
+            base.update(overrides)
+            return base
+
+        canonical = ".github/workflows/private-release-build.yml"
+        assert check_inventory({"workflows": [_entry(canonical)]}) == []
+        rejected = [
+            _entry(".github/workflows/evil.yml"),
+            _entry(".github/workflows/private-release-build.yaml"),
+            _entry(canonical, can_write_contents=True),
+            _entry(canonical, references_secrets=True),
+            _entry(canonical, uses_all_sha_pinned=False),
+        ]
+        for bad in rejected:
+            failures = check_inventory({"workflows": [bad]})
+            assert any("uploads an artifact" in f for f in failures), bad["path"]
 
     def test_no_curl_or_wget_pipes_into_a_shell(self) -> None:
         # N10: no surviving workflow may pipe a downloaded installer into a shell.

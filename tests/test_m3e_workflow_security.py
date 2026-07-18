@@ -69,9 +69,21 @@ def test_the_pr_check_is_read_only_and_requires_a_draft() -> None:
     assert "upload-artifact" not in text
 
 
+# The single authorized private-repo release-artifact channel (basename only). Every other
+# workflow must upload nothing; the exemption is enforced conditionally in
+# eth_research.m3e.verify_m3e_program._no_unsafe_workflow and
+# eth_research.m3f.workflow_inventory.check_inventory, and probed in
+# tests/test_private_workflow_security.py.
+_ARTIFACT_UPLOAD_ALLOWLIST = {"private-release-build.yml"}
+
+
 def test_no_m3e_or_other_workflow_uploads_an_artifact() -> None:
-    # Reinforces the accepted no-artifact-upload invariant across the whole tree.
+    # Reinforces the accepted no-artifact-upload invariant across the whole tree, except the one
+    # allowlisted private-release payload builder (a workflow_dispatch-only, contents:read job that
+    # uploads only the closed dist_private/ directory to this PRIVATE repo's own artifact store).
     for path in _all_workflows():
+        if path.name in _ARTIFACT_UPLOAD_ALLOWLIST:
+            continue
         assert "upload-artifact" not in path.read_text(), f"{path.name} uploads an artifact"
 
 

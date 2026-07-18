@@ -1,0 +1,171 @@
+name: Private Release Build
+
+# Private-GA payload builder for eth-research v1.1.0. This is the ONE authorized private-repo
+# release-artifact channel (see src/eth_research/m3f/workflow_inventory.py::check_inventory and
+# tests/test_private_workflow_security.py). It is MANUALLY dispatched only, runs with a read-only
+# GITHUB_TOKEN, references no secret and requests no OIDC token, and uploads ONLY the closed,
+# access-controlled dist_private/ payload to this PRIVATE repository's own Actions artifact store.
+# It NEVER publishes to a public index, never creates a public GitHub Release, never creates a tag,
+# and never pushes. (GitHub Packages has no native Python index, so there is no in-platform public
+# registry to push to either.) The workflow-security host allowlist is a text grep over this YAML,
+# not a runtime egress control; the private repository's access control is the real boundary.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: >-
+          Full 40-hex commit SHA to build. Must equal the checked-out commit and be an ancestor of
+          origin/main. Leave blank to build the checked-out commit.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-release-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-private-payload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      REPO_FULL_NAME: ${{ github.repository }}
+      REPO_PRIVATE: ${{ github.event.repository.private }}
+      EVENT_NAME: ${{ github.event_name }}
+      CHECKED_OUT_SHA: ${{ github.sha }}
+      SOURCE_COMMIT_INPUT: ${{ github.event.inputs.source_commit }}
+      GATE_LEDGER: research/m3a/development_gate_access.jsonl
+      HOLDOUT_LEDGER: research/m2b/test_evaluations.jsonl
+      PROSPECTIVE_LEDGER: research/m3d/prospective_evaluations.jsonl
+      EMPTY_SHA: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    steps:
+      - name: Assert private repository, exact repo full_name, and manual dispatch
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "workflow_dispatch" ]; then
+            echo "refusing: only workflow_dispatch may build the private payload (got '$EVENT_NAME')" >&2
+            exit 1
+          fi
+          if [ "$REPO_PRIVATE" != "true" ]; then
+            echo "refusing: repository is not private (repository.private='$REPO_PRIVATE')" >&2
+            exit 1
+          fi
+          if [ "$REPO_FULL_NAME" != "panfot1409/gambling-winnings" ]; then
+            echo "refusing: unexpected repository '$REPO_FULL_NAME'" >&2
+            exit 1
+          fi
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve and pin the source commit (40-hex, equals checked-out, ancestor of origin/main)
+        run: |
+          set -euo pipefail
+          src="$SOURCE_COMMIT_INPUT"
+          if [ -z "$src" ]; then
+            src="$CHECKED_OUT_SHA"
+          fi
+          if ! printf '%s' "$src" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "refusing: source_commit is not a full 40-hex sha: '$src'" >&2
+            exit 1
+          fi
+          if [ "$src" != "$CHECKED_OUT_SHA" ]; then
+            echo "refusing: source_commit '$src' does not equal the checked-out commit '$CHECKED_OUT_SHA'" >&2
+            exit 1
+          fi
+          if ! git rev-parse --verify --quiet "origin/main^{commit}" >/dev/null; then
+            echo "refusing: origin/main is not available for the ancestry check" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$src" origin/main; then
+            echo "refusing: '$src' is not an ancestor of origin/main" >&2
+            exit 1
+          fi
+          echo "source commit '$src' verified (equals checked-out, ancestor of origin/main)"
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Install the authoritative CPython 3.12.3
+        run: |
+          set -euo pipefail
+          uv python install 3.12.3
+      - name: Install CPython 3.13 for the fresh-consumer matrix
+        run: |
+          set -euo pipefail
+          uv python install 3.13
+      - name: Verify uv.lock matches pyproject.toml
+        run: |
+          set -euo pipefail
+          uv lock --check
+      - name: Sync the locked environment
+        run: |
+          set -euo pipefail
+          uv sync --locked --all-extras --python 3.12.3
+      - name: The three sealed ledgers are byte-empty
+        run: |
+          set -euo pipefail
+          for L in "$GATE_LEDGER" "$HOLDOUT_LEDGER" "$PROSPECTIVE_LEDGER"; do
+            test "$(sha256sum "$L" | cut -d' ' -f1)" = "$EMPTY_SHA"
+          done
+      - name: Committed release evidence and private manifests reproduce from the tree
+        run: |
+          set -euo pipefail
+          uv run --no-sync --python 3.12.3 python tools/release_evidence.py --check --repo-root .
+          uv run --no-sync --python 3.12.3 python tools/private_release.py --check --repo-root .
+      - name: The private payload is byte-deterministic and reproduces the committed manifest
+        run: |
+          set -euo pipefail
+          # Double-build self-consistency (two builds equal each other) + frozen-state verifiers.
+          uv run --no-sync --python 3.12.3 python tools/private_release.py verify --repo-root .
+          # A fresh build must ALSO equal the COMMITTED manifest members, not merely itself. This
+          # slow guard re-derives the wheel+sdist and compares to release/private/v1.1.0/*; fail if
+          # it is skipped/deselected rather than passed.
+          node="tests/test_private_release.py::test_committed_manifest_binary_hashes_reproduce_from_build"
+          out=$(uv run --no-sync --python 3.12.3 pytest "$node" -rsxX -o addopts="" 2>&1) \
+            || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -qE "[0-9]+ passed" || { echo "FAIL: manifest fidelity did not pass"; exit 1; }
+          if echo "$out" | grep -qiE "skipped|deselected|xfailed|no tests ran"; then
+            echo "FAIL: committed-manifest fidelity was skipped on the authoritative runtime"
+            exit 1
+          fi
+      - name: Build the deterministic private payload into dist_private/
+        run: |
+          set -euo pipefail
+          uv run --no-sync --python 3.12.3 python tools/private_release.py build --repo-root . --out-dir dist_private
+      - name: Fresh-consumer install matrix must execute (never skip)
+        # The §9 two-channel consumer matrix (wheel/sdist/commit x {3.12.3, 3.13}, out-of-tree,
+        # --no-deps) and the installed-wheel E2Es must actually run here. A renamed/removed file or
+        # an all-skipped run is a failure, not a silent pass; 3.13 is installed above so no cell
+        # skips for a missing interpreter.
+        run: |
+          set -euo pipefail
+          test -f tests/test_private_consumer_matrix.py \
+            || { echo "FAIL: the §9 private consumer matrix is missing"; exit 1; }
+          out=$(uv run --no-sync --python 3.12.3 pytest -rsxX -o addopts="" \
+            tests/test_private_consumer_matrix.py \
+            tests/test_consumer_e2e.py \
+            tests/test_m4b_consumer_e2e.py 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -qE "[0-9]+ passed" || { echo "FAIL: consumer matrix did not pass"; exit 1; }
+          if echo "$out" | grep -qiE "skipped|deselected|no tests ran"; then
+            echo "FAIL: a consumer proof was skipped on the authoritative runtime"
+            exit 1
+          fi
+      - name: Emit the dynamic release receipt into the output dir (never committed)
+        run: |
+          set -euo pipefail
+          uv run --no-sync --python 3.12.3 python tools/private_release.py build --repo-root . --out-dir dist_private --emit-receipt dist_private/private_release_receipt.json
+      - name: Upload ONLY the closed private payload directory
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: eth-research-1.1.0-private-payload-${{ github.sha }}
+          path: dist_private/
+          if-no-files-found: error
+          retention-days: 30

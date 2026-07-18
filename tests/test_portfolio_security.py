@@ -188,11 +188,15 @@ _SENSITIVE_MODULES = frozenset(
 )
 
 # Test modules that exercise the portfolio package but legitimately need an otherwise-forbidden
-# import, mapped to the exact top-level names they may import. ``test_m4b_consumer_e2e.py`` shells
-# out via ``subprocess`` to build and install the wheel for the installed-consumer proof; it may
-# import ``subprocess`` and nothing else from the forbidden set (a network / exchange / ML client
-# would still trip the scan).
-_TEST_IMPORT_ALLOWLIST = {"test_m4b_consumer_e2e.py": frozenset({"subprocess"})}
+# import, mapped to the exact top-level names they may import. Both consumer proofs shell out via
+# ``subprocess`` to build and install the wheel/sdist (``test_m4b_consumer_e2e.py`` runs the
+# portfolio reference from an installed wheel; ``test_private_consumer_matrix.py`` runs the same
+# reference across the private install-channel matrix). Each may import ``subprocess`` and nothing
+# else from the forbidden set — a network / exchange / ML client would still trip the scan.
+_TEST_IMPORT_ALLOWLIST = {
+    "test_m4b_consumer_e2e.py": frozenset({"subprocess"}),
+    "test_private_consumer_matrix.py": frozenset({"subprocess"}),
+}
 
 
 def _portfolio_files() -> list[Path]:

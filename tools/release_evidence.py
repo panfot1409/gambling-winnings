@@ -10,8 +10,10 @@ Emits three canonical-JSON artifacts under ``release/<version>/``:
   hashes the working tree (filtering ``__pycache__``), so generate/verify from a clean tree; an
   untracked file under ``src/`` or ``research/`` shifts a digest and drift then fails closed.
 * ``sbom.cdx.json`` — a minimal CycloneDX 1.5 software bill of materials derived from ``uv.lock``.
-* ``release_state.json`` — the honest publication posture: built and hardened, **not published**,
-  with the exact external gates that keep publication closed.
+* ``release_state.json`` — the honest **private** release posture: the public-GA route was
+  abandoned, the package is built and hardened but **not publicly published**, distribution is
+  private, and the ordered private lifecycle (``public_ga_abandoned`` → ``private_ga_in_progress``
+  → ``ready`` → ``shipped``) records the current state with its fail-closed private gates.
 
 Usage::
 
@@ -146,32 +148,74 @@ def build_sbom(repo_root: Path) -> dict[str, object]:
     }
 
 
+# The private-release lifecycle, in order. The prior public-GA route was abandoned when the owner
+# decided to keep the project private; this evidence tracks only the private posture from there.
+RELEASE_LIFECYCLE = (
+    "public_ga_abandoned",
+    "private_ga_in_progress",
+    "ready",
+    "shipped",
+)
+# The current lifecycle state, advanced by hand at each milestone: ``private_ga_in_progress`` while
+# the private release is being built, ``ready`` at code freeze (pre-merge — the source is frozen and
+# every canonical identity is registered and reproduces), ``shipped`` only after the private payload
+# has been delivered through the access-controlled Actions artifact. ``--check`` fails closed unless
+# the committed ``release_state.json`` matches this constant.
+RELEASE_STATE = "ready"
+
+
 def build_state(_repo_root: Path) -> dict[str, object]:
+    if RELEASE_STATE not in RELEASE_LIFECYCLE:  # pragma: no cover - guarded constant
+        raise ValueError(f"unknown release state: {RELEASE_STATE}")
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "version": VERSION,
-        "published": False,
+        "distribution_classification": "private",
+        "repository_visibility_required": "private",
+        "release_lifecycle": list(RELEASE_LIFECYCLE),
+        "release_state": RELEASE_STATE,
+        "release_state_index": RELEASE_LIFECYCLE.index(RELEASE_STATE),
+        "public_ga_abandoned": True,
         "distribution_built": True,
         "hardened": True,
-        "publication_gates": [
+        # Public publication is closed and stays closed: the package ships privately to authorized
+        # collaborators only. ``published`` is the public-publication flag and is never true.
+        "published": False,
+        "public_channels_closed": {
+            "public_pypi": False,
+            "test_pypi": False,
+            "public_github_release": False,
+            "public_package_registry": False,
+            "open_source_claim": False,
+            "license_present": False,
+        },
+        # Private delivery posture. ``private_payload_delivered`` flips true only at ``shipped``.
+        "private_distribution": True,
+        "private_payload_delivered": RELEASE_STATE == "shipped",
+        # The standing conditions the private release is held to (all fail-closed, none external).
+        "private_gates": [
             {
-                "id": "license",
-                "cleared": False,
-                "detail": "no LICENSE file; choosing one is an external human decision "
-                "(docs/V1_LICENSE_DECISION.md)",
+                "id": "repository_private",
+                "required": True,
+                "detail": "the repository must be private; the private-release workflow verifies "
+                "github.event.repository.private before building or uploading",
             },
             {
-                "id": "pypi_trusted_publisher",
-                "cleared": False,
-                "detail": "a PyPI pending publisher must be configured by a human "
-                "before any OIDC upload",
+                "id": "sealed_ledgers_byte_empty",
+                "required": True,
+                "detail": "the three sealed access ledgers must stay byte-empty",
             },
             {
-                "id": "governance_no_id_token_invariant",
-                "cleared": False,
-                "detail": "tests/test_workflow_security.py forbids id-token in any "
-                "workflow; a live Trusted-Publishing workflow needs a reviewed "
-                "relaxation (docs/V1_PUBLICATION_PIPELINE.md)",
+                "id": "governed_state_unchanged",
+                "required": True,
+                "detail": "every accepted research/ artifact stays byte-identical to the governed "
+                "baseline digest",
+            },
+            {
+                "id": "no_public_publication_vector",
+                "required": True,
+                "detail": "tests/test_public_publication_killswitch.py forbids any public-"
+                "publication vector in the executable surface",
             },
         ],
     }

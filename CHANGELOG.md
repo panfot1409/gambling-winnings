@@ -8,16 +8,21 @@ This is a **research-only, offline** toolkit: no live trading, no exchange or wa
 network access, no leverage/margin/shorting, and no alpha claim. See `README.md` and
 `docs/V1_LIMITATIONS.md` for the full boundary.
 
-> **Distribution note.** As of v1.1.0 the repository ships **no `LICENSE`**, so the package is
-> intentionally **not** cleared for public PyPI/GitHub-Release distribution. See
-> `docs/V1_LICENSE_DECISION.md`. This gate concerns publication only; the source history below is
-> real and merged.
+> **Distribution note.** The owner decided to keep the project **private**. v1.1.0 is distributed
+> **privately** to authorized repository collaborators only — **no** PyPI/TestPyPI, **no** public
+> GitHub Release, **no** public registry, and **no** open-source license. The repository ships no
+> `LICENSE`; project metadata authorizes no public redistribution. See
+> `docs/V1_PRIVATE_GA_PLAN.md` and `docs/V1_PRIVATE_DISTRIBUTION.md`.
 
 ## [Unreleased]
 
-- GA release hardening on `release/v1.1.0-ga`: packaging metadata, community/health files, release
-  workflows (dry-run + Trusted-Publishing publish), SBOM, checksums, and a release manifest/state.
-  No accepted research artifact changed; the package version remains `1.1.0`.
+- **Private GA** on `release/v1.1.0-private-ga`: private distribution policy + verifier, a deterministic
+  private payload builder (wheel/sdist/SHA256SUMS/SBOM/manifest/install guide), a dispatch-only
+  least-privilege private release workflow, a public-publication kill switch, and private consumer
+  installation tests. The package version remains `1.1.0`. No accepted research artifact changed.
+- The earlier public-GA hardening on `release/v1.1.0-ga` (packaging metadata, community/health files,
+  read-only release dry-run, SBOM, checksums, release manifest/state) is retained; its *public*
+  publication route (PyPI Trusted Publishing) is **superseded and abandoned** by the private decision.
 
 ## [1.1.0] — Milestone 4B: multi-asset portfolio research simulator
 
