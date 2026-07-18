@@ -55,18 +55,29 @@ public GitHub Release, **no** public registry entry, and **no** license grant. "
    the closed `dist_private/` payload to this **private** repository's own access-controlled Actions
    artifact store: artifact `eth-research-1.1.0-private-payload-61aa6aea…` (1,359,192 bytes, GitHub
    zip digest `sha256:c58e2c42…`, 30-day retention, not expired).
-5. **Payload verification (§26).** The payload was **independently reproduced locally** (byte-exact
-   across two builds; tar `b3643054…`) and every content member matched the register-R canonical
-   identity **and** the committed `release/private/v1.1.0/private_payload_manifest.json`: wheel
-   `93eb4183…`, sdist `ab908494…`, `SHA256SUMS` `bc1fa39f…`, `provenance.json` `4e53505c…`,
-   `sbom.cdx.json` `7fd0396a…`, `PRIVATE_INSTALL.md` `f8f20a85…`; the payload's embedded manifest is
-   byte-identical to the committed one. **Environment limitation (honest):** this session's
-   organization egress policy blocks the Azure blob host that serves Actions-artifact bytes
-   (proxy `403 CONNECT`), so the artifact bytes could not be pulled into this session. Integrity is
-   therefore established by (a) the workflow's own green reproduce-and-upload on an independent
-   runner and (b) the local member-exact deterministic reproduction — not by re-hashing the pulled
-   zip. Authorized collaborators on an unrestricted network download it normally from the private
-   Actions run.
+5. **Payload verification (§26) — precise scope, no overclaim.** What was actually established:
+   - the private-release workflow **built and uploaded an access-controlled artifact successfully**
+     to this private repository's own Actions store (run `29648277940`, artifact `8430703334`);
+   - **CI verified the payload before upload** — its own "byte-deterministic and reproduces the
+     committed manifest" step passed on the runner, so the bytes it uploaded had already been checked
+     against the committed manifest on an independent machine;
+   - a **local independent reproduction** here matched the **registered members and hashes**
+     byte-exact (payload tar `b3643054…` byte-identical across two builds; wheel `93eb4183…`, sdist
+     `ab908494…`, `SHA256SUMS` `bc1fa39f…`, `provenance.json` `4e53505c…`, `sbom.cdx.json`
+     `7fd0396a…`, `PRIVATE_INSTALL.md` `f8f20a85…`; embedded manifest byte-identical to the committed
+     one);
+   - **this environment could not download and re-hash the exact stored artifact**, because the
+     session's egress proxy returned `403 CONNECT` for the Azure host that serves Actions-artifact
+     bytes (`*.blob.core.windows.net`);
+   - **therefore the stored ZIP itself was not independently byte-verified in this environment.** The
+     integrity argument rests on CI's pre-upload verification plus the local reproduction of the
+     registered members — not on re-hashing the downloaded artifact. An authorized collaborator on an
+     unrestricted network can download the artifact and re-hash it against `SHA256SUMS` to close this
+     last step.
+   - **Channel A — the immutable private Git commit (MPGA) — is the durable, canonical delivery
+     channel.** Channel B (the private wheel payload artifact) is access-controlled, reproducible, and
+     **time-limited** (30-day retention), i.e. a convenience copy re-buildable on demand, not the
+     source of truth.
 6. **Ship-state advance.** With private delivery complete, the lifecycle was advanced
    `ready → shipped` (`release_state_index 2 → 3`, `private_payload_delivered false → true`) via the
    `RELEASE_STATE` constant + regenerated `release_state.json`. `published` stays **false** and every
@@ -229,5 +240,8 @@ remote tag only — not the private delivery.
     with `published == false` and all public channels closed; both `--check`s pass.
 68. Post-release red teams A, B, C all returned CLEAN (zero Class A, zero Class D, zero Class B/C).
 69. The full offline terminal battery passes on the authoritative runtime (and branch CI is green).
-70. Delivery honesty: private payload delivered + verified; remote tag is documented 403 debt; the
-    egress-blocked artifact byte-download is disclosed; nothing is claimed as publicly published.
+70. Delivery honesty: the private payload was uploaded successfully; CI verified it against the
+    committed manifest before upload and a local reproduction matched the registered members and
+    hashes, but the stored ZIP was NOT independently re-hashed in this environment (egress proxy
+    blocked the Azure artifact host); the remote tag is documented 403 debt; nothing is claimed as
+    publicly published.
