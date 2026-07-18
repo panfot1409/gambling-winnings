@@ -42,8 +42,8 @@
     "ready",
     "shipped"
   ],
-  "release_state": "private_ga_in_progress",
-  "release_state_index": 1,
+  "release_state": "ready",
+  "release_state_index": 2,
   "repository_visibility_required": "private",
   "schema_version": 2,
   "version": "1.1.0"

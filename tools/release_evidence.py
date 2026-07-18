@@ -157,10 +157,11 @@ RELEASE_LIFECYCLE = (
     "shipped",
 )
 # The current lifecycle state, advanced by hand at each milestone: ``private_ga_in_progress`` while
-# the private release is being built, ``ready`` at code freeze (pre-merge), ``shipped`` only after
-# the private payload has been delivered through the access-controlled Actions artifact. ``--check``
-# fails closed unless the committed ``release_state.json`` matches this constant.
-RELEASE_STATE = "private_ga_in_progress"
+# the private release is being built, ``ready`` at code freeze (pre-merge — the source is frozen and
+# every canonical identity is registered and reproduces), ``shipped`` only after the private payload
+# has been delivered through the access-controlled Actions artifact. ``--check`` fails closed unless
+# the committed ``release_state.json`` matches this constant.
+RELEASE_STATE = "ready"
 
 
 def build_state(_repo_root: Path) -> dict[str, object]:
