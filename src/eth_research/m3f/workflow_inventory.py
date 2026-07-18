@@ -131,6 +131,36 @@ def build_inventory(repo_root: str | Path) -> dict[str, Any]:
     }
 
 
+# The single authorized private-repo release-artifact channel. ``private-release-build.yml`` is a
+# ``workflow_dispatch``-only, ``contents: read`` job that uploads the closed ``dist_private/``
+# payload to the PRIVATE repository's own Actions artifact store — the one sanctioned way to hand a
+# built private payload to an authorized maintainer (a private repo's artifacts are themselves
+# access-controlled). The exemption is deliberately CONDITIONAL: it holds only while every *other*
+# least-privilege protection on that same workflow entry still holds — it must not grant
+# ``contents``/``write-all``, must reference no secret, and must have every action ``uses:`` pinned
+# to a full commit SHA. If any of those regress the upload becomes a fail-closed violation again,
+# and every *other* workflow that uploads an artifact still fails unconditionally. The exemption is
+# keyed on the exact basename: a renamed copy (``evil.yml``) or a ``.yaml`` twin has a different
+# basename and is NOT exempt. ``build_inventory`` globs only the top level of ``.github/workflows``
+# (a non-recursive glob) and GitHub Actions never executes a nested-directory workflow, so the
+# canonical top-level file is the only thing this predicate can ever see in practice. That lexical
+# limit is honestly disclosed and backstopped by the adversarial evasion matrix and the closed-
+# workflow-set pairing in ``tests/test_private_workflow_security.py`` and by the workflow's own
+# runtime assertions (private repo, workflow_dispatch, contents:read).
+_PRIVATE_RELEASE_UPLOAD_BASENAME = "private-release-build.yml"
+
+
+def _artifact_upload_is_authorized(entry: dict[str, Any]) -> bool:
+    """True only for the one allowlisted private-release workflow AND only while its other
+    least-privilege protections still hold (no write-contents, no secret, fully SHA-pinned)."""
+    return (
+        Path(entry["path"]).name == _PRIVATE_RELEASE_UPLOAD_BASENAME
+        and entry["can_write_contents"] is False
+        and entry["references_secrets"] is False
+        and entry["uses_all_sha_pinned"] is True
+    )
+
+
 def check_inventory(inventory: dict[str, Any]) -> list[str]:
     """Return the list of fail-closed violations (empty == all clear)."""
     failures: list[str] = []
@@ -142,7 +172,7 @@ def check_inventory(inventory: dict[str, Any]) -> list[str]:
             failures.append(f"{p}: grants write contents")
         if e["contacts_market_host"]:
             failures.append(f"{p}: contacts a market host")
-        if e["uploads_artifact"]:
+        if e["uploads_artifact"] and not _artifact_upload_is_authorized(e):
             failures.append(f"{p}: uploads an artifact")
         if e["piped_installer"]:
             failures.append(f"{p}: uses a piped installer")

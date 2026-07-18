@@ -12,19 +12,19 @@
     },
     {
       "filename": "SHA256SUMS",
-      "sha256": "93237fee99285358a07109cc8cd2bbf3c245ea508ebbb51d5dc4dbe47944b874"
+      "sha256": "bc1fa39fad03354087dcf2493b97e93434c2e1b619202e9b154eb97d9a9da271"
     },
     {
       "filename": "eth_research-1.1.0-py3-none-any.whl",
-      "sha256": "f2f8df773de06a412851382c968cfc2b0195eadb3954b42e07ce1a68ff3a3843"
+      "sha256": "93eb4183edb16876d5e622b384028ec2ecef151ba97afe41cb37bba3c2eb12b2"
     },
     {
       "filename": "eth_research-1.1.0.tar.gz",
-      "sha256": "042b672f3bea3dc886ec2fef3113aecaa1c99aec694d7629142a14f8806d2ce7"
+      "sha256": "ab90849495a442248eb000f64bb540c86e43753ad27e77a0c5aab6d3e30454de"
     },
     {
       "filename": "provenance.json",
-      "sha256": "43abe83e23a82ea7d9cb0dcaa4320e6bbf77203b2d9dfcb8dfc6d6fb524da5b5"
+      "sha256": "4e53505c571d93460eb290799a4af4ed2b2da5952c892eafc2bc1293a5181ea2"
     },
     {
       "filename": "sbom.cdx.json",
@@ -36,6 +36,6 @@
   "project_name": "eth-research",
   "schema_version": "1",
   "source_member_count": 215,
-  "source_tree_digest": "bebe55b3fdbb7a3768d1ca70a33e8f64b42adaab2826406db15ebd6606be5615",
+  "source_tree_digest": "6fa22c564f3a15817f7c948d38feb5fdd779a8079f8a0aa3080056e85568b272",
   "version": "1.1.0"
 }
