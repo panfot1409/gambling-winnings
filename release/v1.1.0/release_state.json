@@ -1,24 +1,50 @@
 {
   "distribution_built": true,
+  "distribution_classification": "private",
   "hardened": true,
-  "publication_gates": [
+  "private_distribution": true,
+  "private_gates": [
     {
-      "cleared": false,
-      "detail": "no LICENSE file; choosing one is an external human decision (docs/V1_LICENSE_DECISION.md)",
-      "id": "license"
+      "detail": "the repository must be private; the private-release workflow verifies github.event.repository.private before building or uploading",
+      "id": "repository_private",
+      "required": true
     },
     {
-      "cleared": false,
-      "detail": "a PyPI pending publisher must be configured by a human before any OIDC upload",
-      "id": "pypi_trusted_publisher"
+      "detail": "the three sealed access ledgers must stay byte-empty",
+      "id": "sealed_ledgers_byte_empty",
+      "required": true
     },
     {
-      "cleared": false,
-      "detail": "tests/test_workflow_security.py forbids id-token in any workflow; a live Trusted-Publishing workflow needs a reviewed relaxation (docs/V1_PUBLICATION_PIPELINE.md)",
-      "id": "governance_no_id_token_invariant"
+      "detail": "every accepted research/ artifact stays byte-identical to the governed baseline digest",
+      "id": "governed_state_unchanged",
+      "required": true
+    },
+    {
+      "detail": "tests/test_public_publication_killswitch.py forbids any public-publication vector in the executable surface",
+      "id": "no_public_publication_vector",
+      "required": true
     }
   ],
+  "private_payload_delivered": false,
+  "public_channels_closed": {
+    "license_present": false,
+    "open_source_claim": false,
+    "public_github_release": false,
+    "public_package_registry": false,
+    "public_pypi": false,
+    "test_pypi": false
+  },
+  "public_ga_abandoned": true,
   "published": false,
-  "schema_version": 1,
+  "release_lifecycle": [
+    "public_ga_abandoned",
+    "private_ga_in_progress",
+    "ready",
+    "shipped"
+  ],
+  "release_state": "private_ga_in_progress",
+  "release_state_index": 1,
+  "repository_visibility_required": "private",
+  "schema_version": 2,
   "version": "1.1.0"
 }

@@ -1,10 +1,10 @@
 """The committed v1.1.0 release evidence is current, neutral, and honestly unpublished.
 
 ``tools/release_evidence.py`` deterministically regenerates ``release/v1.1.0/`` from the committed
-source; these tests prove the committed bytes match, that GA hardening changed no ``research/``
+source; these tests prove the committed bytes match, that hardening changed no ``research/``
 artifact (the governed-state digest reproduces), that the sealed ledgers stay byte-empty, and that
-the release state records the package as built/hardened but **not** published, with the three
-external gates open.
+the release state records the **private** posture — the public-GA route abandoned, built/hardened
+but **not** publicly published, every public channel closed, on the ordered private lifecycle.
 """
 
 from __future__ import annotations
@@ -49,13 +49,41 @@ def test_manifest_identity() -> None:
     assert manifest["distribution_source"]["member_count"] >= 100
 
 
-def test_state_is_honestly_unpublished_with_open_gates() -> None:
+def test_state_is_private_and_honestly_unpublished() -> None:
     state = json.loads((REPO_ROOT / "release/v1.1.0/release_state.json").read_bytes())
+    # The public-GA route was abandoned; the posture is private and not publicly published.
+    assert state["schema_version"] == 2
+    assert state["distribution_classification"] == "private"
+    assert state["repository_visibility_required"] == "private"
+    assert state["public_ga_abandoned"] is True
     assert state["published"] is False
     assert state["distribution_built"] is True
-    gate_ids = {g["id"] for g in state["publication_gates"]}
-    assert gate_ids == {"license", "pypi_trusted_publisher", "governance_no_id_token_invariant"}
-    assert all(g["cleared"] is False for g in state["publication_gates"])
+    assert state["private_distribution"] is True
+    # Every public channel is closed and no license is present.
+    for closed in state["public_channels_closed"].values():
+        assert closed is False
+    # The lifecycle is the ordered private machine and the current state is a member of it.
+    assert state["release_lifecycle"] == [
+        "public_ga_abandoned",
+        "private_ga_in_progress",
+        "ready",
+        "shipped",
+    ]
+    lifecycle = state["release_lifecycle"]
+    assert state["release_state"] in lifecycle
+    assert state["release_state_index"] == lifecycle.index(state["release_state"])
+    # The payload is only marked delivered in the terminal `shipped` state.
+    assert state["private_payload_delivered"] == (state["release_state"] == "shipped")
+    # No public-publication gates remain; the gates are the fail-closed private ones.
+    assert "publication_gates" not in state
+    gate_ids = {g["id"] for g in state["private_gates"]}
+    assert gate_ids == {
+        "repository_private",
+        "sealed_ledgers_byte_empty",
+        "governed_state_unchanged",
+        "no_public_publication_vector",
+    }
+    assert all(g["required"] is True for g in state["private_gates"])
 
 
 def test_sbom_covers_the_runtime_dependencies() -> None:
