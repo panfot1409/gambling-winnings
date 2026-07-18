@@ -1,3 +1,11 @@
+> **↻ UPDATED (2026-07-18) — outcome is private distribution, not public publication.**
+> The owner decided to keep the project private, so the "public publication" framing below is
+> historical. The operative facts are unchanged and still hold: **no `LICENSE` exists and this program
+> does not choose one.** Under a private-distribution model no public license is required; public
+> redistribution remains unauthorized by project metadata regardless. The "steps to clear this gate"
+> at the end describe the *abandoned* public route and must not be executed. See
+> `docs/V1_PRIVATE_GA_PLAN.md` and `docs/V1_PRIVATE_DISTRIBUTION.md`.
+
 # V1 license decision — external human gate
 
 **Status: UNRESOLVED — public distribution is blocked pending a human license decision.**

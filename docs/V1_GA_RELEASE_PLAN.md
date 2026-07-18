@@ -1,3 +1,12 @@
+> **⛔ SUPERSEDED (2026-07-18) — public publication abandoned by owner decision.**
+> The owner decided to **keep the project private**. This document is retained for historical
+> accuracy: it records the *previously planned* public-GA route (PyPI Trusted Publishing, public
+> GitHub Release), which is **no longer the intended completion path** and must not be executed.
+> The authoritative plan is now **`docs/V1_PRIVATE_GA_PLAN.md`** and the private distribution docs
+> (`V1_PRIVATE_DISTRIBUTION.md`, `V1_PRIVATE_RELEASE_OPERATIONS.md`,
+> `V1_PRIVATE_RELEASE_THREAT_MODEL.md`). No public PyPI/TestPyPI/registry publication and no public
+> Release will occur.
+
 # V1.1.0 general-availability release plan
 
 This document records the plan and posture for shipping **v1.1.0** as the first public general
