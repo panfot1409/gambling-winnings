@@ -1,0 +1,19 @@
+{
+  "components": {
+    "candidate_source_freeze_sha256": "d0203d8c9037934b19aff60b7a2533a16534fea7622229be4f1fa007e12c571e",
+    "execution_scenarios_sha256": "fe94df97af946ee52df3de54a10e3d135c4048eb7c2d35d0c1e2948d8216c79e",
+    "fold_structure": {
+      "oos_fold_count": 6,
+      "warmup_rows": 150
+    },
+    "joint_partition_identity_sha256": "b5f3236989f871c379037b3efa569ba05a4f91fef13cef066b399f59cba87a6f",
+    "multiplicity_state_sha256": "df97daa788ca291aeb7e897ddc75e66a6a9e601ee4ddce0bf94cf166d68846b6",
+    "nomination": {
+      "schema_version": 1,
+      "tie_behavior": "highest_primary_point_estimate_else_none"
+    }
+  },
+  "kind": "v2b_research_protocol_identity",
+  "protocol_fingerprint": "2bdf606e24b6715442c5e3f0b14c16c11acac66d30f9d7774a16a82b20cf61f7",
+  "schema_version": 1
+}

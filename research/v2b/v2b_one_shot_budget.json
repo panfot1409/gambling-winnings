@@ -1,0 +1,7 @@
+{
+  "allow_repair_or_reset": false,
+  "consume_on_start": true,
+  "max_candidate_families": 3,
+  "max_research_executions": 1,
+  "schema_version": 1
+}
