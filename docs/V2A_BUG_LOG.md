@@ -69,3 +69,35 @@ integrity and governance grounds. The Class B/C findings below were reproduced a
 protocol, the three candidate specifications, the constitution, and the buyer contract / claims /
 scorecard / factsheet all fingerprint identically before and after this batch — verified by the
 existing round-trip tests, which continue to pass.
+
+---
+
+## §48 — Post-run red team (four independent auditors)
+
+After the single governed one-shot (`run_001`) executed and published (NO candidate nominated), four
+independent read-only auditors reviewed the executed run from distinct lenses. **All four returned NO
+Class A (scientific/financial) and NO Class D (governance/sealed-partition) finding, and required no
+code fix.** Summary:
+
+| Lens | Verdict | Key confirmation |
+|------|---------|------------------|
+| Scientific integrity | NO CLASS A | Every fingerprint matches the pre-registration; the no-nomination decision is mechanically correct (confirmed 3 ways) and over-determined (each candidate fails 3 of 4 criteria); deterministic within-fold bootstrap; stressed scenario genuinely more punitive; no look-ahead/peeking channel. |
+| Governance / one-shot budget | NO CLASS D | Registry is a sound append-only hash chain; budget consumed & irreversible (a 2nd `started` is empirically refused); lifecycle enforced on append AND read; `completed` binds the exact published fingerprint. |
+| Sealed-partition firewall | NO CLASS D | Three sealed ledgers byte-empty (`e3b0c442…`); run read only research-train (2221 rows, ≤ 2022-06-21); sealed partitions structurally unreachable. |
+| Reproducibility / publication | REPRODUCES EXACTLY | Strict canonical, no wall-clock; manifest/registry binding correct; pure recompute reproduces `6327de21…` byte-for-byte with no side effects; matches the pre-registration fingerprint-for-fingerprint. |
+
+### Class C / observational items (recorded; none invalidate the run; not applied retroactively)
+
+The pre-registration and results are immutable and the evaluation source is frozen at the P commit, so
+these are documented (see docs/V2A_FINDINGS.md §3) rather than retro-fitted into a completed run:
+
+| ID | Class | Where | Note |
+|----|-------|-------|------|
+| PR-C1 | C | pre_registration.json / research/m3a/walk_forward_protocol.json | The walk-forward protocol is bound only *transitively* (no explicit WF fingerprint in the pre-registration). Not exploitable — rows/folds pinned, fold OOS timestamps cross-checked against the fingerprinted research-train, WF file pins the research-train fingerprint; exactly one valid WF protocol exists for this data. A future run should pin an explicit WF fingerprint. |
+| PR-C2 | C | evaluator.py `aggregate_sharpe` | Concatenates per-fold marked returns across independent-cash fold seams. Disclosed; gates only `positive_sharpe`, which all three candidates pass — non-decision-pivotal here. |
+| PR-C3 | C | decision.py bare `assert isinstance` | Cosmetic type guard, stripped under `python -O`; caller always passes the correct type. |
+| PR-obs | NONE | research/m3a/walk_forward_protocol_v2.json | Unused M3A-era artifact (`folds=[]`); the V2A orchestrator loads `walk_forward_protocol.json` and never references `_v2`. Not wired into any V2A evaluation path. |
+
+No Class A or Class D was found; the real one-shot stands as a valid, reproducible, pre-registered
+null result. The Class C items are transparency notes for a hypothetical future governed run and do not
+change this run's outcome, which is immutable and consumed.
