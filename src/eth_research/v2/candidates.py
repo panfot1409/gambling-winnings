@@ -323,3 +323,18 @@ def build_all_fractional_strategies() -> tuple[FractionalStrategy, ...]:
     """Build every pre-registered candidate's reused-engine strategy (validates the set first)."""
     assert_candidate_set_valid(V2A_CANDIDATES)
     return tuple(build_fractional_strategy(spec) for spec in V2A_CANDIDATES)
+
+
+BENCHMARK_NAME: str = "buy_and_hold"
+
+
+def build_buy_and_hold_benchmark() -> FractionalStrategy:
+    """The passive long benchmark every candidate is compared against (no risk overlays)."""
+    return FractionalStrategy(
+        name=BENCHMARK_NAME,
+        signal=AlwaysLong(),
+        risk=RiskConfig(
+            max_exposure=1.0, volatility_target=False, turnover_limit=None, drawdown_breaker=False
+        ),
+        warmup_bars=0,
+    )
