@@ -6,7 +6,9 @@ consumes the one-shot budget even if the run later ``failed`` — then a single 
 reuses the accepted V2A chained-event serialization and hashing
 (:class:`eth_research.v2.registry.RegistryEvent`) and the accepted one-shot budget
 (:class:`eth_research.v2.budget.OneShotResearchBudget`) unchanged; V2B only adds the ``registered``
-precursor state the V2A vocabulary lacks, and its own append/read/verify with that lifecycle.
+precursor state the V2A vocabulary lacks, plus its own append/read/verify for that lifecycle — the
+per-line reader applies the *same* strict field validation as the accepted reader (exact key set,
+``require_hex64`` fingerprint/hashes, choice-checked event, mapping payload), not a looser parse.
 Appends are serialized behind an exclusive advisory lock and fsync'd, so two cannot both ``start``.
 
 Every event references the frozen ``protocol_fingerprint`` — the combined identity binding the
@@ -30,6 +32,12 @@ from eth_research.v2.strict import (
     V2ValidationError,
     canonical_json_bytes,
     canonical_sha256,
+    require_choice,
+    require_exact_keys,
+    require_hex64,
+    require_int,
+    require_mapping,
+    require_nonempty_str,
     require_slug,
     sha256_bytes,
     strict_json_loads,
@@ -133,25 +141,40 @@ def verify_protocol_identity(repo_root: str | Path) -> None:
 # --------------------------------------------------------------------------- #
 # append-only, hash-chained registry (registered -> started -> terminal)        #
 # --------------------------------------------------------------------------- #
+_EVENT_KEYS: frozenset[str] = frozenset(
+    {
+        "seq",
+        "event",
+        "run_id",
+        "protocol_fingerprint",
+        "timestamp",
+        "payload",
+        "prev_entry_hash",
+        "entry_hash",
+    }
+)
+
+
 def _from_line(line: bytes, seq: int) -> RegistryEvent:
-    obj = strict_json_loads(line)
-    if not isinstance(obj, dict):
-        raise V2BGovernanceError(f"registry[{seq}]: not an object")
-    try:
-        event = RegistryEvent(
-            seq=int(obj["seq"]),
-            event=str(obj["event"]),
-            run_id=str(obj["run_id"]),
-            protocol_fingerprint=str(obj["protocol_fingerprint"]),
-            timestamp=str(obj["timestamp"]),
-            payload=dict(obj["payload"]) if isinstance(obj["payload"], dict) else {},
-            prev_entry_hash=str(obj["prev_entry_hash"]),
-            entry_hash=str(obj["entry_hash"]),
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise V2BGovernanceError(f"registry[{seq}]: malformed event: {exc}") from exc
-    if event.event not in EVENT_TYPES:
-        raise V2BGovernanceError(f"registry[{seq}]: unknown event {event.event!r}")
+    # Mirror the accepted V2A reader's strictness exactly (:func:`eth_research.v2.registry.
+    # read_events`): an exact key set, integer ``seq``, choice-checked ``event`` (over the V2B
+    # vocabulary that adds ``registered``), slug ``run_id``, 64-hex ``protocol_fingerprint`` and
+    # both chain hashes, a non-empty ``timestamp``, and a mapping ``payload`` — never a coerced
+    # ``str(...)`` or a silently-emptied non-dict payload, which would let a forged line parse.
+    obj = require_mapping(f"registry[{seq}]", strict_json_loads(line))
+    require_exact_keys(f"registry[{seq}]", obj, _EVENT_KEYS)
+    event = RegistryEvent(
+        seq=require_int(f"registry[{seq}].seq", obj["seq"]),
+        event=require_choice(f"registry[{seq}].event", obj["event"], EVENT_TYPES),
+        run_id=require_slug(f"registry[{seq}].run_id", obj["run_id"]),
+        protocol_fingerprint=require_hex64(
+            f"registry[{seq}].protocol_fingerprint", obj["protocol_fingerprint"]
+        ),
+        timestamp=require_nonempty_str(f"registry[{seq}].timestamp", obj["timestamp"]),
+        payload=require_mapping(f"registry[{seq}].payload", obj["payload"]),
+        prev_entry_hash=require_hex64(f"registry[{seq}].prev_entry_hash", obj["prev_entry_hash"]),
+        entry_hash=require_hex64(f"registry[{seq}].entry_hash", obj["entry_hash"]),
+    )
     if event.recompute_hash() != event.entry_hash:
         raise V2BGovernanceError(f"registry[{seq}]: entry_hash does not match its body")
     return event
@@ -236,6 +259,11 @@ def append_event(
     if event not in EVENT_TYPES:
         raise V2BGovernanceError(f"unknown event {event!r}")
     require_slug("run_id", run_id)
+    # A registry event may only carry a 64-hex protocol fingerprint and a non-empty timestamp, so a
+    # written event can never round-trip through the strict reader as malformed (accepted-writer
+    # parity).
+    require_hex64("protocol_fingerprint", protocol_fingerprint)
+    require_nonempty_str("timestamp", timestamp)
     body = dict(payload or {})
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -291,6 +319,33 @@ def verify_registry(path: str | Path) -> list[str]:
     return []
 
 
+def verify_registry_bound(repo_root: str | Path) -> list[str]:
+    """Every registry event must carry *this* committed protocol fingerprint (empty == bound).
+
+    On top of :func:`verify_registry` (chain integrity + lifecycle), this binds the ledger to the
+    frozen design: an event whose ``protocol_fingerprint`` differs from the committed protocol
+    identity means the ledger belongs to a different — or since-altered — research design, so a
+    registration can never be silently reused under a mutated protocol. An empty registry is
+    vacuously bound.
+    """
+    root = Path(repo_root)
+    registry_path = root / V2B_REGISTRY_RELPATH
+    problems = verify_registry(registry_path)
+    if problems:
+        return problems
+    try:
+        expected = protocol_fingerprint(root)
+        events = read_events(registry_path)
+    except (OSError, V2ValidationError) as exc:
+        return [f"registry binding could not be checked: {exc}"]
+    return [
+        f"registry[{event.seq}]: protocol_fingerprint {event.protocol_fingerprint!r} does not "
+        f"match the committed protocol {expected!r}"
+        for event in events
+        if event.protocol_fingerprint != expected
+    ]
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wrapper
     import argparse
 
@@ -311,7 +366,9 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wrappe
             check(root)
         except (OSError, V2ValidationError) as exc:
             problems.append(str(exc))
-    problems.extend(verify_registry(root / V2B_REGISTRY_RELPATH))
+    # verify_registry_bound subsumes verify_registry (chain + lifecycle) and also binds each event
+    # to the committed protocol fingerprint.
+    problems.extend(verify_registry_bound(root))
     print(json.dumps({"ok": not problems, "problems": problems}))
     return 1 if problems else 0
 

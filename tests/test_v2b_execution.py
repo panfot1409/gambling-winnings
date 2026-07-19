@@ -18,7 +18,7 @@ import pytest
 import eth_research
 from eth_research.v2.strict import V2ValidationError
 from eth_research.v2b import execution as ex
-from eth_research.v2b.acquisition import WINDOW_END_EXCLUSIVE
+from eth_research.v2b.acquisition import RESEARCH_CUTOFF_LAST_OPEN, WINDOW_END_EXCLUSIVE
 from eth_research.v2b.candidates import WEIGHT_BTC, WEIGHT_ETH
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
@@ -146,3 +146,36 @@ def test_builder_takes_only_repo_root() -> None:
     assert list(inspect.signature(ex.build_v2b_universe).parameters) == ["repo_root"]
     # V2BExecutionError is a V2ValidationError, so callers can catch the family uniformly.
     assert issubclass(ex.V2BExecutionError, V2ValidationError)
+
+
+# --------------------------------------------------------------------------- #
+# §26 pre-registration red-team regressions (Auditors A, D)                     #
+# --------------------------------------------------------------------------- #
+def test_linear_basis_refuses_a_sqrt_impact_scenario(universe: ex.V2BUniverse) -> None:
+    # Auditor D: the vectorized basis models only linear cost; a scenario carrying a sqrt-impact
+    # term must be refused (route it through the capacity report), never silently under-charged.
+    from eth_research.v2b.scenarios import COST_SCENARIOS
+
+    panel = universe.partition.panel
+    path = ex.benchmark_weight_paths(universe.index)["static_50_50"]
+    with pytest.raises(ex.V2BExecutionError, match="sqrt-impact"):
+        ex.simulate_target_path(panel, path, COST_SCENARIOS["proxy_impact_severe"])
+    # The two scenarios the nomination rule actually routes through the basis are linear-only.
+    for name in ("primary", "stressed"):
+        ex.simulate_target_path(panel, path, COST_SCENARIOS[name])  # must not raise
+
+
+def test_firewall_rejects_a_non_monotonic_index() -> None:
+    # Auditor A: the firewall asserts a strictly-increasing index directly, not only via the loader.
+    cutoff = pd.Timestamp(RESEARCH_CUTOFF_LAST_OPEN)
+    idx = pd.DatetimeIndex([cutoff, cutoff - pd.Timedelta(days=1)])  # descending
+    with pytest.raises(ex.V2BExecutionError, match="not strictly increasing"):
+        ex._assert_firewall(idx)
+
+
+def test_firewall_rejects_an_open_at_or_after_the_cutoff() -> None:
+    # Auditor A: no open may sit at/after the research cutoff, even an interior one.
+    cutoff = pd.Timestamp(RESEARCH_CUTOFF_LAST_OPEN)
+    idx = pd.DatetimeIndex([cutoff, cutoff + pd.Timedelta(days=1)])  # monotonic, but > cutoff
+    with pytest.raises(ex.V2BExecutionError, match="at/after the research cutoff"):
+        ex._assert_firewall(idx)

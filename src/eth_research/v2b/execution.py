@@ -5,10 +5,13 @@ The V2B candidates emit **time-varying** per-event target weights ``(weight_eth,
 accepted M4B :class:`~eth_research.portfolio.protocol.PortfolioProtocol` only expresses the three
 *static* reference policies (``cash`` / ``equal_weight`` / ``declared_weights``), so it can run the
 static benchmarks but cannot, in one run, execute a signal whose target changes each bar. V2B
-therefore adds **one** thin, deterministic execution basis that reuses the accepted M4B accounting
-convention EXACTLY — trade at the bar opening at the event ``tau``, then mark that holding at its
-own bar's close — and reuses the M4B :class:`~eth_research.portfolio.costs.CostParameters` turnover
-cost UNMODIFIED. No accepted engine is modified.
+therefore adds **one** thin, deterministic execution basis that reuses the same accepted M4B
+accounting convention — trade at the bar opening at the event ``tau``, then mark that holding at its
+own bar's close, the identical rule the engine applies — and reuses the M4B
+:class:`~eth_research.portfolio.costs.CostParameters` turnover cost UNMODIFIED. No engine is
+modified. The basis is a *separate* vectorized computation, proven to reproduce the engine's equity
+path bit-for-bit only under the zero-cost reconciliation below; it is not asserted bit-identical
+under costs, where it applies the same linear turnover rate rather than re-deriving the engine's.
 
 The basis is proven faithful by :func:`build_zero_cost_reconciliation`, which runs every static
 benchmark — including 50/50, whose daily rebalance exercises genuine two-asset trading each event —
@@ -139,11 +142,19 @@ def _assert_firewall(index: pd.DatetimeIndex) -> None:
     """No engine-visible timestamp (open, close, event, mark) reaches the first sealed timestamp."""
     if len(index) == 0:
         raise V2BExecutionError("v2b universe: empty partition index")
+    first_sealed = pd.Timestamp(WINDOW_END_EXCLUSIVE)
+    cutoff = pd.Timestamp(RESEARCH_CUTOFF_LAST_OPEN)
+    # Defense in depth: assert the invariant directly here, not only via the upstream loader — the
+    # index must be strictly ascending, and EVERY open (not just the last) must be at/before the
+    # cutoff, so no interior sealed row can slip a later bar close past the seal.
+    if not index.is_monotonic_increasing:
+        raise V2BExecutionError("v2b universe: partition index is not strictly increasing")
+    if not bool((index <= cutoff).all()):
+        raise V2BExecutionError("v2b universe: an open is at/after the research cutoff")
     last_open = index[-1]
-    if last_open != pd.Timestamp(RESEARCH_CUTOFF_LAST_OPEN):
+    if last_open != cutoff:
         raise V2BExecutionError("v2b universe: last open is not the research cutoff")
     last_close = last_open + BAR_CLOSE_OFFSET
-    first_sealed = pd.Timestamp(WINDOW_END_EXCLUSIVE)
     if not last_close < first_sealed:
         raise V2BExecutionError(
             f"v2b universe: last engine timestamp {last_close.isoformat()} is not strictly before "
@@ -352,8 +363,17 @@ def simulate_target_path(
     btc_open = panel["btc_open"].to_numpy(dtype=float)
     btc_close = panel["btc_close"].to_numpy(dtype=float)
 
-    # The linear (notional-proportional) cost rate is scenario fee + half-spread + base slippage.
-    # trade_cost with participation=0 yields exactly this on a unit notional, so we reuse it.
+    # The basis models only the LINEAR (notional-proportional) cost — fee + half-spread + base
+    # slippage. It does not carry a participation rate, so a scenario with a non-zero sqrt-impact
+    # term would have its impact silently dropped: refuse it rather than under-charge. Liquidity
+    # impact is assessed separately through the participation-based capacity report.
+    if cost_scenario.impact_cap != 0.0 or cost_scenario.impact_coefficient != 0.0:
+        raise V2BExecutionError(
+            f"cost scenario {cost_scenario.scenario!r} carries a sqrt-impact term; the vectorized "
+            "basis models only linear cost — route impact through the capacity report"
+        )
+    # trade_cost with participation=0 yields exactly the linear rate on a unit notional, so we reuse
+    # it (rather than re-summing the rates by hand).
     unit = trade_cost(cost_scenario, 1.0, participation=0.0, currency=BASE_CURRENCY)
     linear_rate = unit.total
 

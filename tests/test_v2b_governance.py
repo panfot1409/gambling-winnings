@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import eth_research
+from eth_research.v2.strict import V2ValidationError
 from eth_research.v2b import governance as gov
 from eth_research.v2b.folds import OOS_FOLD_COUNT
 
@@ -106,3 +107,117 @@ def test_run_id_must_be_a_slug(tmp_path: Path) -> None:
     path = tmp_path / "reg.jsonl"
     with pytest.raises(Exception, match="slug"):
         gov.append_event(path, "registered", "v2b-run-001", protocol_fingerprint=FP, timestamp="t0")
+
+
+# --------------------------------------------------------------------------- #
+# §26 pre-registration red-team regressions (Auditor E findings)               #
+# --------------------------------------------------------------------------- #
+def _seed_protocol_inputs(dst: Path) -> None:
+    """Copy the four committed protocol-input artifacts so protocol_fingerprint(dst) reproduces."""
+    import shutil
+
+    src = REPO_ROOT / "research" / "v2b"
+    (dst / "research" / "v2b").mkdir(parents=True, exist_ok=True)
+    for name in (
+        "candidate_source_freeze.json",
+        "joint_partition_identity.json",
+        "execution_scenarios.json",
+        "research_multiplicity_state.json",
+    ):
+        shutil.copy(src / name, dst / "research" / "v2b" / name)
+
+
+def test_append_event_rejects_a_non_hex64_fingerprint(tmp_path: Path) -> None:
+    path = tmp_path / "reg.jsonl"
+    with pytest.raises(V2ValidationError):
+        gov.append_event(
+            path, "registered", "v2b_run_001", protocol_fingerprint="not_hex", timestamp="t0"
+        )
+
+
+def test_reader_rejects_a_hash_valid_but_non_hex64_fingerprint(tmp_path: Path) -> None:
+    from eth_research.v2.registry import GENESIS_PREV_HASH, RegistryEvent
+
+    # A hand-forged line whose entry_hash MATCHES its body, but whose protocol_fingerprint is not
+    # 64-hex. The hash check alone would pass; the strict field validation must still reject it.
+    partial = RegistryEvent(
+        seq=0,
+        event="registered",
+        run_id="v2b_run_001",
+        protocol_fingerprint="deadbeef",  # too short to be a 64-hex digest
+        timestamp="t0",
+        payload={},
+        prev_entry_hash=GENESIS_PREV_HASH,
+        entry_hash="",
+    )
+    forged = RegistryEvent(
+        seq=0,
+        event="registered",
+        run_id="v2b_run_001",
+        protocol_fingerprint="deadbeef",
+        timestamp="t0",
+        payload={},
+        prev_entry_hash=GENESIS_PREV_HASH,
+        entry_hash=partial.recompute_hash(),
+    )
+    path = tmp_path / "reg.jsonl"
+    path.write_bytes(forged.to_line())
+    problems = gov.verify_registry(path)
+    assert problems
+    assert "protocol_fingerprint" in problems[0]
+
+
+def test_reader_rejects_a_non_mapping_payload(tmp_path: Path) -> None:
+    record = {
+        "seq": 0,
+        "event": "registered",
+        "run_id": "v2b_run_001",
+        "protocol_fingerprint": FP,
+        "timestamp": "t0",
+        "payload": [],  # not a JSON object
+        "prev_entry_hash": "0" * 64,
+        "entry_hash": "0" * 64,
+    }
+    line = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    path = tmp_path / "reg.jsonl"
+    path.write_bytes(line)
+    problems = gov.verify_registry(path)
+    assert problems
+    assert "payload" in problems[0]
+
+
+def test_reader_rejects_an_unexpected_key(tmp_path: Path) -> None:
+    record = {
+        "seq": 0,
+        "event": "registered",
+        "run_id": "v2b_run_001",
+        "protocol_fingerprint": FP,
+        "timestamp": "t0",
+        "payload": {},
+        "prev_entry_hash": "0" * 64,
+        "entry_hash": "0" * 64,
+        "surprise": 1,  # an extra key the exact-key set must reject
+    }
+    line = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    path = tmp_path / "reg.jsonl"
+    path.write_bytes(line)
+    assert gov.verify_registry(path)  # non-empty problems
+
+
+def test_verify_registry_bound_passes_for_the_committed_fingerprint(tmp_path: Path) -> None:
+    _seed_protocol_inputs(tmp_path)
+    fp = gov.protocol_fingerprint(tmp_path)
+    reg = tmp_path / gov.V2B_REGISTRY_RELPATH
+    gov.append_event(reg, "registered", "v2b_run_001", protocol_fingerprint=fp, timestamp="t0")
+    gov.append_event(reg, "started", "v2b_run_001", protocol_fingerprint=fp, timestamp="t1")
+    assert gov.verify_registry_bound(tmp_path) == []
+
+
+def test_verify_registry_bound_flags_a_foreign_fingerprint(tmp_path: Path) -> None:
+    _seed_protocol_inputs(tmp_path)
+    reg = tmp_path / gov.V2B_REGISTRY_RELPATH
+    # FP is valid hex64 but is not the committed protocol fingerprint.
+    gov.append_event(reg, "registered", "v2b_run_001", protocol_fingerprint=FP, timestamp="t0")
+    problems = gov.verify_registry_bound(tmp_path)
+    assert problems
+    assert "does not match the committed protocol" in problems[0]
