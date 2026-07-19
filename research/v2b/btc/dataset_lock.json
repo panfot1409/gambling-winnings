@@ -1,0 +1,11 @@
+{
+  "acquisition_plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a",
+  "content_fingerprint": "6896e6146d747d3b24295e07371eb8a1b8db4f7d8dbe991f2a797a720c1a39ce",
+  "dataset_manifest_sha256": "844be998c4b12ea5825bac7ab1e9f02dd727992cde108cfe5fe269355772a826",
+  "kind": "btc_dataset_lock",
+  "quality_report_sha256": "c22922e1811f872e4df0d602a3dd111ed74a1d4929a969ef1807b4562956cb9f",
+  "reacquisition_audit_sha256": "09444805f73bf450343fa615d679ca77b917f9c762e236388a4275c5d23dd325",
+  "row_count": 2221,
+  "schema_version": 1,
+  "symbol": "BTC-USD"
+}

@@ -1,0 +1,86 @@
+{
+  "documentation_url": "https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles",
+  "endpoint": "https://api.exchange.coinbase.com/products/BTC-USD/candles",
+  "expected_daily_opens": 2221,
+  "granularity_seconds": 86400,
+  "max_buckets_per_request": 299,
+  "product": "BTC-USD",
+  "schema_version": 1,
+  "venue": "coinbase-exchange",
+  "window_end": "2022-06-22T00:00:00Z",
+  "window_start": "2016-05-23T00:00:00Z",
+  "windows": [
+    {
+      "expected_open_count": 299,
+      "filename": "candles_000.json",
+      "ordinal": 0,
+      "requested_end": "2017-03-17T00:00:00Z",
+      "requested_start": "2016-05-23T00:00:00Z",
+      "window_end": "2017-03-18T00:00:00Z",
+      "window_start": "2016-05-23T00:00:00Z"
+    },
+    {
+      "expected_open_count": 299,
+      "filename": "candles_001.json",
+      "ordinal": 1,
+      "requested_end": "2018-01-10T00:00:00Z",
+      "requested_start": "2017-03-18T00:00:00Z",
+      "window_end": "2018-01-11T00:00:00Z",
+      "window_start": "2017-03-18T00:00:00Z"
+    },
+    {
+      "expected_open_count": 299,
+      "filename": "candles_002.json",
+      "ordinal": 2,
+      "requested_end": "2018-11-05T00:00:00Z",
+      "requested_start": "2018-01-11T00:00:00Z",
+      "window_end": "2018-11-06T00:00:00Z",
+      "window_start": "2018-01-11T00:00:00Z"
+    },
+    {
+      "expected_open_count": 299,
+      "filename": "candles_003.json",
+      "ordinal": 3,
+      "requested_end": "2019-08-31T00:00:00Z",
+      "requested_start": "2018-11-06T00:00:00Z",
+      "window_end": "2019-09-01T00:00:00Z",
+      "window_start": "2018-11-06T00:00:00Z"
+    },
+    {
+      "expected_open_count": 299,
+      "filename": "candles_004.json",
+      "ordinal": 4,
+      "requested_end": "2020-06-25T00:00:00Z",
+      "requested_start": "2019-09-01T00:00:00Z",
+      "window_end": "2020-06-26T00:00:00Z",
+      "window_start": "2019-09-01T00:00:00Z"
+    },
+    {
+      "expected_open_count": 299,
+      "filename": "candles_005.json",
+      "ordinal": 5,
+      "requested_end": "2021-04-20T00:00:00Z",
+      "requested_start": "2020-06-26T00:00:00Z",
+      "window_end": "2021-04-21T00:00:00Z",
+      "window_start": "2020-06-26T00:00:00Z"
+    },
+    {
+      "expected_open_count": 299,
+      "filename": "candles_006.json",
+      "ordinal": 6,
+      "requested_end": "2022-02-13T00:00:00Z",
+      "requested_start": "2021-04-21T00:00:00Z",
+      "window_end": "2022-02-14T00:00:00Z",
+      "window_start": "2021-04-21T00:00:00Z"
+    },
+    {
+      "expected_open_count": 128,
+      "filename": "candles_007.json",
+      "ordinal": 7,
+      "requested_end": "2022-06-21T00:00:00Z",
+      "requested_start": "2022-02-14T00:00:00Z",
+      "window_end": "2022-06-22T00:00:00Z",
+      "window_start": "2022-02-14T00:00:00Z"
+    }
+  ]
+}

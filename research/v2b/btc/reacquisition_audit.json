@@ -1,0 +1,20 @@
+{
+  "audit": {
+    "attempt_id": "coinbase-btc-usd-research-audit-002",
+    "receipt_sha256": "fa34b3abffe5172e0c464f5f5e933b489c4e6280291b92b22fd9293b273b7a36",
+    "source_commit": "7586c3e7c3fc88f8df0366a06ae04475a0e446ea",
+    "workflow_run_id": "29703940115"
+  },
+  "canonical_candles_identical": true,
+  "content_fingerprint": "6896e6146d747d3b24295e07371eb8a1b8db4f7d8dbe991f2a797a720c1a39ce",
+  "genesis": {
+    "attempt_id": "coinbase-btc-usd-research-genesis-001",
+    "receipt_sha256": "e8da5eb9695356ad1e93f0352dbe3706f80c4bfc3fabd5281f060afc892784bb",
+    "source_commit": "f937c7a6eacabd9266952774a661e1ffdedfd388",
+    "workflow_run_id": "29703864216"
+  },
+  "independent_run_ids": true,
+  "independent_source_commits": true,
+  "kind": "btc_reacquisition_audit",
+  "schema_version": 1
+}
