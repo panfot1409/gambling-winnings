@@ -72,8 +72,16 @@ KNOWN_WORKFLOW_FILES = frozenset(
         "v2a-replay.yml",
         "release-dry-run.yml",
         "private-release-build.yml",
+        # TRANSIENT (Milestone V2B sections 11-13): the one-shot BTC acquisition workflow. It is
+        # removed with its sentinel in section 13, at which point this entry is removed again.
+        "v2b-acquire.yml",
     }
 )
+
+# TRANSIENT: the temporary write-capable acquisition workflow (sections 11-13). While it exists
+# it legitimately grants contents:write on its acquire job and pushes the bot commit; the accepted
+# governance verifiers flag it honestly and it is retired before source freeze.
+TRANSIENT_ACQUISITION_WORKFLOWS = frozenset({"v2b-acquire.yml"})
 
 PINNED_UPLOAD = "actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882"
 
@@ -243,19 +251,34 @@ class TestClosedWorkflowSet:
 
     def test_live_supply_chain_scan_is_clean(self) -> None:
         _inv, failures = build_and_check(REPO_ROOT)
-        assert failures == []
+        # TRANSIENT (sections 11-13): the one-shot acquire workflow legitimately grants
+        # contents:write and pushes the bot commit, so the fail-closed scanner flags exactly
+        # those two on that basename and nothing else while it exists. After retirement
+        # (section 13) this set is empty and the scan is unconditionally clean again.
+        allowed = {
+            f".github/workflows/{w}: grants write contents" for w in TRANSIENT_ACQUISITION_WORKFLOWS
+        } | {f".github/workflows/{w}: contains git push" for w in TRANSIENT_ACQUISITION_WORKFLOWS}
+        assert set(failures) <= allowed, [f for f in failures if f not in allowed]
 
     def test_every_live_workflow_is_least_privilege(self) -> None:
         inv = build_inventory(REPO_ROOT)
         for e in inv["workflows"]:
             name = Path(e["path"]).name
-            assert e["can_write_contents"] is False, name
-            assert e["can_push"] is False, name
+            transient = name in TRANSIENT_ACQUISITION_WORKFLOWS
+            if not transient:
+                # No standing workflow writes or pushes. The transient acquire workflow does
+                # both by design (sections 11-13) and is removed before source freeze.
+                assert e["can_write_contents"] is False, name
+                assert e["can_push"] is False, name
+            # Every workflow — the transient acquire workflow included — keeps every OTHER
+            # least-privilege property: no merge/release/tag verb, no market-host literal, no
+            # piped installer, no secret, a real permissions block, and full SHA pinning.
             assert e["can_merge_or_release_or_tag"] is False, name
             assert e["contacts_market_host"] is False, name
             assert e["piped_installer"] is False, name
             assert e["uses_all_sha_pinned"] is True, name
             assert e["has_real_permissions_block"] is True, name
+            assert e["references_secrets"] is False, name
             if e["uploads_artifact"]:
                 assert name == PRIVATE_BASENAME, f"{name} uploads but is not allowlisted"
 
