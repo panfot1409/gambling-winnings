@@ -65,6 +65,7 @@ __all__ = [
     "require_tuple",
     "require_unit_interval",
     "require_utc_timestamp",
+    "sha256_bytes",
     "strict_json_loads",
 ]
 
