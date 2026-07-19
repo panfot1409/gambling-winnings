@@ -50,6 +50,10 @@ BTC_DOCUMENTATION_URL: str = (
     "https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles"
 )
 BTC_ADAPTER_ALGORITHM: str = "coinbase-candles-v1"
+BTC_USER_AGENT: str = (
+    "eth-research-v2b-cross-asset-acquisition/1 (offline research; public candles)"
+)
+MAX_BODY_BYTES: int = 2 * 1024 * 1024  # a daily <=299-bucket JSON body is far below this cap
 
 # The authorized window — matched exactly to the ETH research-train. Hard-coded; not caller-set.
 WINDOW_START: pd.Timestamp = pd.Timestamp("2016-05-23T00:00:00Z")
@@ -282,6 +286,102 @@ def build_window_receipt(
         parsed_open_count=len(rows),
         first_open_epoch=rows[0][0],
         last_open_epoch=rows[-1][0],
+    )
+
+
+ATTEMPT_RECEIPT_SCHEMA_VERSION: int = 1
+ATTEMPT_RECEIPT_KIND: str = "btc_usd_acquisition_receipt"
+
+
+@dataclass(frozen=True, slots=True)
+class BtcAttemptReceipt:
+    """A strict, byte-reproducible receipt binding one whole acquisition attempt.
+
+    Records the plan hash, provenance (workflow run, source commit, runner + curl
+    identity, retrieval time) and one :class:`BtcResponseReceipt` per planned window
+    (body hash + length + parsed open bounds). Never any candle value.
+    """
+
+    schema_version: int
+    kind: str
+    package_version: str
+    attempt_id: str
+    endpoint: str
+    user_agent: str
+    plan_sha256: str
+    source_commit: str
+    workflow_run_id: str
+    runner_identity: str
+    client_identity: str
+    created_at_utc: str
+    windows: tuple[BtcResponseReceipt, ...]
+
+    def to_canonical(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "kind": self.kind,
+            "package_version": self.package_version,
+            "attempt_id": self.attempt_id,
+            "endpoint": self.endpoint,
+            "user_agent": self.user_agent,
+            "plan_sha256": self.plan_sha256,
+            "source_commit": self.source_commit,
+            "workflow_run_id": self.workflow_run_id,
+            "runner_identity": self.runner_identity,
+            "client_identity": self.client_identity,
+            "created_at_utc": self.created_at_utc,
+            "windows": [w.to_canonical() for w in self.windows],
+        }
+
+    def to_json_bytes(self) -> bytes:
+        return canonical_json_bytes(self.to_canonical())
+
+    def total_parsed_opens(self) -> int:
+        return sum(w.parsed_open_count for w in self.windows)
+
+
+def build_attempt_receipt(
+    *,
+    attempt_id: str,
+    package_version: str,
+    plan: BtcAcquisitionPlan,
+    window_receipts: tuple[BtcResponseReceipt, ...],
+    source_commit: str,
+    workflow_run_id: str,
+    runner_identity: str,
+    client_identity: str,
+    created_at_utc: str,
+) -> BtcAttemptReceipt:
+    """Assemble a strict attempt receipt, enforcing plan/window coverage."""
+    if attempt_id not in ATTEMPT_IDS:
+        raise BtcAcquisitionError(f"attempt_id {attempt_id!r} is not allowlisted")
+    plan_sha = plan.plan_sha256()
+    if len(window_receipts) != plan.expected_request_count():
+        raise BtcAcquisitionError("window receipt count does not match the plan")
+    for ordinal, receipt in enumerate(window_receipts):
+        if receipt.ordinal != ordinal:
+            raise BtcAcquisitionError(f"window receipt {ordinal} is out of order")
+        if receipt.plan_sha256 != plan_sha:
+            raise BtcAcquisitionError(f"window receipt {ordinal} binds a different plan")
+        if receipt.attempt_id != attempt_id:
+            raise BtcAcquisitionError(f"window receipt {ordinal} binds a different attempt")
+    total = sum(w.parsed_open_count for w in window_receipts)
+    if total != EXPECTED_DAILY_OPENS:
+        raise BtcAcquisitionError(f"attempt parsed {total} opens, expected {EXPECTED_DAILY_OPENS}")
+    return BtcAttemptReceipt(
+        schema_version=ATTEMPT_RECEIPT_SCHEMA_VERSION,
+        kind=ATTEMPT_RECEIPT_KIND,
+        package_version=package_version,
+        attempt_id=attempt_id,
+        endpoint=BTC_CANDLES_ENDPOINT,
+        user_agent=BTC_USER_AGENT,
+        plan_sha256=plan_sha,
+        source_commit=source_commit,
+        workflow_run_id=workflow_run_id,
+        runner_identity=runner_identity,
+        client_identity=client_identity,
+        created_at_utc=created_at_utc,
+        windows=tuple(window_receipts),
     )
 
 
