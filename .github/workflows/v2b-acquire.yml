@@ -146,7 +146,10 @@ jobs:
         run: |
           set -euo pipefail
           RAW_DIR="research/v2b/raw/coinbase/${ATTEMPT_ID}"
-          if git status --porcelain | grep -vE "(^|[?M ]) *${RAW_DIR}/" ; then
+          # --untracked-files=all lists individual files: research/v2b/raw/ is a brand-new
+          # directory with no previously-tracked files, so a plain porcelain status collapses
+          # it to a single "?? research/v2b/raw/" line that would not match the attempt-dir path.
+          if git status --porcelain --untracked-files=all | grep -vE "(^|[?M ]) *${RAW_DIR}/" ; then
             echo "refusing: changes outside ${RAW_DIR}"
             exit 1
           fi

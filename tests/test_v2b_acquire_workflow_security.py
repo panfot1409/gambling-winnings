@@ -126,6 +126,10 @@ def test_push_is_fast_forward_only_and_scope_checked() -> None:
     assert "push origin HEAD:claude/v2b-cross-asset-research-reset" in text
     assert "remote head moved" in text  # before/after remote-head verification
     assert "changes outside" in text  # bot-commit scope confinement to the raw dir
+    # The scope check must enumerate individual untracked files: research/v2b/raw/ is a
+    # brand-new directory, so a plain `git status --porcelain` collapses it to one line that
+    # would not match the attempt-dir path (regression: genesis run 29703684302 step 11).
+    assert "--untracked-files=all" in text
 
 
 def test_runner_is_the_offline_module_and_no_dynamic_endpoint() -> None:
