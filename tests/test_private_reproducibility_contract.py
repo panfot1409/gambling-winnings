@@ -136,6 +136,8 @@ def _uv_available() -> bool:
 
 @pytest.mark.slow
 def test_two_independent_builds_yield_byte_identical_artifacts() -> None:
+    if TOOL._active_version(REPO) != TOOL.VERSION:
+        pytest.skip("the frozen private-release builder builds only the v1.1.0 source tree")
     if not _uv_available():
         pytest.skip("uv/git required for the deterministic build")
     try:
@@ -172,6 +174,8 @@ def test_sdist_contains_the_root_gitignore_input() -> None:
     import io
     import tarfile
 
+    if TOOL._active_version(REPO) != TOOL.VERSION:
+        pytest.skip("the frozen private-release builder builds only the v1.1.0 source tree")
     if not _uv_available():
         pytest.skip("uv/git required for the deterministic build")
     try:

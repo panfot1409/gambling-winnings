@@ -205,6 +205,15 @@ def _pyproject(root: Path) -> dict[str, Any]:
     return data
 
 
+def _active_version(root: Path) -> str:
+    """The running package's active version from the tracked pyproject."""
+    return str(_pyproject(root)["project"]["version"])
+
+
+def _is_lower_hex(value: str) -> bool:
+    return all(c in "0123456789abcdef" for c in value)
+
+
 def _runtime_dependencies(root: Path) -> list[str]:
     return list(_pyproject(root)["project"]["dependencies"])
 
@@ -553,8 +562,15 @@ def assemble_payload_bytes(root: Path, wheel_bytes: bytes, sdist_bytes: bytes) -
 # --------------------------------------------------------------------------- #
 # wheel metadata license guard                                                 #
 # --------------------------------------------------------------------------- #
-def wheel_metadata_findings(wheel_path: Path) -> list[str]:
-    """Fail closed unless the wheel METADATA is name/version-correct, guarded, and license-free."""
+def wheel_metadata_findings(wheel_path: Path, *, expected_version: str = VERSION) -> list[str]:
+    """Fail closed unless the wheel METADATA is name/version-correct, guarded, and license-free.
+
+    ``expected_version`` defaults to the frozen release ``VERSION`` — the production build path
+    (``_build_wheel_and_sdist``) pins the wheel to exactly that. A caller verifying a *current*
+    wheel at a later development version passes the active version, so the guard validates the
+    wheel's own recorded version together with its version-independent invariants (name, the
+    ``Private :: Do Not Upload`` guard, and license-freeness) instead of the frozen release string.
+    """
     findings: list[str] = []
     with zipfile.ZipFile(wheel_path) as zf:
         names = [n for n in zf.namelist() if n.endswith(".dist-info/METADATA")]
@@ -568,8 +584,8 @@ def wheel_metadata_findings(wheel_path: Path) -> list[str]:
         header.append(line)
     if "Name: eth-research" not in header:
         findings.append("METADATA Name is not eth-research")
-    if f"Version: {VERSION}" not in header:
-        findings.append(f"METADATA Version is not {VERSION}")
+    if f"Version: {expected_version}" not in header:
+        findings.append(f"METADATA Version is not {expected_version}")
     if "Classifier: Private :: Do Not Upload" not in header:
         findings.append("METADATA is missing the Private :: Do Not Upload guard")
     for line in header:
@@ -1012,7 +1028,6 @@ def check(repo_root: str | Path) -> list[str]:
 
     governed = _governed_digest(root)
     ledgers = _ledger_hashes(root)
-    source = _source_distribution(root)
 
     if manifest.get("governed_state_digest") != governed:
         problems.append("manifest governed_state_digest does not reproduce")
@@ -1020,10 +1035,28 @@ def check(repo_root: str | Path) -> list[str]:
         problems.append("manifest ledger_sha256 does not reproduce")
     if manifest.get("policy_sha256") != _policy_sha256(root):
         problems.append("manifest policy_sha256 does not reproduce")
-    if manifest.get("source_tree_digest") != source["tree_digest"]:
-        problems.append("manifest source_tree_digest does not reproduce")
-    if manifest.get("source_member_count") != source["member_count"]:
-        problems.append("manifest source_member_count does not reproduce")
+
+    # Source anchors reproduce from the live tree only when the active version equals the frozen
+    # release VERSION. Under a later development version the committed private-release manifest is a
+    # historical artifact built from the v1.1.0 source tree, which a newer tree legitimately differs
+    # from (a bumped __version__, added V2 modules); validate the recorded anchors structurally and
+    # confirm the manifest is version-stamped VERSION rather than requiring the diverged tree to
+    # reproduce them. The governed digest and ledgers above are version-independent and always live.
+    if _active_version(root) == VERSION:
+        source = _source_distribution(root)
+        if manifest.get("source_tree_digest") != source["tree_digest"]:
+            problems.append("manifest source_tree_digest does not reproduce")
+        if manifest.get("source_member_count") != source["member_count"]:
+            problems.append("manifest source_member_count does not reproduce")
+    else:
+        digest = manifest.get("source_tree_digest")
+        if manifest.get("version") != VERSION:
+            problems.append("manifest version is not the frozen release version")
+        if not (isinstance(digest, str) and len(digest) == 64 and _is_lower_hex(digest)):
+            problems.append("manifest source_tree_digest is not a valid sha256 digest")
+        count = manifest.get("source_member_count")
+        if not (isinstance(count, int) and not isinstance(count, bool) and count > 0):
+            problems.append("manifest source_member_count is not a positive integer")
 
     # Every listed member path must be a safe basename (no traversal / separators / absolute).
     member_map: dict[str, str] = {}

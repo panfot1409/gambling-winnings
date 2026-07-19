@@ -185,9 +185,21 @@ def test_committed_manifest_source_fields_reproduce() -> None:
     assert manifest["governed_state_digest"] == TOOL._governed_digest(REPO)
     assert manifest["ledger_sha256"] == TOOL._ledger_hashes(REPO)
     assert manifest["policy_sha256"] == TOOL._policy_sha256(REPO)
-    source = TOOL._source_distribution(REPO)
-    assert manifest["source_tree_digest"] == source["tree_digest"]
-    assert manifest["source_member_count"] == source["member_count"]
+    # Source anchors reproduce from the live tree only at the frozen release version; under a later
+    # development version the committed manifest is a historical artifact (its recorded anchors are
+    # validated structurally instead of reproduced from the diverged tree).
+    if TOOL._active_version(REPO) == TOOL.VERSION:
+        source = TOOL._source_distribution(REPO)
+        assert manifest["source_tree_digest"] == source["tree_digest"]
+        assert manifest["source_member_count"] == source["member_count"]
+    else:
+        digest = manifest["source_tree_digest"]
+        assert manifest["version"] == TOOL.VERSION
+        assert isinstance(digest, str)
+        assert len(digest) == 64
+        assert TOOL._is_lower_hex(digest)
+        assert isinstance(manifest["source_member_count"], int)
+        assert manifest["source_member_count"] > 0
     members = {entry["filename"]: entry["sha256"] for entry in manifest["members"]}
     assert members["sbom.cdx.json"] == sha256_hex(TOOL._sbom_bytes(REPO))
     assert members["PRIVATE_INSTALL.md"] == sha256_hex(TOOL.render_install_md(REPO))
@@ -333,6 +345,8 @@ def _uv_available() -> bool:
 
 @pytest.mark.slow
 def test_real_build_payload_is_byte_identical() -> None:
+    if TOOL._active_version(REPO) != TOOL.VERSION:
+        pytest.skip("the frozen private-release builder builds only the v1.1.0 source tree")
     if not _uv_available():
         pytest.skip("uv/git required for the deterministic build")
     try:
@@ -354,6 +368,8 @@ def test_committed_manifest_binary_hashes_reproduce_from_build() -> None:
     # Guards the cross-environment reproducibility of the wheel and sdist: with SOURCE_DATE_EPOCH
     # pinned, a fresh build must reproduce the exact member hashes recorded in the committed
     # manifest (the sdist gzip header is otherwise wall-clock dependent).
+    if TOOL._active_version(REPO) != TOOL.VERSION:
+        pytest.skip("the frozen v1.1.0 payload reproduces only from the v1.1.0 source tree")
     if not _uv_available():
         pytest.skip("uv/git required for the deterministic build")
     try:
@@ -385,5 +401,8 @@ def test_built_wheel_metadata_is_license_free_and_guarded(tmp_path: Path) -> Non
     except subprocess.CalledProcessError as exc:  # pragma: no cover
         pytest.skip(f"wheel build unavailable (offline?): {exc.stderr}")
     wheel = next(tmp_path.glob("*.whl"))
-    assert TOOL.wheel_metadata_findings(wheel) == []
+    # Validate the current wheel against its OWN active version: the frozen-release VERSION guard is
+    # relaxed to the live version here, while every version-independent invariant (name, the
+    # Private :: Do Not Upload guard, license-freeness) is still enforced.
+    assert TOOL.wheel_metadata_findings(wheel, expected_version=TOOL._active_version(REPO)) == []
     assert SCANNER.scan_distribution(wheel) == []

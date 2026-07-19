@@ -270,6 +270,8 @@ def _uv_available() -> bool:
 
 @pytest.mark.slow
 def test_real_built_payload_verifies_and_member_injection_is_rejected(tmp_path: Path) -> None:
+    if TOOL._active_version(REPO) != TOOL.VERSION:
+        pytest.skip("the frozen private-release builder builds only the v1.1.0 source tree")
     if not _uv_available():
         pytest.skip("uv/git required to build the distribution")
     try:
