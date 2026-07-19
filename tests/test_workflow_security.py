@@ -32,15 +32,6 @@ CI = WORKFLOWS / "ci.yml"
 # tests/test_private_workflow_security.py.
 ARTIFACT_UPLOAD_ALLOWLIST = {"private-release-build.yml"}
 
-# TRANSIENT (Milestone V2B sections 11-13). The temporary one-shot BTC acquisition workflow is
-# the sole workflow permitted `contents: write` WHILE it exists, and only on its acquire job. It
-# is removed together with its sentinel after the genesis + audit acquisitions are verified
-# (section 13), at which point this set becomes empty again and the no-write assertion is
-# unconditional. While it exists, the accepted M3F governance verifiers (honest_state,
-# workflow_inventory, the independent verifier) correctly flag it — that is the honest transient
-# state; its full hardening is proven in tests/test_v2b_acquire_workflow_security.py.
-TRANSIENT_ACQUISITION_WORKFLOWS = {"v2b-acquire.yml"}
-
 # Only the uv installer host may appear, and only in read-only workflows.
 ALLOWED_HOSTS = {"astral.sh"}
 _URL_RE = re.compile(r"https://([A-Za-z0-9.\-]+)")
@@ -75,14 +66,16 @@ class TestAcquisitionWorkflowsRetired:
     def test_m3d_acquire_trigger_is_removed(self) -> None:
         assert not (REPO_ROOT / "research/m3d/acquire.trigger").exists()
 
+    def test_v2b_acquisition_workflow_is_removed(self) -> None:
+        assert not (WORKFLOWS / "v2b-acquire.yml").exists()
+
+    def test_v2b_acquire_trigger_is_removed(self) -> None:
+        assert not (REPO_ROOT / "research/v2b/acquire.trigger").exists()
+
     def test_no_workflow_can_write_contents(self) -> None:
-        # No STANDING workflow may write repository contents. The temporary one-shot V2B BTC
-        # acquisition workflow is the sole exception WHILE it exists (sections 11-12); it is
-        # retired with its sentinel in section 13, after which this exemption is removed and the
-        # assertion is unconditional again (see test_v2b_acquisition_workflow_is_removed).
+        # At the final HEAD no workflow may write repository contents — the temporary V2B BTC
+        # acquisition workflow is retired (section 13).
         for path in _all_workflow_files():
-            if path.name in TRANSIENT_ACQUISITION_WORKFLOWS:
-                continue
             text = path.read_text(encoding="utf-8")
             assert "contents: write" not in text, f"{path.name} still grants contents: write"
             assert "contents:write" not in text
