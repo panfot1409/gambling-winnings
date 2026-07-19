@@ -1,0 +1,8 @@
+{
+  "nominated_candidate_id": null,
+  "results_file": "results.json",
+  "results_fingerprint": "6327de21759c21a97c8b1ee9c14782bb36534c8d968d6792eba54b7c9c58cbca",
+  "results_sha256": "6327de21759c21a97c8b1ee9c14782bb36534c8d968d6792eba54b7c9c58cbca",
+  "run_id": "run_001",
+  "schema_version": 1
+}
