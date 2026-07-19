@@ -1,0 +1,104 @@
+{
+  "attempt_id": "coinbase-btc-usd-research-audit-002",
+  "client_identity": "curl/8.5.0",
+  "created_at_utc": "2026-07-19T21:12:47Z",
+  "endpoint": "https://api.exchange.coinbase.com/products/BTC-USD/candles",
+  "kind": "btc_usd_acquisition_receipt",
+  "package_version": "2.0.0.dev1",
+  "plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a",
+  "runner_identity": "Linux 6.17.0-1020-azure x86_64",
+  "schema_version": 1,
+  "source_commit": "7586c3e7c3fc88f8df0366a06ae04475a0e446ea",
+  "user_agent": "eth-research-v2b-cross-asset-acquisition/1 (offline research; public candles)",
+  "windows": [
+    {
+      "attempt_id": "coinbase-btc-usd-research-audit-002",
+      "body_bytes": 16006,
+      "body_sha256": "b458adc3288362b86dda2a40ac996e8fabc1508a7c7f190da0e567f4207079e4",
+      "filename": "candles_000.json",
+      "first_open_epoch": 1463961600,
+      "last_open_epoch": 1489708800,
+      "ordinal": 0,
+      "parsed_open_count": 299,
+      "plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a"
+    },
+    {
+      "attempt_id": "coinbase-btc-usd-research-audit-002",
+      "body_bytes": 16921,
+      "body_sha256": "280ba50f2c44155e3475cb59991719793c5e3c3e6204426d6c63c141892abe89",
+      "filename": "candles_001.json",
+      "first_open_epoch": 1489795200,
+      "last_open_epoch": 1515542400,
+      "ordinal": 1,
+      "parsed_open_count": 299,
+      "plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a"
+    },
+    {
+      "attempt_id": "coinbase-btc-usd-research-audit-002",
+      "body_bytes": 16682,
+      "body_sha256": "9820bc2b3dc6bb8171db9e300b6d3584328f266f90f2eb52628600d927d5f174",
+      "filename": "candles_002.json",
+      "first_open_epoch": 1515628800,
+      "last_open_epoch": 1541376000,
+      "ordinal": 2,
+      "parsed_open_count": 299,
+      "plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a"
+    },
+    {
+      "attempt_id": "coinbase-btc-usd-research-audit-002",
+      "body_bytes": 17185,
+      "body_sha256": "a364461077a3a87d298cf524f150f136847bff780dc3fe1b209b8728b02ef362",
+      "filename": "candles_003.json",
+      "first_open_epoch": 1541462400,
+      "last_open_epoch": 1567209600,
+      "ordinal": 3,
+      "parsed_open_count": 299,
+      "plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a"
+    },
+    {
+      "attempt_id": "coinbase-btc-usd-research-audit-002",
+      "body_bytes": 17021,
+      "body_sha256": "d49b4690687c130fbbcc8fb7f0f729d61e18b91a8ddfbfb755f62a5bacd2a46f",
+      "filename": "candles_004.json",
+      "first_open_epoch": 1567296000,
+      "last_open_epoch": 1593043200,
+      "ordinal": 4,
+      "parsed_open_count": 299,
+      "plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a"
+    },
+    {
+      "attempt_id": "coinbase-btc-usd-research-audit-002",
+      "body_bytes": 17985,
+      "body_sha256": "bcf1d9b41aa0f80ff666745a223e18c011842926c849becae7edfc5c86f3faaf",
+      "filename": "candles_005.json",
+      "first_open_epoch": 1593129600,
+      "last_open_epoch": 1618876800,
+      "ordinal": 5,
+      "parsed_open_count": 299,
+      "plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a"
+    },
+    {
+      "attempt_id": "coinbase-btc-usd-research-audit-002",
+      "body_bytes": 18321,
+      "body_sha256": "fae344929ae0839f7c64fecfc4a2b405952ebfcdf1b11b813bd640281faaf7f1",
+      "filename": "candles_006.json",
+      "first_open_epoch": 1618963200,
+      "last_open_epoch": 1644710400,
+      "ordinal": 6,
+      "parsed_open_count": 299,
+      "plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a"
+    },
+    {
+      "attempt_id": "coinbase-btc-usd-research-audit-002",
+      "body_bytes": 7863,
+      "body_sha256": "7ab0ab288f5364993d5e359353fa24f879c3bece5360bea56e5f5b4b613df746",
+      "filename": "candles_007.json",
+      "first_open_epoch": 1644796800,
+      "last_open_epoch": 1655769600,
+      "ordinal": 7,
+      "parsed_open_count": 128,
+      "plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a"
+    }
+  ],
+  "workflow_run_id": "29703940115"
+}
