@@ -59,10 +59,12 @@ def _iter_files(root: Path) -> list[Path]:
 
 
 # Development layers added AFTER the pre-GA baseline are outside this frozen neutrality scope: they
-# carry their own drift checks (V2A: eth_research.v2.replay.verify_v2a + the v2a-replay workflow),
-# so their research/ artifacts are excluded here — as the M3C-M3E freeze table excludes the later
-# M3F/M4A/M4B layers it does not own. The baseline stays the merged-main (M3) governed state.
-_POST_BASELINE_PREFIXES = ("research/v2a/",)
+# carry their own drift checks (V2A: eth_research.v2.replay.verify_v2a + the v2a-replay workflow;
+# V2B: the eth_research.v2b research-memory / dataset / registry verifiers + the v2b-replay
+# workflow), so their research/ artifacts are excluded here — as the M3C-M3E freeze table excludes
+# the later M3F/M4A/M4B layers it does not own. The baseline stays the merged-main (M3) governed
+# state.
+_POST_BASELINE_PREFIXES = ("research/v2a/", "research/v2b/")
 
 
 def governed_baseline_digest(repo_root: Path) -> str:

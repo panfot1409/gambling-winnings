@@ -50,6 +50,9 @@ def test_freeze_table_covers_every_research_file() -> None:
     # (src/eth_research/m3f/catalog.py).
     # research/v2a/ is the later V2A commercial-evidence layer, excluded on the same basis: it
     # carries its own drift check (eth_research.v2.replay verify_v2a + the v2a-replay workflow).
+    # research/v2b/ is the later V2B cross-asset research-reset layer, excluded on the same basis:
+    # it carries its own drift checks (eth_research.v2b research-memory / multiplicity / dataset /
+    # registry verifiers + the v2b-replay workflow).
     tracked = {
         p
         for p in tracked
@@ -58,6 +61,7 @@ def test_freeze_table_covers_every_research_file() -> None:
             or p.startswith("research/m4a/")
             or p.startswith("research/m4b/")
             or p.startswith("research/v2a/")
+            or p.startswith("research/v2b/")
         )
     }
     listed = {row["path"] for row in _table()["files"]}

@@ -1,0 +1,94 @@
+{
+  "rejected_families": [
+    {
+      "decisions": [
+        "not_promoted"
+      ],
+      "family_id": "m3a_sma_crossover",
+      "identity_fingerprint": "63b3cd042192557e1e9c7f753f2a40bed68b0efbdfff62976dd4a3245ef55975",
+      "lineage": [
+        "m3a"
+      ],
+      "partition": "research_train"
+    },
+    {
+      "decisions": [
+        "permanently_rejected"
+      ],
+      "family_id": "m3c_dual_horizon_trend_63_252_vol_target_30d_50pct",
+      "identity_fingerprint": "65e7a2aa0c12e7ab3c4d35c7c99df7de5b12f047f1244eb049483e42f1a176a0",
+      "lineage": [
+        "m3c"
+      ],
+      "partition": "research_train"
+    },
+    {
+      "decisions": [
+        "research_stage_rejected"
+      ],
+      "family_id": "v2a_trend_regime_single_horizon",
+      "identity_fingerprint": "7c78c0478bfcc16b6a14fee6a8c78459d75ab53374da11a44cdd480d91ce64ad",
+      "lineage": [
+        "v2a"
+      ],
+      "partition": "research_train"
+    },
+    {
+      "decisions": [
+        "not_promoted"
+      ],
+      "family_id": "m3b_vol_target_buy_and_hold_30d_50pct",
+      "identity_fingerprint": "8a2553379f560b10beda8802b25a7d1a4d565e23b1cea263452a9011e457b2c9",
+      "lineage": [
+        "m3b"
+      ],
+      "partition": "research_train"
+    },
+    {
+      "decisions": [
+        "research_stage_rejected"
+      ],
+      "family_id": "v2a_meanrev_zscore_accumulation",
+      "identity_fingerprint": "8dcedc9ea9020cca508611f4ca5f38ac92a0400de36eff58a554110fc741a8e0",
+      "lineage": [
+        "v2a"
+      ],
+      "partition": "research_train"
+    },
+    {
+      "decisions": [
+        "not_promoted"
+      ],
+      "family_id": "m3b_vol_target_donchian_55_20_30d_50pct",
+      "identity_fingerprint": "b220bc546f2f8427568653454d50255fa321b7023b74aeda64cb21034f85f810",
+      "lineage": [
+        "m3b"
+      ],
+      "partition": "research_train"
+    },
+    {
+      "decisions": [
+        "not_promoted"
+      ],
+      "family_id": "m3a_donchian_breakout",
+      "identity_fingerprint": "c45c240bd67d055f2f4678d263490c523b9c163e18eec4125bede7431c8bbc8d",
+      "lineage": [
+        "m3a"
+      ],
+      "partition": "research_train"
+    },
+    {
+      "decisions": [
+        "research_stage_rejected"
+      ],
+      "family_id": "v2a_vol_scaled_hold_drawdown_guard",
+      "identity_fingerprint": "f5c6a29fcd723aab4f8876072808f33c2bd923d1dff9ad1c1a128fb2dc19b347",
+      "lineage": [
+        "v2a"
+      ],
+      "partition": "research_train"
+    }
+  ],
+  "rejected_family_count": 8,
+  "schema_version": 1
+}
