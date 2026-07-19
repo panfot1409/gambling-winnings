@@ -28,6 +28,15 @@ from eth_research.v2.constitution import (
 # the governed research programme, not the wheel.
 V2A_MILESTONE: str = "v2a"
 
+# V2A is a completed milestone: its committed governed artifacts (pre_registration.json,
+# results.json) stamp the version the run was authorized under. Once a later milestone (V2B) bumps
+# the active package version, V2A freezes and pins its own recorded version here rather than tracking
+# the live ``eth_research.__version__`` — exactly as every prior completed milestone pins its own
+# ``*_PACKAGE_VERSION`` (M4B is ``1.1.0``, M3C is ``0.6.0``, …). A running version that differs from
+# this frozen constant marks a development ("snapshot") run, never a re-authorization of the
+# consumed one-shot.
+V2A_PACKAGE_VERSION: str = "2.0.0.dev0"
+
 __all__ = [
     "MAX_CANDIDATE_FAMILIES",
     "MAX_RESEARCH_EXECUTIONS",
@@ -35,6 +44,7 @@ __all__ = [
     "STANDING_POSTURE",
     "V2A_EMITTABLE_STATUSES",
     "V2A_MILESTONE",
+    "V2A_PACKAGE_VERSION",
     "CommercialEvidenceConstitution",
     "OneShotResearchBudget",
 ]

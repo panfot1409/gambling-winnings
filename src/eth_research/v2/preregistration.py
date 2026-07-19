@@ -20,8 +20,8 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
-from eth_research import __version__
 from eth_research.buyer.contract import EvaluationContract
+from eth_research.v2 import V2A_PACKAGE_VERSION
 from eth_research.v2.budget import OneShotResearchBudget
 from eth_research.v2.candidates import V2A_CANDIDATES
 from eth_research.v2.constitution import CommercialEvidenceConstitution
@@ -82,7 +82,7 @@ class V2APreRegistration:
         return V2APreRegistration(
             schema_version=PREREGISTRATION_SCHEMA_VERSION,
             run_id=require_slug("pre_registration.run_id", run_id),
-            package_version=__version__,
+            package_version=V2A_PACKAGE_VERSION,
             protocol_fingerprint=ResearchProtocol.current().fingerprint(),
             constitution_fingerprint=CommercialEvidenceConstitution.current().fingerprint(),
             budget_fingerprint=OneShotResearchBudget.current().fingerprint(),
