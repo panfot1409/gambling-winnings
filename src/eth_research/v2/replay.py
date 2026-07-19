@@ -4,12 +4,15 @@
 been published, re-verifies it against the committed bytes. It is read-only and offline: no network,
 no sealed partition, no wall-clock. It works in both states of the milestone:
 
-* **before the governed run** — the protocol / constitution / contract / claims / scorecard /
+* **pristine (before registration)** — the protocol / constitution / contract / claims / scorecard /
   factsheet fingerprints must round-trip, the diligence bundle must assemble past the redaction
   gate, and the three sealed access ledgers must be byte-empty;
-* **after the governed run** — additionally, the published results + manifest must verify, the
-  registry chain must be sound and within its one-shot budget, and the registry's ``completed``
-  event must bind exactly the published results fingerprint under the current protocol.
+* **registered (checkpoint R)** — additionally, a committed pre-registration must parse and still
+  match the frozen source (registry + results still absent);
+* **completed (checkpoint P)** — additionally, the published results + manifest must verify, the
+  registry chain must be sound and within its one-shot budget, the registry's ``completed`` event
+  must bind exactly the published results fingerprint under the current protocol, and the results
+  must match the pre-registration fingerprint-for-fingerprint.
 
 Any mismatch is returned as a human-readable string; an empty list means the stack replays cleanly.
 """
@@ -26,6 +29,11 @@ from eth_research.buyer.diligence import assemble_diligence_bundle
 from eth_research.buyer.factsheet import Factsheet
 from eth_research.buyer.scorecard import ReadinessScorecard
 from eth_research.v2.constitution import CommercialEvidenceConstitution
+from eth_research.v2.preregistration import (
+    PREREGISTRATION_NAME,
+    load_preregistration,
+    verify_preregistration,
+)
 from eth_research.v2.protocol import ResearchProtocol, parse_protocol
 from eth_research.v2.publication import RESULTS_NAME, V2A_DIR, verify_publication
 from eth_research.v2.registry import COMPLETED, read_events, verify_registry
@@ -132,12 +140,40 @@ def _check_published_run(root: Path) -> list[str]:
     return problems
 
 
+def _check_preregistration(root: Path) -> list[str]:
+    """Pre-registration is sound, and (if the run has published) the results are exactly its run."""
+    problems = verify_preregistration(root)
+    prereg_path = root / V2A_DIR / PREREGISTRATION_NAME
+    results_path = root / RESULTS_RELPATH
+    if problems or not prereg_path.exists() or not results_path.exists():
+        return problems
+    # Both present and the pre-registration parsed: the published results must be the run of exactly
+    # what was pre-registered (fingerprint for fingerprint), or the run departed from its plan.
+    try:
+        prereg = load_preregistration(root)
+        results = parse_results(load_canonical_json(results_path))
+    except V2ValidationError as exc:
+        return [*problems, f"pre-registration/results cross-check failed to load: {exc}"]
+    if results.run_id != prereg.run_id:
+        problems.append("published results run_id does not match the pre-registration")
+    if results.protocol_fingerprint != prereg.protocol_fingerprint:
+        problems.append("published results protocol fingerprint != the pre-registration")
+    if results.constitution_fingerprint != prereg.constitution_fingerprint:
+        problems.append("published results constitution fingerprint != the pre-registration")
+    if results.budget_fingerprint != prereg.budget_fingerprint:
+        problems.append("published results budget fingerprint != the pre-registration")
+    if results.candidate_fingerprints != prereg.candidate_fingerprints:
+        problems.append("published results candidate fingerprints != the pre-registration")
+    return problems
+
+
 def verify_v2a(repo_root: str | Path) -> list[str]:
     """Return every V2A replay problem (empty == the stack replays cleanly)."""
     root = Path(repo_root)
     return [
         *_check_design_invariants(),
         *_check_sealed_ledgers(root),
+        *_check_preregistration(root),
         *_check_published_run(root),
     ]
 
