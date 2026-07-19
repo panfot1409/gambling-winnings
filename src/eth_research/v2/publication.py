@@ -13,6 +13,7 @@ already constitution-validated).
 from __future__ import annotations
 
 import os
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -62,10 +63,23 @@ def _manifest(results: FrozenResearchResults, results_bytes: bytes) -> dict[str,
     }
 
 
-def _atomic_write(path: Path, data: bytes) -> None:
+def _stage(path: Path, data: bytes) -> Path:
+    """Write ``data`` to a fsync'd tmp file beside ``path`` and return the tmp path."""
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_bytes(data)
-    os.replace(tmp, path)
+    with tmp.open("wb") as fh:
+        fh.write(data)
+        fh.flush()
+        os.fsync(fh.fileno())
+    return tmp
+
+
+def _fsync_dir(path: Path) -> None:
+    with suppress(OSError):  # pragma: no cover - best-effort directory durability
+        fd = os.open(str(path), os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def publish_results(repo_root: str | Path, results: FrozenResearchResults) -> PublicationReceipt:
@@ -78,9 +92,13 @@ def publish_results(repo_root: str | Path, results: FrozenResearchResults) -> Pu
     results_bytes = canonical_json_bytes(results.to_canonical())
     manifest_bytes = canonical_json_bytes(_manifest(results, results_bytes))
 
-    # Stage both, then swap into place; verify before returning.
-    _atomic_write(results_path, results_bytes)
-    _atomic_write(manifest_path, manifest_bytes)
+    # Stage BOTH durable tmp files first, then swap both into place, then fsync the directory (F5).
+    # A crash between the two swaps still leaves a state that verify_publication detects.
+    results_tmp = _stage(results_path, results_bytes)
+    manifest_tmp = _stage(manifest_path, manifest_bytes)
+    os.replace(results_tmp, results_path)
+    os.replace(manifest_tmp, manifest_path)
+    _fsync_dir(out_dir)
 
     problems = verify_publication(repo_root)
     if problems:

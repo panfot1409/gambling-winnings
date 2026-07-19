@@ -319,6 +319,67 @@ def test_runner_rejects_empty_and_mismatched() -> None:
         run_shadow(_config(), mismatched)
 
 
+def test_runner_revalidates_mode_fail_closed() -> None:
+    # Sh-C1: a config built *without* the create() factory can carry a live mode. run_shadow
+    # re-validates it at entry and fails closed before touching any step.
+    live_config = ShadowConfig(
+        mode="live",
+        instrument=ETH_USD,
+        candidate_id="trend_candidate",
+        starting_cash=10_000.0,
+        limits=RiskLimits(max_target_weight=1.0, max_weight_step=1.0),
+        thresholds=MonitoringThresholds(max_staleness_seconds=172_800, max_drawdown_fraction=0.9),
+    )
+    with pytest.raises(ShadowDomainError, match="signal-only"):
+        run_shadow(live_config, _clean_steps())
+
+
+class _RogueChannelAdapter(ShadowExecutionAdapter):
+    """An adapter that declares a non-allowlisted channel; the runner must refuse to drive it."""
+
+    @property
+    def channel(self) -> str:
+        return "venue_live"
+
+    def dispatch(self, intent: ExecutionIntent) -> IntentAck:
+        return IntentAck(accepted=True, channel="venue_live", note="should never be reached")
+
+
+def test_runner_refuses_non_allowlisted_adapter_channel() -> None:
+    # Sh-C2: only reviewed non-routing channels may run. A rogue channel is refused before the loop.
+    with pytest.raises(ShadowRunError, match="non-routing"):
+        run_shadow(_config(), _clean_steps(), adapter=_RogueChannelAdapter())
+
+
+def test_runner_raises_staleness_warning_between_far_apart_bars() -> None:
+    # Sh-C3: a gap between consecutive bars beyond the staleness budget raises a warning (which does
+    # not halt the run). _config()'s budget is 2 days; these bars are 5 days apart.
+    steps = (
+        ShadowStep(envelope=_env(0, 0, 100.0), signal=_sig(0, 0.2)),
+        ShadowStep(envelope=_env(1, 5, 101.0), signal=_sig(5, 0.3)),
+    )
+    result = run_shadow(_config(), steps)
+    assert any(a.code == "stale_market_data" and a.severity == "warning" for a in result.alerts)
+    assert not result.kill_tripped  # a staleness warning never trips the kill switch
+    assert len(result.fills) == 2  # ...and never halts the run
+
+
+def test_runner_drawdown_breaker_holds_book_before_fill() -> None:
+    # Sh-C4: a drawdown breach is evaluated on the held (pre-trade) book and trips the kill switch
+    # BEFORE any rebalance, so the breaching bar holds instead of executing one last fill.
+    config = _config(max_dd=0.3)
+    steps = (
+        ShadowStep(envelope=_env(0, 0, 100.0), signal=_sig(0, 1.0)),  # go fully long
+        ShadowStep(envelope=_env(1, 1, 50.0), signal=_sig(1, 0.0)),  # -50%: try to flatten
+    )
+    result = run_shadow(config, steps)
+    assert result.kill_tripped
+    assert any(a.code == "drawdown_breach" for a in result.alerts)
+    # Only the first bar filled; the drawdown bar held rather than rebalancing to flat.
+    assert len(result.fills) == 1
+    assert result.final_account.units == pytest.approx(100.0)
+
+
 # --- CLI ----------------------------------------------------------------------
 
 

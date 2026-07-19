@@ -115,7 +115,7 @@ class Factsheet:
         )
         if not headlines:
             raise FactsheetError("factsheet must have at least one headline")
-        return Factsheet(
+        factsheet = Factsheet(
             title=require_nonempty_str("factsheet.title", obj["title"]),
             summary=require_nonempty_str("factsheet.summary", obj["summary"]),
             headlines=headlines,
@@ -132,3 +132,11 @@ class Factsheet:
                 "factsheet.scorecard_fingerprint", obj["scorecard_fingerprint"]
             ),
         )
+        # Pin to the fixed build so a committed factsheet cannot drift, and its bound fingerprints
+        # are re-verified against the real current contract/claims/scorecard (C2).
+        current = Factsheet.build(
+            EvaluationContract.current(), ClaimsCatalog.current(), ReadinessScorecard.current()
+        )
+        if factsheet.fingerprint() != current.fingerprint():
+            raise FactsheetError("factsheet drifted from the fixed definition")
+        return factsheet

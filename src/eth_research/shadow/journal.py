@@ -8,6 +8,11 @@ reordered or edited: a single changed byte breaks the chain at :func:`parse`.
 Timestamps are the run's own as-of stamps (never wall-clock), so the journal is deterministic and a
 re-run produces a byte-identical chain. The journal is the single source of truth a checkpoint or a
 monitor reads from.
+
+``EVENT_TYPES`` is the full accepted vocabulary. The single-pass :func:`run_shadow` runner emits a
+subset of it; ``KILL_RESET`` (an operator clearing the latch) and ``CHECKPOINT_WRITTEN`` (an
+out-of-band checkpoint stamp) are part of the schema so a journal from a longer-lived operator loop
+parses under the same rules, but this package's runner never trips those two paths itself.
 """
 
 from __future__ import annotations

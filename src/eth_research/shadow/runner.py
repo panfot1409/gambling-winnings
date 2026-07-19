@@ -5,14 +5,18 @@ step strictly in time order:
 
 1. advance the as-of clock to the bar's close (never backwards);
 2. reveal the bar and require the signal to be valid at or before the frontier (no look-ahead);
-3. clamp the signal through the risk engine; a hard breach trips the latching kill switch;
-4. while the kill switch is clear, dispatch the approved intent to the (paper) adapter and rebalance
+3. check data staleness against the previous bar (a warning; it does not halt the run);
+4. mark the *held* book at the new close and, if the drawdown limit is breached, trip the latching
+   kill switch **before** any new exposure — a drawdown breaker holds the book on the same bar;
+5. clamp the signal through the risk engine; a hard breach also trips the kill switch;
+6. while the kill switch is clear, dispatch the approved intent to the (paper) adapter and rebalance
    the paper book; while it is tripped, hold — no new exposure;
-5. run monitoring (staleness, drawdown) and let a critical drawdown trip the kill switch;
-6. journal every step into the append-only hash chain.
+7. journal every step into the append-only hash chain.
 
 Every input is explicit and every step is a pure transition, so a run is byte-reproducible and its
 journal + final checkpoint fully describe what happened. Nothing here connects, orders, or settles.
+The mode and the adapter channel are re-validated at run entry (fail-closed) even if the config was
+built without its ``create`` factory.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from eth_research.shadow.adapter import (
+    NON_ROUTING_CHANNELS,
     ExecutionIntent,
     PaperExecutionAdapter,
     ShadowExecutionAdapter,
@@ -50,6 +55,7 @@ from eth_research.shadow.monitoring import (
     drawdown_alert,
     kill_switch_alert,
     risk_breach_alert,
+    staleness_alert,
 )
 from eth_research.shadow.paper import PaperAccount, PaperFill, rebalance
 from eth_research.shadow.risk import RiskLimitEngine, RiskLimits
@@ -128,7 +134,16 @@ def run_shadow(
     """Run the signal-only pipeline over ``steps``; return the journalled, reproducible result."""
     if not steps:
         raise ShadowRunError("a shadow run needs at least one step")
+    # Re-validate the mode at run entry even if the config was built without its create() factory,
+    # and refuse any adapter whose channel is not on the reviewed non-routing allowlist — so a
+    # directly-built config or a rogue adapter cannot slip a live channel through (Sh-C1/Sh-C2).
+    require_shadow_mode("config.mode", config.mode)
     exec_adapter = adapter if adapter is not None else PaperExecutionAdapter()
+    if exec_adapter.channel not in NON_ROUTING_CHANNELS:
+        raise ShadowRunError(
+            f"adapter channel {exec_adapter.channel!r} is not an approved non-routing channel "
+            f"{sorted(NON_ROUTING_CHANNELS)!r}; the shadow runner drives non-routing adapters only"
+        )
 
     clock = AsOfClock.unstarted()
     kill = LatchingKillSwitch.armed()
@@ -137,6 +152,7 @@ def run_shadow(
     account = PaperAccount.opening(config.starting_cash)
     peak_equity = config.starting_cash
     current_weight = 0.0
+    previous_close_time: str | None = None
     fills: list[PaperFill] = []
     alerts: list[Alert] = []
 
@@ -172,7 +188,40 @@ def run_shadow(
             as_of=stamp,
             payload={"sequence": envelope.sequence, "close": bar.close},
         )
+        # Staleness: how old is this bar relative to the previous one? A warning only — it never
+        # halts the run (Sh-C3). The first bar has no predecessor to compare against.
+        if previous_close_time is not None:
+            stale = staleness_alert(
+                as_of=stamp,
+                last_bar_time=previous_close_time,
+                max_staleness_seconds=config.thresholds.max_staleness_seconds,
+            )
+            if stale is not None:
+                _raise_and_journal_alert(journal, alerts, stale)
+        previous_close_time = stamp
+
         journal.append(SIGNAL_EMITTED, as_of=stamp, payload={"target_weight": signal.target_weight})
+
+        # Drawdown circuit breaker BEFORE any new exposure (Sh-C4): mark the *held* (pre-trade) book
+        # at the new close and, on a breach, trip the kill switch so this same bar holds instead of
+        # rebalancing into a drawdown. A rebalance conserves equity at a single price, so this mark
+        # equals the post-fill equity when a fill happens; the peak update below is idempotent.
+        marked_equity = account.equity(bar.close)
+        peak_equity = max(peak_equity, marked_equity)
+        drawdown = drawdown_alert(
+            as_of=stamp,
+            equity=marked_equity,
+            peak_equity=peak_equity,
+            max_drawdown_fraction=config.thresholds.max_drawdown_fraction,
+        )
+        if drawdown is not None:
+            _raise_and_journal_alert(journal, alerts, drawdown)
+            if not kill.is_tripped:
+                kill.trip("drawdown breach")
+                journal.append(KILL_TRIPPED, as_of=stamp, payload={"reason": kill.reason or ""})
+                _raise_and_journal_alert(
+                    journal, alerts, kill_switch_alert(as_of=stamp, reason=kill.reason or "")
+                )
 
         decision = engine.evaluate(
             requested_weight=signal.target_weight, current_weight=current_weight
@@ -193,8 +242,9 @@ def run_shadow(
                 )
 
         if kill.is_tripped:
-            # Latched: hold the current book, place no intent, mark equity at the new close.
-            equity = account.equity(bar.close)
+            # Latched (or just tripped by drawdown/risk): hold the book, place no intent. The held
+            # book is unchanged, so its equity is the mark computed above.
+            equity = marked_equity
         else:
             intent = ExecutionIntent.create(
                 candidate_id=config.candidate_id,
@@ -212,17 +262,6 @@ def run_shadow(
             journal.append(FILL_RECORDED, as_of=stamp, payload=fill.to_canonical())
 
         peak_equity = max(peak_equity, equity)
-        drawdown = drawdown_alert(
-            as_of=stamp,
-            equity=equity,
-            peak_equity=peak_equity,
-            max_drawdown_fraction=config.thresholds.max_drawdown_fraction,
-        )
-        if drawdown is not None:
-            _raise_and_journal_alert(journal, alerts, drawdown)
-            if not kill.is_tripped:
-                kill.trip("drawdown breach")
-                journal.append(KILL_TRIPPED, as_of=stamp, payload={"reason": kill.reason or ""})
 
     last_stamp = steps[-1].envelope.close_time
     journal.append(

@@ -104,20 +104,31 @@ def _check_published_run(root: Path) -> list[str]:
     if not registry_present and not results_present:
         return problems  # pristine pre-run state; nothing published yet.
 
-    problems.extend(verify_registry(registry_path))
+    # Registry integrity (chain + budget + lifecycle) whenever it exists.
+    if registry_present:
+        problems.extend(verify_registry(registry_path))
+    try:
+        events = read_events(registry_path) if registry_present else ()
+    except V2ValidationError:
+        events = ()  # already reported by verify_registry above
+    completed = [e for e in events if e.event == COMPLETED]
+
+    # F2/F3: the expectation is derived from the REGISTRY, not from file existence.
+    # A completed run must have published, verifiable results; and published results must be backed
+    # by a within-budget completed registry event (no registry-bypassing publication passes).
+    if completed and not results_present:
+        problems.append("registry has a completed event but no published results")
+    if results_present and not completed:
+        problems.append("published results are not backed by a completed registry event")
+
     if results_present:
         problems.extend(verify_publication(root))
-
-    if registry_present and results_present and not problems:
-        results = parse_results(load_canonical_json(results_path))
-        events = read_events(registry_path)
-        completed = [e for e in events if e.event == COMPLETED]
-        if not completed:
-            problems.append("results are published but the registry has no completed event")
-        elif completed[-1].payload.get("results_fingerprint") != results.fingerprint():
-            problems.append("registry completed event does not bind the published results")
-        if results.protocol_fingerprint != ResearchProtocol.current().fingerprint():
-            problems.append("published results were produced under a different protocol")
+        if completed and not problems:
+            results = parse_results(load_canonical_json(results_path))
+            if completed[-1].payload.get("results_fingerprint") != results.fingerprint():
+                problems.append("registry completed event does not bind the published results")
+            if results.protocol_fingerprint != ResearchProtocol.current().fingerprint():
+                problems.append("published results were produced under a different protocol")
     return problems
 
 

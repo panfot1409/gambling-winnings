@@ -169,6 +169,15 @@ def test_builders_produce_reused_engine_strategies() -> None:
     assert by_name["trend_regime_single_horizon"].risk.volatility_target is False
 
 
+def test_vol_scaled_builder_rejects_reused_constant_drift(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Sci-C2: the 30-day / 50%-annual vol target lives inside the reused overlay. If a reviewed
+    # constant ever drifts from this candidate's pinned spec, the builder must fail loudly rather
+    # than silently redefine the pre-registered candidate.
+    monkeypatch.setattr(cand, "VOLATILITY_LOOKBACK", 999)
+    with pytest.raises(CandidateError, match="lookback"):
+        cand.build_all_fractional_strategies()
+
+
 # --------------------------------------------------------------------------- #
 # partition firewall                                                           #
 # --------------------------------------------------------------------------- #

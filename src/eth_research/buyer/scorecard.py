@@ -140,4 +140,8 @@ class ReadinessScorecard:
         posture = require_choice(
             "scorecard.overall_posture", obj["overall_posture"], frozenset({STANDING_POSTURE})
         )
-        return ReadinessScorecard(dimensions=dims, overall_posture=posture)
+        scorecard = ReadinessScorecard(dimensions=dims, overall_posture=posture)
+        # Pin to the fixed definition (like the contract): a drifted scorecard is rejected (C1).
+        if scorecard.fingerprint() != ReadinessScorecard.current().fingerprint():
+            raise ScorecardError("scorecard drifted from the fixed definition")
+        return scorecard

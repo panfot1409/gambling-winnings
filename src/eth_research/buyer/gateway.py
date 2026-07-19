@@ -55,6 +55,14 @@ class ReferenceEvaluationGateway(EvaluationGateway):
         violations = served.scan(RedactionPolicy.current())
         if violations:
             raise GatewayError(f"gateway refused to open on {len(violations)} redaction violations")
+        # A supplied contract must match the fixed definition — an injected empty-withheld contract
+        # cannot be used to weaken the withheld refusal (C3). The real guarantee is still that
+        # ``_texts`` holds only the scanned artifacts; this is defense in depth on the withheld set.
+        if (
+            contract is not None
+            and contract.fingerprint() != EvaluationContract.current().fingerprint()
+        ):
+            raise GatewayError("gateway refused: the supplied contract drifted from the fixed one")
         texts = {name: text for name, _kind, text in served.artifact_texts()}
         return ReferenceEvaluationGateway(
             _contract=contract if contract is not None else EvaluationContract.current(),

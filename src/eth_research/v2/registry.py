@@ -16,8 +16,17 @@ module stays free of hidden nondeterminism.
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import IO
+
+try:
+    import fcntl  # POSIX only; the CI runtime is Linux.
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    fcntl = None  # type: ignore[assignment]
 
 from eth_research.v2.budget import MAX_RESEARCH_EXECUTIONS
 from eth_research.v2.strict import (
@@ -164,6 +173,7 @@ def read_events(path: str | Path) -> tuple[RegistryEvent, ...]:
         prev = event.entry_hash
 
     _assert_budget(events)
+    _assert_lifecycle(events)
     return tuple(events)
 
 
@@ -173,6 +183,47 @@ def _assert_budget(events: list[RegistryEvent]) -> None:
         raise RegistryError(
             f"{started} started events exceed the one-shot budget of {MAX_RESEARCH_EXECUTIONS}"
         )
+
+
+def _assert_lifecycle(events: list[RegistryEvent]) -> None:
+    """Re-assert the run lifecycle on *read*, not only on append (F4).
+
+    A hash-valid but hand-forged chain (e.g. a lone ``completed``, or two terminals for one run)
+    must still be rejected: a ``completed``/``failed`` requires a prior ``started`` for that run,
+    and a run may have at most one terminal event. Integrity against a *wholesale* re-chain rests
+    on the committed git history — the digest is an unkeyed SHA-256 over public canonical bytes.
+    """
+    started_runs: set[str] = set()
+    terminal_runs: set[str] = set()
+    for event in events:
+        if event.event == STARTED:
+            started_runs.add(event.run_id)
+        elif event.event in (COMPLETED, FAILED):
+            if event.run_id not in started_runs:
+                raise RegistryError(
+                    f"registry {event.event!r} for run {event.run_id!r} has no prior started event"
+                )
+            if event.run_id in terminal_runs:
+                raise RegistryError(f"run {event.run_id!r} has more than one terminal event")
+            terminal_runs.add(event.run_id)
+
+
+@contextmanager
+def _exclusive_lock(path: Path) -> Iterator[IO[bytes]]:
+    """Serialize appends behind an exclusive advisory lock so two writers cannot both start (F1)."""
+    fh = path.open("ab")
+    try:
+        if fcntl is not None:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        yield fh
+    finally:
+        with suppress(OSError):  # pragma: no cover - best-effort durability
+            fh.flush()
+            os.fsync(fh.fileno())
+        if fcntl is not None:
+            with suppress(OSError):  # pragma: no cover
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        fh.close()
 
 
 def append_event(
@@ -191,23 +242,29 @@ def append_event(
     require_nonempty_str("timestamp", timestamp)
     body = dict(payload or {})
 
-    existing = read_events(path)
-    if event == STARTED and any(e.event == STARTED for e in existing):
-        raise RegistryError(
-            "a started event already exists; the one-shot research budget is consumed"
-        )
-    if event in (COMPLETED, FAILED):
-        if not any(e.event == STARTED and e.run_id == run_id for e in existing):
-            raise RegistryError(f"cannot append {event!r} for run {run_id!r} with no started event")
-        if any(e.event in (COMPLETED, FAILED) and e.run_id == run_id for e in existing):
-            raise RegistryError(f"run {run_id!r} is already terminal")
-
-    prev = existing[-1].entry_hash if existing else GENESIS_PREV_HASH
-    entry = _make_event(len(existing), event, run_id, protocol_fingerprint, timestamp, body, prev)
-
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("ab") as fh:
+    # Hold the exclusive lock across read + check + append so two concurrent writers cannot both
+    # pass the "at most one started" guard and both begin the governed run (F1). The write is
+    # fsync'd before the lock is released so consume-on-start survives power loss (F5).
+    with _exclusive_lock(p) as fh:
+        existing = read_events(p)
+        if event == STARTED and any(e.event == STARTED for e in existing):
+            raise RegistryError(
+                "a started event already exists; the one-shot research budget is consumed"
+            )
+        if event in (COMPLETED, FAILED):
+            if not any(e.event == STARTED and e.run_id == run_id for e in existing):
+                raise RegistryError(
+                    f"cannot append {event!r} for run {run_id!r} with no started event"
+                )
+            if any(e.event in (COMPLETED, FAILED) and e.run_id == run_id for e in existing):
+                raise RegistryError(f"run {run_id!r} is already terminal")
+
+        prev = existing[-1].entry_hash if existing else GENESIS_PREV_HASH
+        entry = _make_event(
+            len(existing), event, run_id, protocol_fingerprint, timestamp, body, prev
+        )
         fh.write(entry.to_line())
     return entry
 

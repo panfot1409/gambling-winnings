@@ -25,6 +25,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from eth_research.fractional.risk import ANNUAL_VOLATILITY_TARGET, VOLATILITY_LOOKBACK
 from eth_research.fractional.strategies import FractionalStrategy, RiskConfig
 from eth_research.m3c.candidate import (
     CANDIDATE_FINGERPRINT as M3C_CANDIDATE_FINGERPRINT,
@@ -283,6 +284,20 @@ def _build_meanrev() -> FractionalStrategy:
 
 
 def _build_vol_scaled() -> FractionalStrategy:
+    # The 30-day / 50%-annual volatility target is fixed *inside* the reused risk overlay, not sent
+    # through RiskConfig. Re-assert that the accepted engine's constants match this candidate's
+    # pinned spec, so reviewed code cannot silently redefine the pre-registered candidate (Sci-C2).
+    pinned = VOL_SCALED_SPEC.fixed_parameters
+    if pinned["volatility_lookback"] != VOLATILITY_LOOKBACK:
+        raise CandidateError(
+            f"pinned vol_scaled lookback {pinned['volatility_lookback']!r} != reused "
+            f"VOLATILITY_LOOKBACK {VOLATILITY_LOOKBACK}"
+        )
+    if pinned["annual_volatility_target"] != ANNUAL_VOLATILITY_TARGET:
+        raise CandidateError(
+            f"pinned vol_scaled annual target {pinned['annual_volatility_target']!r} != reused "
+            f"ANNUAL_VOLATILITY_TARGET {ANNUAL_VOLATILITY_TARGET}"
+        )
     return FractionalStrategy(
         name=VOL_SCALED_SPEC.candidate_id,
         signal=AlwaysLong(),

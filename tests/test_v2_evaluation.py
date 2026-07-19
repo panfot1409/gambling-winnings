@@ -8,13 +8,20 @@ failed robustness nominate nobody. Every emitted status is within the constituti
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from eth_research.v2.constitution import V2A_EMITTABLE_STATUSES
 from eth_research.v2.decision import DecisionError, decide, parse_decision
-from eth_research.v2.evaluator import CandidateEvaluation, ProgramEvaluation, summarize_candidate
+from eth_research.v2.evaluator import (
+    CandidateEvaluation,
+    EvaluatorError,
+    ProgramEvaluation,
+    summarize_candidate,
+)
 from eth_research.v2.protocol import ProtocolError, ResearchProtocol, parse_protocol
 
 _PROTOCOL = ResearchProtocol.current()
@@ -74,6 +81,25 @@ def test_protocol_roundtrips_and_pins() -> None:
     bad["bootstrap_seed"] = 1
     with pytest.raises(ProtocolError):
         parse_protocol(bad)
+
+
+def test_summarize_refuses_protocol_confidence_mismatch() -> None:
+    # Sci-C1: the reused fold-stratified bootstrap fixes a 95% interval. A protocol that declares a
+    # different confidence is refused before any bootstrap runs, so the reported CI cannot be
+    # mislabelled by silently disagreeing with the accepted engine.
+    bench = _benchmark()
+    cand = _shift(bench, 0.02)
+    mismatched = dataclasses.replace(_PROTOCOL, bootstrap_confidence=0.99)
+    with pytest.raises(EvaluatorError, match="mislabelled"):
+        summarize_candidate(
+            "c",
+            primary_candidate_by_fold=cand,
+            primary_benchmark_by_fold=bench,
+            stressed_candidate_by_fold=cand,
+            stressed_benchmark_by_fold=bench,
+            periods_per_year=_PPY,
+            protocol=mismatched,
+        )
 
 
 # --------------------------------------------------------------------------- #

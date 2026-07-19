@@ -41,6 +41,32 @@ def test_replay_cli_check_returns_zero() -> None:
     assert main(["--check", "--repo-root", str(REPO)]) == 0
 
 
+def test_check_published_run_flags_completed_without_results(tmp_path: Path) -> None:
+    # F2/F3: the expectation is derived from the REGISTRY, not from file existence. A within-budget
+    # completed run with no published results is a mismatch the verifier must surface (and the
+    # converse — results with no completed event — is covered by the real run in §31-32).
+    from eth_research.v2.protocol import ResearchProtocol
+    from eth_research.v2.registry import append_event
+    from eth_research.v2.replay import REGISTRY_RELPATH, _check_published_run
+
+    fp = ResearchProtocol.current().fingerprint()
+    reg = tmp_path / REGISTRY_RELPATH
+    reg.parent.mkdir(parents=True, exist_ok=True)
+    append_event(
+        reg, "started", "run_001", protocol_fingerprint=fp, timestamp="2026-07-19T00:00:00Z"
+    )
+    append_event(
+        reg,
+        "completed",
+        "run_001",
+        protocol_fingerprint=fp,
+        timestamp="2026-07-19T00:05:00Z",
+        payload={"results_fingerprint": "a" * 64},
+    )
+    problems = _check_published_run(tmp_path)
+    assert any("completed event but no published results" in p for p in problems)
+
+
 # --- v2a-replay workflow shape -------------------------------------------------
 
 

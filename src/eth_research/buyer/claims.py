@@ -153,4 +153,8 @@ class ClaimsCatalog:
         claims = tuple(require_list("claims_catalog.claims", obj["claims"], BuyerClaim.parse))
         if not claims:
             raise ClaimsError("claims catalogue must not be empty")
-        return ClaimsCatalog(claims=claims)
+        catalog = ClaimsCatalog(claims=claims)
+        # Pin to the fixed definition (like the contract): a drifted catalogue is rejected (C1).
+        if catalog.fingerprint() != ClaimsCatalog.current().fingerprint():
+            raise ClaimsError("claims catalogue drifted from the fixed definition")
+        return catalog

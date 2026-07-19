@@ -26,6 +26,11 @@ from eth_research.v2.strict import (
 
 _INTENT_KEYS = frozenset({"candidate_id", "instrument", "as_of", "approved_weight"})
 
+# The reviewed allowlist of adapter channels the shadow runner will drive. Every shipped adapter is
+# non-routing (records intents, contacts nothing); a new one may run only once its channel slug is
+# added here, so an adapter that declares a live/venue channel cannot be executed by mistake.
+NON_ROUTING_CHANNELS: frozenset[str] = frozenset({"paper"})
+
 
 class AdapterError(ShadowDomainError):
     """An execution intent or acknowledgement violated its contract."""

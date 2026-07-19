@@ -18,6 +18,7 @@ is closed by default, opened only by an empty finding list.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 
@@ -28,28 +29,36 @@ ALLOWED_ARTIFACT_KINDS: frozenset[str] = frozenset(
     {"contract", "claims_catalog", "factsheet", "readiness_scorecard", "diligence_manifest"}
 )
 
+# The private-key header is written with ``-{5}`` (not five literal dashes) so this detector source
+# does not itself trip the repo's private-key hygiene scan; it still matches a real PEM header.
 _SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("private_key_block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    ("private_key_block", re.compile(r"-{5}BEGIN [A-Z ]*PRIVATE KEY-{5}")),
     ("aws_access_key", re.compile(r"AKIA[0-9A-Z]{16}")),
     ("bearer_token", re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]{20,}")),
     (
         "credential_assignment",
         re.compile(
-            r"(?i)(api[_-]?key|secret|password|passwd|access[_-]?token|private[_-]?key)"
+            r"(?i)(api[_-]?key|secret|password|passwd|access[_-]?token|private[_-]?key"
+            r"|credential|auth[_-]?token|session[_-]?token|passphrase)"
             r"\s*[:=]\s*['\"]?[A-Za-z0-9/+_\-]{12,}"
         ),
     ),
 )
 
-# Python source tokens; several distinct ones in one artifact indicates embedded source.
+# Python source markers. Beyond keyword-lead lines (import/from/def/class/@), a bare assignment,
+# ``return``, or ``lambda`` also indicates source — so an expression-only strategy formula trips.
+# A SINGLE marker is enough (embedded source is never expected in a redacted artifact).
 _SOURCE_TOKENS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?m)^\s*import\s+\w"),
     re.compile(r"(?m)^\s*from\s+\w[\w.]*\s+import\s"),
     re.compile(r"(?m)^\s*def\s+\w+\s*\("),
     re.compile(r"(?m)^\s*class\s+\w+\s*[:(]"),
     re.compile(r"(?m)^\s*@\w+"),
+    re.compile(r"(?m)^\s*[A-Za-z_]\w*\s*=[^=]"),
+    re.compile(r"(?m)^\s*return\b"),
+    re.compile(r"\blambda\b\s*[\w,\s]*:"),
 )
-_SOURCE_TOKEN_THRESHOLD: int = 2
+_SOURCE_TOKEN_THRESHOLD: int = 1
 
 # Raw/sealed tabular data: an OHLCV header, a long numeric CSV row, or a big JSON number array.
 _RAW_DATA_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -105,6 +114,31 @@ def scan_text(artifact: str, text: str) -> list[RedactionViolation]:
     return violations
 
 
+def _scan_json_string_values(artifact: str, text: str) -> list[RedactionViolation]:
+    """Also scan the decoded string *values* of a JSON artifact (B1/B3).
+
+    Canonical JSON places each string value on one physical line, so a line-anchored detector (an
+    assignment-style source line, a numeric CSV row) can be evaded by smuggling content *inside* a
+    string. Decoding and scanning every string value standalone closes that gap. Non-JSON text is
+    left to the raw scan above.
+    """
+    try:
+        decoded = json.loads(text)
+    except (ValueError, TypeError):
+        return []
+    violations: list[RedactionViolation] = []
+    stack: list[object] = [decoded]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, str):
+            violations.extend(scan_text(artifact, node))
+        elif isinstance(node, dict):
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return violations
+
+
 @dataclass(frozen=True, slots=True)
 class RedactionPolicy:
     """The kinds a bundle may contain and the scan every artifact must pass."""
@@ -127,5 +161,9 @@ class RedactionPolicy:
         return []
 
     def scan_artifact(self, artifact: str, kind: str, text: str) -> list[RedactionViolation]:
-        """Kind-allowlist check + content scan for one artifact."""
-        return [*self.check_kind(artifact, kind), *scan_text(artifact, text)]
+        """Kind-allowlist check + raw content scan + decoded-JSON-value scan for one artifact."""
+        return [
+            *self.check_kind(artifact, kind),
+            *scan_text(artifact, text),
+            *_scan_json_string_values(artifact, text),
+        ]

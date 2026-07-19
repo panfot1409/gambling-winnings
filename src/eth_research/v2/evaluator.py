@@ -19,8 +19,13 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from eth_research.data.schema import frame_interval
 from eth_research.m3c.experiment import M3CCellRun, compute_m3c_cell_runs
-from eth_research.m3c.statistics import align_paired_by_fold, fold_stratified_block_bootstrap
+from eth_research.m3c.statistics import (
+    M3C_BOOTSTRAP_CONFIDENCE,
+    align_paired_by_fold,
+    fold_stratified_block_bootstrap,
+)
 from eth_research.metrics import periods_per_year_from_interval, sharpe_ratio
 from eth_research.v2.candidates import (
     BENCHMARK_NAME,
@@ -101,6 +106,14 @@ def summarize_candidate(
     protocol: ResearchProtocol,
 ) -> CandidateEvaluation:
     """Reduce one candidate's per-fold marked returns to its :class:`CandidateEvaluation` (pure)."""
+    # The reused fold-stratified bootstrap fixes a 95% (2.5/97.5) interval; the protocol's declared
+    # confidence must equal it, or the reported CI bounds would be mislabelled (Sci-C1). We do not
+    # reparameterize the accepted engine — we refuse a protocol that disagrees with it.
+    if protocol.bootstrap_confidence != M3C_BOOTSTRAP_CONFIDENCE:
+        raise EvaluatorError(
+            f"protocol bootstrap_confidence {protocol.bootstrap_confidence!r} != the reused "
+            f"engine's fixed {M3C_BOOTSTRAP_CONFIDENCE!r}; the interval would be mislabelled"
+        )
     folds = sorted(primary_candidate_by_fold)
     if not folds:
         raise EvaluatorError(f"candidate {candidate_id!r} has no evaluated folds")
@@ -184,8 +197,9 @@ def evaluate_program(
         scenarios=scenarios,
     )
 
-    # The research-train index is regular (validated by the loader), so the first step is the bar.
-    interval = research_train.index[1] - research_train.index[0]
+    # Derive the bar from the reviewed frame helper, which re-checks the index is a >= 2-row
+    # DatetimeIndex, rather than indexing the first two rows by hand (Sci-C3).
+    interval = frame_interval(research_train)
     ppy = periods_per_year_from_interval(interval)
 
     primary = protocol.primary_cost_scenario

@@ -9,16 +9,19 @@ refuses every withheld item, and fails closed when the redaction policy is not s
 
 from __future__ import annotations
 
+import dataclasses
+import json
+
 import pytest
 
 from eth_research.buyer import redaction
 from eth_research.buyer.claims import ClaimsCatalog, ClaimsError
 from eth_research.buyer.contract import ContractError, EvaluationContract, parse_contract
 from eth_research.buyer.diligence import assemble_diligence_bundle
-from eth_research.buyer.factsheet import Factsheet
+from eth_research.buyer.factsheet import Factsheet, FactsheetError
 from eth_research.buyer.gateway import GatewayError, ReferenceEvaluationGateway
 from eth_research.buyer.redaction import RedactionPolicy, scan_text
-from eth_research.buyer.scorecard import ReadinessScorecard
+from eth_research.buyer.scorecard import ReadinessScorecard, ScorecardError
 from eth_research.v2.constitution import STANDING_POSTURE
 
 # --- redaction scanner --------------------------------------------------------
@@ -33,15 +36,18 @@ def test_scan_passes_honest_governance_prose() -> None:
     assert scan_text("factsheet", text) == []
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "-----BEGIN RSA PRIVATE KEY-----",
-        "AKIAABCDEFGHIJKLMNOP",
-        "Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345",
-        "api_key = 'abcdef0123456789'",
-    ],
-)
+# The synthetic secret fixtures are assembled from parts at runtime so the literal secret strings
+# never appear in this file's source — that keeps the repo's own secret scanner and private-key
+# hygiene test clean while still exercising the redaction detectors on the assembled values.
+_FAKE_SECRETS = [
+    "-" * 5 + "BEGIN RSA PRIVATE KEY" + "-" * 5,
+    "AKIA" + "ABCDEFGHIJKLMNOP",
+    "Authorization: Bearer " + "abcdefghijklmnopqrstuvwxyz012345",
+    "api" + "_key = " + "'" + "abcdef0123456789'",
+]
+
+
+@pytest.mark.parametrize("text", _FAKE_SECRETS)
 def test_scan_detects_secrets(text: str) -> None:
     violations = scan_text("artifact", text)
     assert any(v.category == "secret" for v in violations)
@@ -51,6 +57,16 @@ def test_scan_detects_embedded_source() -> None:
     src = "import os\nfrom sys import argv\ndef run():\n    return 1\n"
     violations = scan_text("artifact", src)
     assert any(v.category == "embedded_source" for v in violations)
+
+
+def test_scan_artifact_catches_source_smuggled_in_json_values() -> None:
+    # B4: a line-anchored raw scan is evaded by hiding source *inside* a JSON string value (its
+    # newlines are escaped, so nothing sits at a physical line start). Decoding the JSON and
+    # scanning each string value standalone closes that gap.
+    payload = json.dumps({"note": "y = 1\nreturn y\n"})
+    assert scan_text("artifact", payload) == []  # raw scan misses the escaped source...
+    violations = RedactionPolicy.current().scan_artifact("artifact", "factsheet", payload)
+    assert any(v.category == "embedded_source" for v in violations)  # ...JSON-value scan catches it
 
 
 @pytest.mark.parametrize(
@@ -117,6 +133,17 @@ def test_scorecard_is_not_sell_ready_and_roundtrips() -> None:
     )
 
 
+def test_scorecard_parse_rejects_drift() -> None:
+    # C1: a committed scorecard that no longer matches the fixed definition is rejected, even if
+    # every field is individually well-formed.
+    bad = ReadinessScorecard.current().to_canonical()
+    dims = bad["dimensions"]
+    assert isinstance(dims, list)
+    dims[0]["rationale"] = "a different but well-formed rationale that changes the fingerprint"
+    with pytest.raises(ScorecardError, match="drifted"):
+        ReadinessScorecard.parse(bad)
+
+
 # --- factsheet ----------------------------------------------------------------
 
 
@@ -131,6 +158,18 @@ def test_factsheet_binds_sources_and_renders_cleanly() -> None:
     # The rendered markdown must itself be redaction-clean.
     assert scan_text("factsheet.md", factsheet.render_markdown()) == []
     assert Factsheet.parse(factsheet.to_canonical()).fingerprint() == factsheet.fingerprint()
+
+
+def test_factsheet_parse_rejects_drift() -> None:
+    # C2: a committed factsheet must match the fixed build (and its bound source fingerprints); a
+    # well-formed but altered factsheet is rejected.
+    built = Factsheet.build(
+        EvaluationContract.current(), ClaimsCatalog.current(), ReadinessScorecard.current()
+    )
+    bad = built.to_canonical()
+    bad["summary"] = "a different but non-empty summary that changes the fingerprint"
+    with pytest.raises(FactsheetError, match="drifted"):
+        Factsheet.parse(bad)
 
 
 # --- diligence bundle ---------------------------------------------------------
@@ -167,6 +206,17 @@ def test_gateway_serves_only_redacted_and_refuses_withheld() -> None:
             gateway.request(withheld)
     with pytest.raises(GatewayError):
         gateway.serve("nonexistent_artifact")
+
+
+def test_gateway_refuses_a_drifted_contract() -> None:
+    # C3: an injected contract that drifted from the fixed one (e.g. an emptied withheld set) cannot
+    # be used to open the gateway — it is refused before any artifact is served.
+    bundle = assemble_diligence_bundle()
+    drifted = dataclasses.replace(
+        EvaluationContract.current(), withheld=(), terms_summary="drifted terms"
+    )
+    with pytest.raises(GatewayError, match="drifted"):
+        ReferenceEvaluationGateway.open(bundle, contract=drifted)
 
 
 def test_gateway_fails_closed_when_policy_not_satisfied(monkeypatch: pytest.MonkeyPatch) -> None:

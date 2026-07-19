@@ -30,7 +30,9 @@ from eth_research.v2.strict import V2ValidationError
 # The only partition V2A strategy code may evaluate on.
 RESEARCH_TRAIN: str = "research_train"
 
-# Sealed partitions. V2A never routes these through evaluation; any attempt is a hard stop.
+# Sealed partitions. V2A never routes these through evaluation; selecting one *by name* through the
+# gate below is rejected. (The gate is name-level; it does not, by itself, intercept a frame built
+# by other means — the data-level guarantee is that the loader only ever returns research-train.)
 SEALED_PARTITIONS: frozenset[str] = frozenset({"development_gate", "final_holdout"})
 
 # Pinned research-train identity (cross-checked against the reconstructed dataset).
@@ -61,8 +63,10 @@ class ResearchTrainView:
 def require_research_train_partition(label: str, name: object) -> str:
     """Return ``name`` iff it is exactly ``research_train``; reject sealed / unknown partitions.
 
-    This is the name-level gate: any code that selects a partition for strategy evaluation must pass
-    the chosen name through here, so a sealed partition can never be selected even by mistake.
+    This is the name-level gate: any code that selects a partition *by name* for strategy evaluation
+    must route the chosen name through here, so a sealed partition can never be selected by mistake
+    on that path. It gates names, not frames — the data-level guarantee that only research-train
+    rows are ever materialised is enforced separately by :func:`load_research_train_only`.
     """
     if not isinstance(name, str):
         raise PartitionFirewallError(
