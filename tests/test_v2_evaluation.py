@@ -151,7 +151,10 @@ def test_decision_roundtrips_and_rejects_double_nomination() -> None:
     assert parse_decision(decision.to_canonical()).fingerprint() == decision.fingerprint()
     # A tampered artifact with two nominations is rejected.
     bad = decision.to_canonical()
-    for o in bad["outcomes"]:  # type: ignore[index]
+    outcomes = bad["outcomes"]
+    assert isinstance(outcomes, list)
+    for o in outcomes:
+        assert isinstance(o, dict)
         o["nominated"] = True
         o["status"] = "eligible_for_development_gate_review"
     bad["nominated_candidate_id"] = "winner"

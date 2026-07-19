@@ -18,16 +18,20 @@ import pytest
 
 from eth_research.v2 import orchestrator
 from eth_research.v2.candidates import V2A_CANDIDATES
-from eth_research.v2.decision import decide
+from eth_research.v2.decision import ProgramDecision, decide
 from eth_research.v2.evaluator import ProgramEvaluation, summarize_candidate
 from eth_research.v2.partitions import ResearchTrainView
 from eth_research.v2.protocol import ResearchProtocol
 from eth_research.v2.registry import RegistryError, read_events
-from eth_research.walkforward import load_walk_forward_protocol
+from eth_research.walkforward import WalkForwardProtocol, load_walk_forward_protocol
 
 REPO = Path(__file__).resolve().parents[1]
 _PROTOCOL = ResearchProtocol.current()
 _RT_FP = "sha256:60aa988e9db786db5723c925abc794463c23ff701791173b745196c7a8b12033"
+
+
+def _wf() -> WalkForwardProtocol:
+    return load_walk_forward_protocol(REPO / orchestrator.WALK_FORWARD_RELPATH)
 
 
 def _synthetic_research_train() -> pd.DataFrame:
@@ -66,7 +70,7 @@ def test_execute_evaluation_full_pipeline_rehearsal() -> None:
     )
 
 
-def _canned_eval_and_decision() -> tuple[ProgramEvaluation, object]:
+def _canned_eval_and_decision() -> tuple[ProgramEvaluation, ProgramDecision]:
     rng = np.random.default_rng(3)
     bench = {
         f: pd.Series(
@@ -108,7 +112,9 @@ def _fake_view() -> ResearchTrainView:
     )
 
 
-def test_run_one_shot_flow_started_then_completed(tmp_path: Path, monkeypatch) -> None:
+def test_run_one_shot_flow_started_then_completed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     program, decision = _canned_eval_and_decision()
     monkeypatch.setattr(orchestrator, "load_research_train_only", lambda root: _fake_view())
     monkeypatch.setattr(orchestrator, "execute_evaluation", lambda f, wf, p: (program, decision))
@@ -119,7 +125,7 @@ def test_run_one_shot_flow_started_then_completed(tmp_path: Path, monkeypatch) -
         started_at="2026-07-19T00:00:00Z",
         completed_at="2026-07-19T00:05:00Z",
         registry_path=reg,
-        wf_protocol=object(),  # unused (execute_evaluation is patched)
+        wf_protocol=_wf(),  # unused (execute_evaluation is patched), but correctly typed
     )
     events = read_events(reg)
     assert [e.event for e in events] == ["started", "completed"]
@@ -128,9 +134,11 @@ def test_run_one_shot_flow_started_then_completed(tmp_path: Path, monkeypatch) -
 
 
 def test_run_one_shot_failure_records_failed_and_consumes_budget(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def _boom(frame, wf, protocol):
+    def _boom(
+        frame: pd.DataFrame, wf: WalkForwardProtocol, protocol: ResearchProtocol
+    ) -> tuple[ProgramEvaluation, ProgramDecision]:
         raise RuntimeError("engine blew up")
 
     monkeypatch.setattr(orchestrator, "load_research_train_only", lambda root: _fake_view())
@@ -143,7 +151,7 @@ def test_run_one_shot_failure_records_failed_and_consumes_budget(
             started_at="2026-07-19T00:00:00Z",
             completed_at="2026-07-19T00:05:00Z",
             registry_path=reg,
-            wf_protocol=object(),
+            wf_protocol=_wf(),
         )
     events = read_events(reg)
     assert [e.event for e in events] == ["started", "failed"]
@@ -158,5 +166,5 @@ def test_run_one_shot_failure_records_failed_and_consumes_budget(
             started_at="2026-07-19T01:00:00Z",
             completed_at="2026-07-19T01:05:00Z",
             registry_path=reg,
-            wf_protocol=object(),
+            wf_protocol=_wf(),
         )
