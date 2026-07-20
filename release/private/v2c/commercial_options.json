@@ -1,0 +1,60 @@
+{
+  "honest_limitation": "Nothing here is for sale. Every path is unavailable now and gated on external human decisions. The only thing offerable today is the redacted evaluation surface for diligence, which is not a product and carries no forward evidence.",
+  "not_offerable": [
+    "forward_or_live_performance_evidence",
+    "the_private_source_or_candidate_logic",
+    "a_license_or_sell_ready_product",
+    "any_routed_or_live_trading_capability"
+  ],
+  "offerable_now": [
+    "the_redacted_evaluation_surface_for_diligence_only",
+    "the_readiness_scorecard_and_claims_catalog",
+    "the_evaluation_contract_and_factsheet"
+  ],
+  "options": [
+    {
+      "available_now": false,
+      "description": "A private, time-boxed license to evaluate the redacted surface under a signed agreement.",
+      "option_id": "private_evaluation_license",
+      "prerequisites_unmet": [
+        "explicit_human_authorization",
+        "license_decision",
+        "legal_review"
+      ]
+    },
+    {
+      "available_now": false,
+      "description": "A vendor-run, process-isolated evaluation service that serves only redacted diligence artifacts.",
+      "option_id": "managed_evaluation_service",
+      "prerequisites_unmet": [
+        "explicit_human_authorization",
+        "operations_and_security_review",
+        "forward_evidence"
+      ]
+    },
+    {
+      "available_now": false,
+      "description": "A collaboration in which a partner contributes new information under a governance agreement; no strategy is transferred.",
+      "option_id": "research_collaboration",
+      "prerequisites_unmet": [
+        "explicit_human_authorization",
+        "collaboration_agreement"
+      ]
+    },
+    {
+      "available_now": false,
+      "description": "An outright acquisition of the private implementation and its IP under a negotiated agreement.",
+      "option_id": "source_acquisition",
+      "prerequisites_unmet": [
+        "explicit_human_authorization",
+        "valuation_and_diligence",
+        "legal_review",
+        "forward_evidence"
+      ]
+    }
+  ],
+  "options_id": "v2c_commercial_options",
+  "overall_posture": "not_sell_ready",
+  "schema_version": 1,
+  "sell_ready": false
+}
