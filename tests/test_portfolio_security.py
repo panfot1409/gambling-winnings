@@ -202,6 +202,7 @@ _TEST_IMPORT_ALLOWLIST = {
     "test_private_consumer_matrix.py": frozenset({"subprocess"}),
     "test_v2c_firewall.py": frozenset({"subprocess"}),
     "test_v2c_prospective.py": frozenset({"subprocess"}),
+    "test_v2c_oq.py": frozenset({"subprocess"}),
 }
 
 
