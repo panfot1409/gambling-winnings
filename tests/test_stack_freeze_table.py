@@ -53,6 +53,10 @@ def test_freeze_table_covers_every_research_file() -> None:
     # research/v2b/ is the later V2B cross-asset research-reset layer, excluded on the same basis:
     # it carries its own drift checks (eth_research.v2b research-memory / multiplicity / dataset /
     # registry verifiers + the v2b-replay workflow).
+    # research/v2/ and research/v2ab/ form the strictly-later V2A-V2B stacked-acceptance layer
+    # (the generated V2 research artifacts plus the acceptance tooling's own freeze table). It is
+    # excluded on the same basis: it carries its own drift checks (the whole-stack
+    # eth_research.v2ab.acceptance verifier and the v2ab-replay workflow).
     tracked = {
         p
         for p in tracked
@@ -62,6 +66,8 @@ def test_freeze_table_covers_every_research_file() -> None:
             or p.startswith("research/m4b/")
             or p.startswith("research/v2a/")
             or p.startswith("research/v2b/")
+            or p.startswith("research/v2/")
+            or p.startswith("research/v2ab/")
         )
     }
     listed = {row["path"] for row in _table()["files"]}

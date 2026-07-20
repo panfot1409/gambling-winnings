@@ -8,13 +8,20 @@ families under a cumulative multiplicity correction, and nominated none. Inventi
 candidates on the same interval would convert disciplined research into strategy mining;
 this module prevents that.
 
-The closure is enforced through an unforgeable ``HistoricalReplayAuthorization`` that only the
-approved factory (:func:`authorize_historical_replay`) can mint, and only for an EXACT committed
-historical experiment on the EXACT committed partition and package version. A new or disguised
-evaluation (a changed experiment id, protocol, candidate label, partition fingerprint, or package
-version) is refused before any candidate calculation, engine invocation, registry ``started``
-append, or result publication. No ordinary caller can set a ``replay=True`` flag; the token is the
-only signal, and it cannot be forged.
+The closure is enforced by :func:`guard_operation`, which refuses every forbidden
+new-candidate-research operation UNCONDITIONALLY: no token, present or forged, can authorize one.
+An allowed replay/verify operation additionally requires a ``HistoricalReplayAuthorization`` that
+the approved factory (:func:`authorize_historical_replay`) mints only for an EXACT committed
+historical experiment on the EXACT committed partition and package version; a changed experiment
+id, partition fingerprint, or package version is refused before any candidate calculation, engine
+invocation, registry ``started`` append, or result publication.
+
+The authorization's constructor is guarded by a private module sentinel, so ordinary or
+accidental construction fails. That barrier is pragmatic and in-process, not cryptographic: a
+determined caller who imported the sentinel could bypass the constructor. It does not weaken the
+moratorium, because the forbidden operations above are refused independently of any token; a
+forged authorization can at most mislabel a replay of an already-committed historical experiment,
+and can never open the partitions to a new candidate.
 
 This is a POST-RUN governance addition. The closure artifact records that it post-dates the accepted
 V2B terminal state and never claims to have existed before the V2A/V2B executions.
@@ -142,11 +149,14 @@ class PartitionClosure:
 
 
 class HistoricalReplayAuthorization:
-    """An unforgeable authorization for the EXACT replay of one committed historical experiment.
+    """A token authorizing EXACT replay of one committed historical experiment.
 
-    It can only be minted by :func:`authorize_historical_replay`; direct construction raises. It
-    binds the exact experiment id, partition fingerprint, and package version, so a disguised new
-    evaluation cannot reuse it.
+    Obtain one via :func:`authorize_historical_replay`; the constructor is guarded by a private
+    module sentinel, so ordinary or accidental direct construction raises. That guard is an
+    in-process barrier, not a cryptographic one (a determined caller who imported the sentinel
+    could bypass it). It binds the exact experiment id, partition fingerprint, and package
+    version, and :func:`guard_operation` re-checks that binding and refuses forbidden operations
+    regardless of any token, so a disguised new evaluation cannot ride on it.
     """
 
     __slots__ = ("experiment_id", "package_version", "partition_fingerprint")
@@ -367,8 +377,8 @@ def guard_operation(
     """Enforce the moratorium BEFORE candidate calc / engine / registry-started / publication.
 
     A forbidden new-research operation is refused unconditionally (no token can authorize it). An
-    allowed replay/verify operation requires an unforgeable HistoricalReplayAuthorization whose
-    bound identity exactly matches the requested experiment id, partition fingerprint, and version.
+    allowed replay/verify operation requires a HistoricalReplayAuthorization whose bound identity
+    exactly matches the requested experiment id, partition fingerprint, and version.
     """
     closure = load_closure(repo_root)
     if closure.closure_status != CLOSED_STATUS:

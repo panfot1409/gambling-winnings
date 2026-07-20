@@ -17,9 +17,10 @@ both the genesis and the independent audit acquisition, and proves:
 * every committed receipt's response counts, byte lengths, and SHA-256 values are
   self-consistent with the raw candle files actually present;
 * the one-shot acquisition workflow is *retired*: no committed workflow contacts the
-  Coinbase endpoint or grants ``contents: write`` / ``id-token: write``, the sentinel is
-  consumed, and the governance amendment honestly distinguishes the final-tree state from
-  the historical state (it does not claim the workflow never existed).
+  Coinbase endpoint or grants a repository write capability (the ``contents`` or ``id-token``
+  write permissions, ``packages`` write, or ``write-all``), the sentinel is consumed, and the
+  governance amendment honestly distinguishes the final-tree state from the historical state
+  (it does not claim the workflow never existed).
 
 The raw-root and evidence paths are parameters (:class:`AuditPaths`), so an adversarial
 test can point the audit at a tampered *copy* without touching any accepted artifact.
