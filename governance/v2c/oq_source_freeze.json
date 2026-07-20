@@ -1,0 +1,29 @@
+{
+  "freeze_id": "v2c_oq_source_freeze",
+  "frozen_artifact_sha256": {
+    "docs/V2C_PLAN.md": "aeeb1613ed86cde8396f946bb536904001c3ad5fe12097dadce434404f18c11e",
+    "governance/v2c/inactive_workflow_templates/v2c-prospective-update-probe.yml.inactive": "7cc8baaa5af41e8c8adb943d912acc2cde4ab2392dcf3d981c4991927c909822"
+  },
+  "frozen_source_sha256": {
+    "src/eth_research/v2c/activation_template.py": "0f6725e866e060389a4c1e588b4fcdb2ef5c409a9d1740d8afe2f292cade8c5e",
+    "src/eth_research/v2c/buyer/boundary.py": "678494d5e91034e31fd3829a167982a8347172195eeacf9dc3e69fef506f7e09",
+    "src/eth_research/v2c/buyer/framing.py": "b2573e4208bc88c890e1ce803e02019355541eb016590600627016ca914c8cb1",
+    "src/eth_research/v2c/buyer/harness.py": "9e85c1563da884b625cb5f28cbbdb1a2238e1a256f6640039befd4b08b4a4ffd",
+    "src/eth_research/v2c/buyer/isolation.py": "19fddc5d446f4ffd1aac34d54622bc6a75681c760d6599395a32a4f92f4f39d7",
+    "src/eth_research/v2c/firewall.py": "392361b8250187aed34119e60a3602ca648f558dd56cd47862c6f1417aa4250f",
+    "src/eth_research/v2c/maturity.py": "bb09d75a95ab23e43f9fa52e51e8fce937c50bb82d28022ad84bb789c14c1c08",
+    "src/eth_research/v2c/oq/events.py": "bd6299ca264d929222a9772890fecc20a41a849004337319abdb24ea76fb5285",
+    "src/eth_research/v2c/oq/harness.py": "f249f50dcbed5c12ce7b49e4bac781b6c120af2408cf4e4e61c7fa29ec261edc",
+    "src/eth_research/v2c/oq/recovery.py": "c45adbcf652ceb3b228f72dabbeae52f86a73a7e0fb8d07d99334367ffbf4f4c",
+    "src/eth_research/v2c/oq/registry.py": "bea59eb035e1bb7bb1b66b1dc7caaaa2b40c4a4ddd414f6ebcf7099e20d5233d",
+    "src/eth_research/v2c/oq/resources.py": "9936c450df0fac5047085e22a80a12b72a204916bed296a9da9d8734cc1ad221",
+    "src/eth_research/v2c/oq/slo.py": "fdc207e0857ecf76745c382d051f97fba7b5ae781e2b27b37c01dbbb9b35a801",
+    "src/eth_research/v2c/proposal.py": "562921c4bf10e94a4fb31913ec0b9abc4e224bc36e4ed7b0e2182fcb41c1faa3",
+    "src/eth_research/v2c/proposal_generator.py": "b93f8d6fe479eb493eb2a4d7722bf77c249d85cc04300f6d5033baa22a98bbd4",
+    "src/eth_research/v2c/prospective.py": "09bad3d6e3d797a854714e3888a2120f910a73bd12df4d59908296ba038c1ba9",
+    "src/eth_research/v2c/readiness.py": "dd357510d86e1d6afb39a85b130f5e44c34336444bda1395988938743aeb7580"
+  },
+  "schema_version": 1,
+  "source_freeze_digest": "3969eaef249d541f611ed92df640c5a8a522e369d4eddabb037e67b205195e6f",
+  "statement": "The source that defines the V2C offline operational qualification -- the candidate-free firewall, the synthetic event stream and fault schedule, the virtual-time harness, the resource and crash/recovery campaigns, the SLO contract, the OQ registry, the prospective governance, the inactive activation template, the process-isolated buyer boundary, and the readiness derivation -- was fixed on a green tree before the qualification was registered (OQ-R) and executed (OQ-P). It evaluates no strategy and computes no market performance."
+}
