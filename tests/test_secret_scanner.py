@@ -285,6 +285,8 @@ def _sdist_members(data: bytes) -> dict[str, bytes]:
 
 @pytest.mark.slow
 def test_built_wheel_sdist_and_payload_have_no_secret() -> None:
+    if PRIV._active_version(REPO) != PRIV.VERSION:
+        pytest.skip("the frozen private-release builder builds only the v1.1.0 source tree")
     if not _uv_available():
         pytest.skip("uv/git required to build the distribution")
     try:

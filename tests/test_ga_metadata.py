@@ -6,8 +6,8 @@ research/simulation-framed description, and the deliberate publication guards.
 Critically, they assert that **no license classifier or license field** is declared
 — choosing a license is an external human decision (``docs/V1_LICENSE_DECISION.md``)
 — and that the ``Private :: Do Not Upload`` guard is present so the unlicensed
-package cannot reach public PyPI by accident. The version stays exactly ``1.1.0``
-(release packaging, not a code bump).
+package cannot reach public PyPI by accident. The GA metadata itself is frozen;
+the active package version has since bumped to the V2A development pre-release.
 """
 
 from __future__ import annotations
@@ -30,7 +30,10 @@ def _project() -> dict[str, Any]:
 def test_name_and_version_unchanged() -> None:
     proj = _project()
     assert proj["name"] == "eth-research"
-    assert proj["version"] == "1.1.0"
+    # The GA packaging metadata (URLs, classifiers, no-license, Private :: Do Not Upload,
+    # research/simulation description) is frozen; the active version has since bumped to the V2A
+    # development pre-release. The name is unchanged; the version tracks the live package.
+    assert proj["version"] == "2.0.0.dev0"
     assert proj["version"] == eth_research.__version__
 
 

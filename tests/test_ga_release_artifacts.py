@@ -44,7 +44,9 @@ def test_ga_hardening_changed_no_governed_artifact() -> None:
 def test_manifest_identity() -> None:
     manifest = json.loads((REPO_ROOT / "release/v1.1.0/release_manifest.json").read_bytes())
     assert manifest["name"] == "eth-research"
-    assert manifest["version"] == "1.1.0" == eth_research.__version__
+    # The manifest records the *frozen* v1.1.0 release version (== the release_evidence VERSION
+    # constant), which is independent of the live running package version once it bumps past 1.1.0.
+    assert manifest["version"] == "1.1.0" == _TOOL.VERSION  # type: ignore[attr-defined]
     assert manifest["publication"]["published"] is False
     assert manifest["distribution_source"]["member_count"] >= 100
 

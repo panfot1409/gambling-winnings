@@ -1,0 +1,14 @@
+{
+  "budget_fingerprint": "b9cb17cc534405c1967364e770713838e4e8c5fa64d8a5563d234e865e8df145",
+  "candidate_fingerprints": {
+    "meanrev_zscore_accumulation": "55e21c3341f1989c321a3223d86628cb4b1da2d439807c9d207721dc9b6a8c6f",
+    "trend_regime_single_horizon": "c5d54b7c18e971bba38bd00eb7dcf36bf16bb284f4780c66e41dd7b9c6642e26",
+    "vol_scaled_hold_drawdown_guard": "54eb7fa8b0e3ecfedde4190e043cff9a436f4c87d4afa2d4268f7d4140e35796"
+  },
+  "constitution_fingerprint": "ebdd6dd4496f1fd79c352cba5c4f447cedeb1c22fd6568b2dc62450c74d3e2c4",
+  "contract_fingerprint": "00ed9b33f8f3e85059c9c7f9d5e8d44a1eb5a0ee8fc74932f95cc03523a5936e",
+  "package_version": "2.0.0.dev0",
+  "protocol_fingerprint": "2854a8065845b7a7eff344044dbfdcaf3456d002c0e32f91c039a5431b56054f",
+  "run_id": "run_001",
+  "schema_version": 1
+}

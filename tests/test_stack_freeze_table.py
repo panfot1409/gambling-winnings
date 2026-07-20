@@ -48,6 +48,8 @@ def test_freeze_table_covers_every_research_file() -> None:
     # check (eth_research.portfolio.public_api verify / verify_additive). This mirrors the
     # M3F_LAYER_PREFIX exclusion the M3F catalog applies to the accepted stack it verifies
     # (src/eth_research/m3f/catalog.py).
+    # research/v2a/ is the later V2A commercial-evidence layer, excluded on the same basis: it
+    # carries its own drift check (eth_research.v2.replay verify_v2a + the v2a-replay workflow).
     tracked = {
         p
         for p in tracked
@@ -55,6 +57,7 @@ def test_freeze_table_covers_every_research_file() -> None:
             p.startswith("research/m3f/")
             or p.startswith("research/m4a/")
             or p.startswith("research/m4b/")
+            or p.startswith("research/v2a/")
         )
     }
     listed = {row["path"] for row in _table()["files"]}

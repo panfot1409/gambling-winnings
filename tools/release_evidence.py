@@ -58,12 +58,21 @@ def _iter_files(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*") if p.is_file() and "__pycache__" not in p.parts)
 
 
+# Development layers added AFTER the pre-GA baseline are outside this frozen neutrality scope: they
+# carry their own drift checks (V2A: eth_research.v2.replay.verify_v2a + the v2a-replay workflow),
+# so their research/ artifacts are excluded here — as the M3C-M3E freeze table excludes the later
+# M3F/M4A/M4B layers it does not own. The baseline stays the merged-main (M3) governed state.
+_POST_BASELINE_PREFIXES = ("research/v2a/",)
+
+
 def governed_baseline_digest(repo_root: Path) -> str:
-    """Hash every artifact under ``research/`` (sorted by posix path) into one digest."""
+    """Hash every pre-GA artifact under ``research/`` (sorted by posix path) into one digest."""
     research = repo_root / "research"
     lines = []
     for p in _iter_files(research):
         rel = p.relative_to(repo_root).as_posix()
+        if any(rel.startswith(prefix) for prefix in _POST_BASELINE_PREFIXES):
+            continue
         lines.append(f"{_sha256_bytes(p.read_bytes())}  {rel}\n")
     return _sha256_bytes("".join(lines).encode("utf-8"))
 
@@ -244,13 +253,68 @@ def write(repo_root: Path) -> None:
         (outdir / name).write_bytes(_canonical_json(builder(repo_root)))
 
 
+def _active_version(repo_root: Path) -> str:
+    """The running package's active version, read from the tracked ``pyproject.toml``."""
+    proj = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    return str(proj["version"])
+
+
+def _check_release_manifest_historical(path: Path, repo_root: Path) -> list[str]:
+    """Historical-replay verification of the committed v1.1.0 ``release_manifest.json``.
+
+    Used only when the active package version has moved past the frozen release ``VERSION``
+    (e.g. a later development version like ``2.0.0.dev0``). The v1.1.0 manifest was built from the
+    v1.1.0 *source tree*; a later tree legitimately differs (a bumped ``__version__``, added V2
+    modules), so requiring the live tree to reproduce it would be wrong. Instead this validates the
+    artifact's own recorded identity and internal consistency, and that the version-independent
+    governed record it references still holds — never mutating the artifact and never relaxing the
+    live-reproduction check that runs when the active version equals ``VERSION``.
+    """
+    problems: list[str] = []
+    mf = f"{RELDIR}/release_manifest.json"
+    manifest = json.loads(path.read_bytes())
+    if manifest.get("name") != "eth-research":
+        problems.append(f"{mf} records an unexpected package name")
+    if manifest.get("version") != VERSION:
+        problems.append(
+            f"{mf} records version {manifest.get('version')!r} "
+            f"(expected the frozen release version {VERSION!r})"
+        )
+    if manifest.get("runtime_dependencies") != _runtime_dependencies(repo_root):
+        problems.append(f"{mf} runtime_dependencies drifted from pyproject")
+    ds = manifest.get("distribution_source", {})
+    members = ds.get("members", [])
+    recomputed = _sha256_bytes(
+        "".join(f"{m['sha256']}  {m['path']}\n" for m in members).encode("utf-8")
+    )
+    if recomputed != ds.get("tree_digest"):
+        problems.append(f"{mf} distribution_source tree_digest is inconsistent")
+    if ds.get("member_count") != len(members):
+        problems.append(f"{mf} distribution_source member_count is inconsistent")
+    governed = manifest.get("governed_state", {})
+    if governed.get("baseline_digest") != GOVERNED_BASELINE_DIGEST:
+        problems.append(f"{mf} records a stale governed baseline digest")
+    if governed.get("sealed_ledgers") != dict.fromkeys(SEALED_LEDGERS, EMPTY_SHA):
+        problems.append(f"{mf} records non-empty sealed ledgers")
+    return problems
+
+
 def check(repo_root: Path) -> list[str]:
     problems = []
     outdir = repo_root / RELDIR
+    # Under a later development version, the v1.1.0 release evidence is a *historical* artifact:
+    # its source-derived manifest was built from the v1.1.0 tree and is verified for its own
+    # recorded identity rather than reproduced from the diverged live tree. The sbom and
+    # release_state are version-independent (the sbom excludes eth-research itself; the state is a
+    # posture record), so they are still rebuilt-and-compared in both modes.
+    historical = _active_version(repo_root) != VERSION
     for name, builder in _ARTIFACTS.items():
         path = outdir / name
         if not path.exists():
             problems.append(f"{RELDIR}/{name} is missing")
+            continue
+        if historical and name == "release_manifest.json":
+            problems.extend(_check_release_manifest_historical(path, repo_root))
             continue
         want = _canonical_json(builder(repo_root))
         if path.read_bytes() != want:
