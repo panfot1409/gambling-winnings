@@ -1,0 +1,43 @@
+{
+  "adaptive_research_milestones": 5,
+  "closure_status": "closed_to_further_research",
+  "data_sources_used": [
+    "btc_usd_daily",
+    "eth_usd_daily"
+  ],
+  "diagnostic_neighborhoods": 12,
+  "historical_candidate_families": 8,
+  "limitations": [
+    "Qualitative closure level backed by explicit counts, not a calibrated overfit probability.",
+    "The multiplicity correction bounds family-wise error, not the enumerated researcher freedoms.",
+    "Closure is a post-run governance control over the legacy partition, not a forecast."
+  ],
+  "partitions_repeatedly_observed": [
+    {
+      "observation_count": 5,
+      "partition": "research_train"
+    }
+  ],
+  "pre_closure_pressure_level": "high",
+  "primary_family_evaluations": 10,
+  "prospective_data_status": "unavailable_pending_forward_collection",
+  "research_partition": "research_train",
+  "result_reports_reviewed": 5,
+  "schema_version": 1,
+  "sealed_access_ledgers": [
+    "research/m3a/development_gate_access.jsonl",
+    "research/m2b/test_evaluations.jsonl",
+    "research/m3d/prospective_evaluations.jsonl"
+  ],
+  "sealed_partitions_remaining": 3,
+  "unresolved_researcher_degrees_of_freedom": [
+    "candidate_family_choice",
+    "feature_choice",
+    "signal_transform_choice",
+    "cost_scenario_choice",
+    "fold_structure_choice"
+  ],
+  "unresolved_researcher_dof_count": 5,
+  "v2a_candidate_families": 3,
+  "v2b_candidate_families": 2
+}
