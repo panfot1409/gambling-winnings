@@ -1,0 +1,69 @@
+name: V2AB Stack Acceptance Replay
+
+# Fresh-clone reproducibility for the V2A-V2B stacked acceptance program. The offline whole-stack
+# acceptance verifier re-derives every acceptance check from committed bytes: the immutable freeze table,
+# the independent V2A and V2B result-reconstruction oracles, the BTC acquisition audit, the raw-to-result
+# provenance graph (deep), the cumulative family-catalog enumeration, the hash-chained negative-evidence
+# index, the research-debt register, the legacy-research moratorium closure, the commercial-truth pack and
+# sales-material scan, and the three byte-empty sealed access ledgers. Everything is offline and read-only:
+# no networking, no sealed partition, no wall clock. The three sealed ledgers stay byte-empty throughout.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "src/eth_research/v2ab/**"
+      - "tests/test_v2ab_*.py"
+      - "research/v2/**"
+      - "research/v2ab/**"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/v2ab-replay.yml"
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GATE_LEDGER: research/m3a/development_gate_access.jsonl
+  HOLDOUT_LEDGER: research/m2b/test_evaluations.jsonl
+  PROSPECTIVE_LEDGER: research/m3d/prospective_evaluations.jsonl
+  EMPTY_SHA: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+jobs:
+  v2ab-replay:
+    # Reproduce under the exact authoritative runtime (CPython 3.12.3).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Install the authoritative CPython 3.12.3
+        run: uv python install 3.12.3
+      - name: Verify uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: The V2AB acceptance test suite must run (cannot silently skip)
+        run: |
+          uv run --no-sync --python 3.12.3 python -m pytest -q -p no:cacheprovider \
+            tests/test_v2ab_*.py
+      - name: The whole-stack acceptance verifier passes (deep provenance reconstruction)
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.v2ab.acceptance --check --deep --repo-root .
+      - name: All three sealed ledgers are byte-empty throughout
+        run: |
+          for ledger in "$GATE_LEDGER" "$HOLDOUT_LEDGER" "$PROSPECTIVE_LEDGER"; do
+            if [ -s "$ledger" ]; then
+              echo "sealed ledger $ledger is not empty" >&2
+              exit 1
+            fi
+            got=$(sha256sum "$ledger" | cut -d' ' -f1)
+            if [ "$got" != "$EMPTY_SHA" ]; then
+              echo "sealed ledger $ledger changed (sha $got)" >&2
+              exit 1
+            fi
+          done
+          echo "all three sealed ledgers are byte-empty"
