@@ -1,0 +1,148 @@
+{
+  "package_version": "2.0.0.dev1",
+  "protocol_fingerprint": "2bdf606e24b6715442c5e3f0b14c16c11acac66d30f9d7774a16a82b20cf61f7",
+  "result": {
+    "candidates": [
+      {
+        "corrected_bootstrap": {
+          "ci95_lower": -0.0007259902951894158,
+          "ci95_upper": 0.002617452513363295,
+          "corrected_alpha": 0.005,
+          "corrected_lower_above_zero": false,
+          "corrected_one_sided_lower": -0.0012850403794931458,
+          "observation_count": 2071,
+          "one_sided_p_value": 0.14135,
+          "point_estimate": 0.0009250545901529498,
+          "resamples": 20000
+        },
+        "evaluation": {
+          "aggregate_sharpe": 1.8566476228925006,
+          "benchmark": "eth_buy_and_hold",
+          "candidate_id": "cross_asset_btc_confirmed_eth_trend",
+          "fold_count": 6,
+          "folds_beating_benchmark": 4,
+          "latency_lower_above_zero": false,
+          "primary_ci_lower": -0.0007259902951894158,
+          "primary_ci_upper": 0.002617452513363295,
+          "primary_lower_above_zero": false,
+          "primary_point_estimate": 0.0009250545901529498,
+          "stressed_lower_above_zero": false
+        },
+        "gates": {
+          "candidate_id": "cross_asset_btc_confirmed_eth_trend",
+          "eligible": false,
+          "gates": {
+            "corrected_lower_above_zero": false,
+            "latency_lower_above_zero": false,
+            "mc_supports": false,
+            "primary_lower_above_zero": false,
+            "sensitivity_all_above_zero": false,
+            "stressed_lower_above_zero": false,
+            "strict_fold_majority": true
+          },
+          "primary_point_estimate": 0.0009250545901529498
+        },
+        "mc_sign_flip_p_value": 0.14029298535073245,
+        "sensitivity": {
+          "all_above_zero": false,
+          "candidate_id": "cross_asset_btc_confirmed_eth_trend",
+          "fraction_lower_above_zero": 0.0,
+          "min_primary_ci_lower": -0.0009450154243926832,
+          "neighbor_count": 9,
+          "neighbors_lower_above_zero": 0
+        }
+      },
+      {
+        "corrected_bootstrap": {
+          "ci95_lower": -0.0011180721707015884,
+          "ci95_upper": 0.002160301605845618,
+          "corrected_alpha": 0.005,
+          "corrected_lower_above_zero": false,
+          "corrected_one_sided_lower": -0.0016159650633159929,
+          "observation_count": 2071,
+          "one_sided_p_value": 0.27015,
+          "point_estimate": 0.0005175497768289299,
+          "resamples": 20000
+        },
+        "evaluation": {
+          "aggregate_sharpe": 1.5649106243448152,
+          "benchmark": "eth_buy_and_hold",
+          "candidate_id": "cross_asset_eth_btc_relative_strength_rotation",
+          "fold_count": 6,
+          "folds_beating_benchmark": 4,
+          "latency_lower_above_zero": false,
+          "primary_ci_lower": -0.0011180721707015884,
+          "primary_ci_upper": 0.002160301605845618,
+          "primary_lower_above_zero": false,
+          "primary_point_estimate": 0.0005175497768289299,
+          "stressed_lower_above_zero": false
+        },
+        "gates": {
+          "candidate_id": "cross_asset_eth_btc_relative_strength_rotation",
+          "eligible": false,
+          "gates": {
+            "corrected_lower_above_zero": false,
+            "latency_lower_above_zero": false,
+            "mc_supports": false,
+            "primary_lower_above_zero": false,
+            "sensitivity_all_above_zero": false,
+            "stressed_lower_above_zero": false,
+            "strict_fold_majority": true
+          },
+          "primary_point_estimate": 0.0005175497768289299
+        },
+        "mc_sign_flip_p_value": 0.26818659067046646,
+        "sensitivity": {
+          "all_above_zero": false,
+          "candidate_id": "cross_asset_eth_btc_relative_strength_rotation",
+          "fraction_lower_above_zero": 0.0,
+          "min_primary_ci_lower": -0.0011180721707015884,
+          "neighbor_count": 3,
+          "neighbors_lower_above_zero": 0
+        }
+      }
+    ],
+    "corrected_alpha": 0.005,
+    "decision": {
+      "eligible_candidate_ids": [],
+      "gates": [
+        {
+          "candidate_id": "cross_asset_btc_confirmed_eth_trend",
+          "eligible": false,
+          "gates": {
+            "corrected_lower_above_zero": false,
+            "latency_lower_above_zero": false,
+            "mc_supports": false,
+            "primary_lower_above_zero": false,
+            "sensitivity_all_above_zero": false,
+            "stressed_lower_above_zero": false,
+            "strict_fold_majority": true
+          },
+          "primary_point_estimate": 0.0009250545901529498
+        },
+        {
+          "candidate_id": "cross_asset_eth_btc_relative_strength_rotation",
+          "eligible": false,
+          "gates": {
+            "corrected_lower_above_zero": false,
+            "latency_lower_above_zero": false,
+            "mc_supports": false,
+            "primary_lower_above_zero": false,
+            "sensitivity_all_above_zero": false,
+            "stressed_lower_above_zero": false,
+            "strict_fold_majority": true
+          },
+          "primary_point_estimate": 0.0005175497768289299
+        }
+      ],
+      "nominated_candidate_id": null,
+      "reason": "no candidate cleared every gate",
+      "schema_version": 1,
+      "tie_behavior": "highest_primary_point_estimate_else_none"
+    },
+    "schema_version": 1,
+    "verdict": "V2B COMPLETE — NO CROSS-ASSET CANDIDATE NOMINATED; CUMULATIVE NEGATIVE EVIDENCE PRESERVED; ALL SEALED PARTITIONS UNTOUCHED; V2 NOT SELL-READY"
+  },
+  "run_id": "v2b_run_001",
+  "schema_version": 1
+}
