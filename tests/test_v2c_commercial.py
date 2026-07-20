@@ -2,7 +2,7 @@
 
 Covers the inactive deployment blueprint, the private SBOM, the IP dossier, and the commercial-
 options record: each is a fixed, fingerprint-pinned model that round-trips and rejects drift; the
-committed artifacts under ``release/private/v2c/`` reproduce byte-for-byte; ``sell_ready`` is
+committed artifacts under ``governance/v2c/commercial/`` reproduce byte-for-byte; ``sell_ready`` is
 derived false; and no candidate id or strategy token leaks into a source module or committed file.
 """
 

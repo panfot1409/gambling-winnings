@@ -1,10 +1,12 @@
 """V2C sections 28-31: deterministic build + fail-closed check of the commercial evidence pack.
 
 Serializes the four fixed models -- the inactive deployment blueprint, the private SBOM, the IP
-dossier, and the commercial-options record -- to canonical JSON under ``release/private/v2c/`` and
-verifies the committed bytes reproduce exactly. Every artifact is a pure function of the committed
-source (and, for the SBOM, of ``uv.lock``), so ``check`` fails closed on any drift. Nothing here is
-published; the pack is private evidence in a private repository.
+dossier, and the commercial-options record -- to canonical JSON under ``governance/v2c/commercial/``
+and verifies the committed bytes reproduce exactly. That location is deliberately outside the frozen
+``research/`` and ``release/`` roots the V2A-V2B freeze table pins, so V2C adds evidence without
+touching the frozen stack. Every artifact is a pure function of the committed source (and, for the
+SBOM, of ``uv.lock``), so ``check`` fails closed on any drift. Nothing here is published; the pack
+is private evidence in a private repository.
 """
 
 from __future__ import annotations
@@ -18,8 +20,9 @@ from eth_research.v2c.commercial.ip_dossier import IPDossier
 from eth_research.v2c.commercial.options import CommercialOptions
 from eth_research.v2c.commercial.sbom import build_private_sbom
 
-#: Where the committed commercial-evidence artifacts live (a private, non-published location).
-EVIDENCE_DIR: str = "release/private/v2c"
+#: Where the committed commercial-evidence artifacts live: a private, non-published location outside
+#: the frozen ``research/`` and ``release/`` roots pinned by the V2A-V2B freeze table.
+EVIDENCE_DIR: str = "governance/v2c/commercial"
 
 DEPLOYMENT_ARTIFACT: str = "deployment_blueprint.json"
 SBOM_ARTIFACT: str = "sbom.cdx.json"

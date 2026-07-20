@@ -5,6 +5,10 @@ evaluated). Each is a deterministic canonical-JSON serialization of a fixed, fin
 in `eth_research.v2c.commercial`, and reproduces byte-for-byte via
 `eth_research.v2c.commercial.evidence.check`.
 
+This directory lives under `governance/v2c/` -- deliberately outside the frozen `research/` and
+`release/` roots pinned by the V2A-V2B freeze table -- so V2C adds evidence without touching the
+frozen stack.
+
 | Artifact | Section | What it is |
 | --- | --- | --- |
 | `deployment_blueprint.json` | 28 | The **inactive** offline-operations deployment blueprint. It activates nothing, opens no network egress, routes no orders, and lists every activation precondition as an unmet external human gate. |
