@@ -70,6 +70,8 @@ KNOWN_WORKFLOW_FILES = frozenset(
         "m3f-replay.yml",
         "m4b-replay.yml",
         "v2a-replay.yml",
+        "v2b-replay.yml",
+        "v2ab-replay.yml",
         "release-dry-run.yml",
         "private-release-build.yml",
     }

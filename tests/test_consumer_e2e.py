@@ -66,7 +66,7 @@ def test_version_and_doctor(consumer: tuple[Path, Path]) -> None:
     venv, workdir = consumer
     version = _cli(venv, workdir, "version", "--json")
     assert version.returncode == 0
-    assert json.loads(version.stdout)["package_version"] == "2.0.0.dev0"
+    assert json.loads(version.stdout)["package_version"] == "2.0.0.dev1"
     doctor = _cli(venv, workdir, "doctor", "--json")
     assert doctor.returncode == 0
     assert json.loads(doctor.stdout)["ok"] is True

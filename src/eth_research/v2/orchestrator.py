@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from eth_research import __version__
+from eth_research.v2 import V2A_PACKAGE_VERSION
 from eth_research.v2.decision import ProgramDecision, decide
 from eth_research.v2.evaluator import ProgramEvaluation, evaluate_program
 from eth_research.v2.partitions import load_research_train_only
@@ -81,7 +81,7 @@ def run_one_shot(
             evaluation,
             decision,
             research_train_fingerprint=view.content_fingerprint,
-            package_version=__version__,
+            package_version=V2A_PACKAGE_VERSION,
         )
         publish_results(root, results)
     except Exception as exc:

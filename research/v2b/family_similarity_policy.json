@@ -1,0 +1,47 @@
+{
+  "canonical_signal_families": [
+    "cash_hold",
+    "cross_asset_trend_confirmation",
+    "cross_sectional_relative_strength",
+    "donchian_breakout",
+    "dual_horizon_trend",
+    "mean_reversion_zscore",
+    "moving_average_crossover",
+    "passive_hold",
+    "single_horizon_sma_gate"
+  ],
+  "identity_excluded_attributes": [
+    "candidate_description",
+    "class_name",
+    "default_parameter_syntax",
+    "display_name",
+    "experiment_id",
+    "horizon_value",
+    "lookback_value",
+    "module_path",
+    "output_scaling",
+    "package_version",
+    "serialization_order",
+    "threshold_value",
+    "wrapper_function"
+  ],
+  "schema_version": 1,
+  "signal_family_aliases": {
+    "always_long_passive": "passive_hold",
+    "buy_and_hold": "passive_hold",
+    "dual_sma_cross": "moving_average_crossover",
+    "rolling_extrema_breakout": "donchian_breakout",
+    "rolling_max_min_channel": "donchian_breakout",
+    "single_ma_price_gate": "single_horizon_sma_gate",
+    "twin_horizon_trend": "dual_horizon_trend",
+    "two_speed_trend": "dual_horizon_trend",
+    "weighted_threshold_moving_average": "moving_average_crossover",
+    "zscore_mean_reversion": "mean_reversion_zscore"
+  },
+  "structural_equivalences": {
+    "engine_internal_drawdown_breaker": "drawdown_breaker",
+    "engine_internal_volatility_target": "volatility_target",
+    "riskconfig_drawdown_breaker": "drawdown_breaker",
+    "riskconfig_volatility_target": "volatility_target"
+  }
+}

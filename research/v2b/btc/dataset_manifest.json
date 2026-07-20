@@ -1,0 +1,23 @@
+{
+  "audit_receipt_sha256": "fa34b3abffe5172e0c464f5f5e933b489c4e6280291b92b22fd9293b273b7a36",
+  "base_currency": "USD",
+  "columns": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "content_fingerprint": "6896e6146d747d3b24295e07371eb8a1b8db4f7d8dbe991f2a797a720c1a39ce",
+  "first_open": "2016-05-23T00:00:00Z",
+  "genesis_receipt_sha256": "e8da5eb9695356ad1e93f0352dbe3706f80c4bfc3fabd5281f060afc892784bb",
+  "interval_seconds": 86400,
+  "kind": "btc_dataset_manifest",
+  "last_open": "2022-06-21T00:00:00Z",
+  "plan_sha256": "1a7368eb8012ff7e7ce6799204d8316b71acccbfaeeb6b581be13b2aab096e6a",
+  "research_cutoff_last_open": "2022-06-21T00:00:00Z",
+  "row_count": 2221,
+  "schema_version": 1,
+  "symbol": "BTC-USD",
+  "venue": "coinbase-exchange"
+}

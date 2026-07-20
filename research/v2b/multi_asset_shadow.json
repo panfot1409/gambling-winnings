@@ -1,0 +1,29 @@
+{
+  "base_currency": "USD",
+  "candidate_ids": [
+    "cross_asset_btc_confirmed_eth_trend",
+    "cross_asset_eth_btc_relative_strength_rotation"
+  ],
+  "causal_lag_bars": 1,
+  "gross_leq_one": true,
+  "instruments": [
+    "eth_usd",
+    "btc_usd"
+  ],
+  "kind": "v2b_multi_asset_shadow_policy",
+  "modes": [
+    "synthetic_demo",
+    "historical_shadow",
+    "paper_simulation"
+  ],
+  "policy_fingerprint": "57e86155911776e4e6a9466f11c211e314aaa8f88b54076fc60dfb541d5cd00d",
+  "prohibitions": [
+    "no_network",
+    "no_orders",
+    "no_credentials",
+    "no_money_movement",
+    "no_leverage_or_shorting"
+  ],
+  "schema_version": 1,
+  "signal_only": true
+}

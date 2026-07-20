@@ -1,0 +1,32 @@
+{
+  "candidate_count": 2,
+  "candidate_set_fingerprint": "9b4b784677ee706b667eae971e29dc5622dd051aad49b3e05a89e3e0d182ea32",
+  "candidates": [
+    {
+      "candidate_id": "cross_asset_btc_confirmed_eth_trend",
+      "fixed_parameters": {
+        "btc_horizon": 100,
+        "eth_horizon": 100
+      },
+      "identity_fingerprint": "66ca47eecd2d540ccb6007eef2e26ef06903a7374fe7ae9746b88d161444bb4c",
+      "spec_fingerprint": "163871fce9251502a4274cc42584f89a585eed73a95f86698a2c163a672cb978"
+    },
+    {
+      "candidate_id": "cross_asset_eth_btc_relative_strength_rotation",
+      "fixed_parameters": {
+        "lookback": 90
+      },
+      "identity_fingerprint": "8c8c2cd061416caabad5888dc17a5ac892d46c796f0099277261b2bad49688a0",
+      "spec_fingerprint": "d3cbd9a8a5117ea83ba7ddb627ae2075296dd6f5d1b7741e8da70c8def20932b"
+    }
+  ],
+  "frozen_before_real_btc": true,
+  "frozen_source_sha256": {
+    "src/eth_research/v2b/candidates.py": "5310325b62fae78a0da277e741d4742fbdd929b9f9744e1dffe3fb697f3a1397",
+    "src/eth_research/v2b/multiplicity.py": "2de4beae1ab311e359e93f73081705023d1336ac6ecd3595746076d2d51b6647",
+    "src/eth_research/v2b/research_memory.py": "2241cd87af0a9cb7350f9374b7e28a6c254ea4af7f7b82fe8baed89af8614eea"
+  },
+  "hypothesis_review_sha256": "844a095a97f1d2d91223c83d2823a886161d7b2b5185a7d0496377c421e6ae48",
+  "schema_version": 1,
+  "statement": "The two V2B cross-asset candidate families, their primary parameters, and the candidate/eligibility/identity source were fixed on synthetic-only reasoning and the frozen hypothesis review before the first real BTC observation was acquired. No real BTC price informed the candidate logic or parameters."
+}

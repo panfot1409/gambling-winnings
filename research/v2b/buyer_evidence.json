@@ -1,0 +1,35 @@
+{
+  "claims_fingerprint": "fbe38f998b35c3f340193dc123aed6f34363d50a99330679cc2852cd8838a4b9",
+  "contract_fingerprint": "00ed9b33f8f3e85059c9c7f9d5e8d44a1eb5a0ee8fc74932f95cc03523a5936e",
+  "evidence_fingerprint": "83b70d8cbf057c732d4614b415c2f95625b276e323c94d2d2eb92c5a81c41892",
+  "factsheet": {
+    "claims_fingerprint": "fbe38f998b35c3f340193dc123aed6f34363d50a99330679cc2852cd8838a4b9",
+    "contract_fingerprint": "00ed9b33f8f3e85059c9c7f9d5e8d44a1eb5a0ee8fc74932f95cc03523a5936e",
+    "headlines": [
+      "Pre-registered protocol: folds, costs, bootstrap, and nomination rule fixed and hash-pinned before any candidate runs.",
+      "Exactly one governed execution, mediated by an append-only hash-chained registry.",
+      "Sealed development-gate and final-holdout partitions are never read (byte-empty access ledgers).",
+      "Signal-only shadow operations: no network, no orders, no credentials, no money.",
+      "Standing commercial posture is not_sell_ready."
+    ],
+    "posture": "not_sell_ready",
+    "schema_version": 1,
+    "scorecard_fingerprint": "52b0d1b4f8931c4528ea6d0e0211f80b804b6c7541bcdd2865352135e6622bae",
+    "summary": "A research-stage evaluation of a pre-registered ETH/USD candidate program on the authorized research-train partition, with cost-aware, bootstrapped statistics and a single governed execution. This is not an out-of-sample, forward, or live performance claim, and it is not an offer to sell.",
+    "title": "ETH/USD research program — buyer evaluation factsheet"
+  },
+  "kind": "v2b_buyer_evidence",
+  "posture": "not_sell_ready",
+  "schema_version": 1,
+  "scorecard_fingerprint": "52b0d1b4f8931c4528ea6d0e0211f80b804b6c7541bcdd2865352135e6622bae",
+  "sell_ready": false,
+  "v2b_limitations": [
+    "Research-stage only: the ETH/BTC/cash program is evaluated on the authorized research-train partition only; there is no out-of-sample, forward, walk-forward-live, or live evidence.",
+    "V2A returned no nominated ETH-only candidate; that negative result stands as immutable research evidence and is not reopened.",
+    "V2B adds a genuinely-new BTC information source and at most one cross-asset candidate may be forwarded to an INDEPENDENT development-gate review; a nomination is not validation, forward evidence, deployment readiness, capacity, or a performance claim.",
+    "Any nomination must clear the cumulative family-wise multiplicity correction over all prior families (M3A/M3B/M3C/V2A) plus V2B — a stricter bar than any single milestone applied.",
+    "Sealed partitions (development gate, final holdout, M2B test, M3D prospective, and every observation after the research cutoff) are never read; access ledgers stay byte-empty.",
+    "Shadow operations are signal-only: no network, no orders, no credentials, and no money.",
+    "sell_ready is false and remains false; nothing here is an offer to sell."
+  ]
+}

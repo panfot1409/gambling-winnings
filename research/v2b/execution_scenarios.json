@@ -1,0 +1,67 @@
+{
+  "capacity_method": {
+    "dollar_volume": "close_times_volume",
+    "lag_bars": 1,
+    "participation": "traded_dollars_over_lagged_pair_min_dollar_volume"
+  },
+  "cost_scenarios": {
+    "frictionless": {
+      "base_slippage": 0.0,
+      "fee_rate": 0.0,
+      "fx_conversion_rate": 0.0,
+      "half_spread": 0.0,
+      "impact_cap": 0.0,
+      "impact_coefficient": 0.0,
+      "scenario": "frictionless"
+    },
+    "primary": {
+      "base_slippage": 0.0005,
+      "fee_rate": 0.001,
+      "fx_conversion_rate": 0.0,
+      "half_spread": 0.0,
+      "impact_cap": 0.0,
+      "impact_coefficient": 0.0,
+      "scenario": "compatibility_v1"
+    },
+    "proxy_impact_moderate": {
+      "base_slippage": 0.0005,
+      "fee_rate": 0.001,
+      "fx_conversion_rate": 0.0,
+      "half_spread": 0.0,
+      "impact_cap": 0.01,
+      "impact_coefficient": 0.1,
+      "scenario": "proxy_impact_moderate"
+    },
+    "proxy_impact_severe": {
+      "base_slippage": 0.0005,
+      "fee_rate": 0.001,
+      "fx_conversion_rate": 0.0,
+      "half_spread": 0.0,
+      "impact_cap": 0.03,
+      "impact_coefficient": 0.25,
+      "scenario": "proxy_impact_severe"
+    },
+    "stressed": {
+      "base_slippage": 0.0015,
+      "fee_rate": 0.002,
+      "fx_conversion_rate": 0.0,
+      "half_spread": 0.0005,
+      "impact_cap": 0.0,
+      "impact_coefficient": 0.0,
+      "scenario": "stressed"
+    }
+  },
+  "declaration_fingerprint": "53d234edcf0513a82c5a37f1d8acbbbf6164ebef70d4b52cbeba0c6561ec708b",
+  "kind": "v2b_execution_scenarios",
+  "latency_scenarios": {
+    "causal_t_plus_1_open": 0,
+    "delayed_one_bar": 1
+  },
+  "primary_cost": "primary",
+  "schema_version": 1,
+  "stressed_cost": "stressed",
+  "weight_columns": [
+    "weight_eth",
+    "weight_btc"
+  ]
+}

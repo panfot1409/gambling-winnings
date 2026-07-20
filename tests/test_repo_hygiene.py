@@ -192,6 +192,30 @@ def test_raw_aggregate_size_is_bounded() -> None:
     assert total <= RAW_AGGREGATE_CAP_BYTES, f"raw aggregate {total} exceeds the 10 MiB cap"
 
 
+# --- V2B cross-asset (BTC-USD) raw-data allowlist -----------------------------
+# The V2B milestone acquires a genuinely new BTC-USD daily research dataset. Any
+# committed raw body must be an allowlisted JSON candle body or receipt under the
+# closed research/v2b/raw/coinbase/<attempt>/ tree — never a CSV/Parquet, symlink,
+# LFS pointer, or traversal. This is a no-op before acquisition (no tracked files)
+# and enforcing once the genesis/audit bundles are committed.
+
+
+def test_v2b_tracked_raw_bodies_are_allowlisted_json() -> None:
+    for rel in _tracked_files("research/v2b/raw"):
+        path = REPO_ROOT / rel
+        assert rel.startswith("research/v2b/raw/coinbase/"), rel
+        assert rel.endswith(".json"), f"unexpected non-JSON tracked raw file: {rel}"
+        assert ".." not in rel
+        assert not path.is_symlink(), f"raw file is a symlink: {rel}"
+        head = path.read_bytes()[:64]
+        assert not head.startswith(b"version https://git-lfs"), f"LFS pointer masquerading: {rel}"
+
+
+def test_v2b_raw_aggregate_size_is_bounded() -> None:
+    total = sum((REPO_ROOT / rel).stat().st_size for rel in _tracked_files("research/v2b/raw"))
+    assert total <= RAW_AGGREGATE_CAP_BYTES, f"v2b raw aggregate {total} exceeds the 10 MiB cap"
+
+
 def test_frozen_dossier_anchors_every_committed_artifact() -> None:
     """The committed frozen dossier must hash-anchor every committed artifact.
 

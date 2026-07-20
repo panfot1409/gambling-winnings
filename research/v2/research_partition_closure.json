@@ -1,0 +1,47 @@
+{
+  "accepted_package_version": "2.0.0.dev1",
+  "aligned_partition_fingerprint": "6a37a95e1f1faeb182834fce2b52d97b4e56f133a9a1fe9892dddf32087191e4",
+  "allowed_operations": [
+    "accepted_result_rendering",
+    "byte_verification",
+    "calculation_free_recovery",
+    "compatibility_test",
+    "documentation",
+    "historical_replay",
+    "independent_result_reconstruction",
+    "integrity_hashing",
+    "regression_test"
+  ],
+  "btc_content_fingerprint": "80071ef7692a3d31c6a63dcf0bdfefb9cf3469babe6fd7a9ccacc6a3ed7609a7",
+  "closure_digest": "4a5c16e2f309c8f637464c7c927fa43f9385e9fa109d24b62cac384d95f73c64",
+  "closure_id": "legacy_research_partition_closure_v1",
+  "closure_reason": "V2A nominated no ETH candidate (3 families) and V2B no cross-asset candidate (2 families) under cumulative multiplicity; the historical partitions are closed to further candidate-nomination research to prevent strategy mining.",
+  "closure_status": "closed_to_new_candidate_nomination_research",
+  "cumulative_family_catalog_sha256": "c445a7e6cefa3f5744f9931e8c66e9509a5bde5056da1e7e903caeda2d48d034",
+  "effective_after_commit": "5798610389af0905331fc5da20f54f4b8f7930fb",
+  "eth_content_fingerprint": "219aaa3559b5f56375159a4f39405511bfdb2e996843c31a33109e4e80e98650",
+  "first_open": "2016-05-23T00:00:00Z",
+  "forbidden_operations": [
+    "add_primary_configuration",
+    "change_nomination_threshold",
+    "claim_freshness_via_new_benchmark",
+    "claim_freshness_via_new_version",
+    "evaluate_modified_candidate",
+    "evaluate_new_candidate",
+    "open_new_research_budget",
+    "promote_sensitivity_output_to_candidate",
+    "read_sealed_to_choose_family",
+    "recombine_and_claim_new_trial",
+    "run_new_experiment"
+  ],
+  "historical_experiments": [
+    "v2a_run_001",
+    "v2b_run_001"
+  ],
+  "last_open": "2022-06-21T00:00:00Z",
+  "multiplicity_state_sha256": "df97daa788ca291aeb7e897ddc75e66a6a9e601ee4ddce0bf94cf166d68846b6",
+  "negative_evidence_index_sha256": "268be1e71620045ce045fc3b3d2db3cbca4b8c5a8cdd9480b8edb33f52fd737f",
+  "post_run_addition": true,
+  "schema_version": 1,
+  "supersession_policy": "This closure is permanent for the legacy partitions. Future research requires a separately-authorized, new prospective dataset or domain under its own governance; it does not reopen these partitions."
+}

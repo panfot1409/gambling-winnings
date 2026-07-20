@@ -66,15 +66,24 @@ class TestAcquisitionWorkflowsRetired:
     def test_m3d_acquire_trigger_is_removed(self) -> None:
         assert not (REPO_ROOT / "research/m3d/acquire.trigger").exists()
 
+    def test_v2b_acquisition_workflow_is_removed(self) -> None:
+        assert not (WORKFLOWS / "v2b-acquire.yml").exists()
+
+    def test_v2b_acquire_trigger_is_removed(self) -> None:
+        assert not (REPO_ROOT / "research/v2b/acquire.trigger").exists()
+
     def test_no_workflow_can_write_contents(self) -> None:
-        # At the final HEAD no workflow may write repository contents — the
-        # temporary M3D acquisition workflow is retired.
+        # At the final HEAD no workflow may write repository contents — the temporary V2B BTC
+        # acquisition workflow is retired (section 13).
         for path in _all_workflow_files():
             text = path.read_text(encoding="utf-8")
             assert "contents: write" not in text, f"{path.name} still grants contents: write"
             assert "contents:write" not in text
 
     def test_no_workflow_contacts_coinbase(self) -> None:
+        # The acquisition endpoint is never a literal in any workflow YAML (it is emitted at run
+        # time from the hard-coded package constant), so even the transient acquire workflow
+        # carries no Coinbase host string. This assertion stays unconditional.
         for path in _all_workflow_files():
             assert not _COINBASE_HOST_RE.search(path.read_text(encoding="utf-8")), (
                 f"{path.name} still contacts a Coinbase host"

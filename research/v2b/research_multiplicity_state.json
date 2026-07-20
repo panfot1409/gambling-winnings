@@ -1,0 +1,21 @@
+{
+  "corrected_one_sided_confidence": 0.995,
+  "corrected_per_family_alpha": 0.005,
+  "correction_method": "holm_bonferroni_familywise",
+  "cumulative_alpha_budget": 0.05,
+  "historical_family_count": 8,
+  "historical_nominal_alpha": 0.05,
+  "historical_primary_test_count": 8,
+  "limitations": [
+    "Frequentist family-wise correction over the ENUMERATED families; it does not eliminate researcher degrees of freedom (choice of families/features/transforms).",
+    "The budget never resets: a new package version, the addition of BTC, or a changed benchmark does not refresh alpha.",
+    "Diagnostics report unadjusted intervals; only the primary nomination verdict is corrected."
+  ],
+  "no_reset": true,
+  "research_family_catalog_sha256": "3b5596955856a994160a3e062e07c7f24050d39ab0188b2b3747009cfeaf987a",
+  "schema_version": 1,
+  "tie_behavior": "highest_primary_point_estimate_else_none",
+  "total_family_count": 10,
+  "v2a_family_count": 3,
+  "v2b_max_family_count": 2
+}

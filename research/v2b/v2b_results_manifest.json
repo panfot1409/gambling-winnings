@@ -1,0 +1,9 @@
+{
+  "nominated_candidate_id": null,
+  "results_file": "v2b_results.json",
+  "results_fingerprint": "d0b668f45c9e1f6adfeb606e16003a4bd5649d39bb0676a444cb691ec9fe6f1f",
+  "results_sha256": "d0b668f45c9e1f6adfeb606e16003a4bd5649d39bb0676a444cb691ec9fe6f1f",
+  "run_id": "v2b_run_001",
+  "schema_version": 1,
+  "verdict": "V2B COMPLETE — NO CROSS-ASSET CANDIDATE NOMINATED; CUMULATIVE NEGATIVE EVIDENCE PRESERVED; ALL SEALED PARTITIONS UNTOUCHED; V2 NOT SELL-READY"
+}

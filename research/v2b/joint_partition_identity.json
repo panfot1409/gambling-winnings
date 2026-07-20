@@ -1,0 +1,25 @@
+{
+  "aligned_timestamp_fingerprint": "6be3a46a7c5faa4b1e398bfd9be90c139e7af132f13fe5f1b13661b031c88f3e",
+  "alignment_policy": "exact_shared_daily_opens",
+  "base_currency": "USD",
+  "btc_content_fingerprint": "80071ef7692a3d31c6a63dcf0bdfefb9cf3469babe6fd7a9ccacc6a3ed7609a7",
+  "btc_dataset_fingerprint": "6896e6146d747d3b24295e07371eb8a1b8db4f7d8dbe991f2a797a720c1a39ce",
+  "combined_partition_fingerprint": "6a37a95e1f1faeb182834fce2b52d97b4e56f133a9a1fe9892dddf32087191e4",
+  "eth_content_fingerprint": "219aaa3559b5f56375159a4f39405511bfdb2e996843c31a33109e4e80e98650",
+  "eth_dataset_fingerprint": "sha256:60aa988e9db786db5723c925abc794463c23ff701791173b745196c7a8b12033",
+  "first_open": "2016-05-23T00:00:00Z",
+  "instruments": [
+    "BTC-USD",
+    "ETH-USD"
+  ],
+  "interval_seconds": 86400,
+  "kind": "eth_btc_joint_partition_identity",
+  "last_open": "2022-06-21T00:00:00Z",
+  "no_row_at_or_after_cutoff": true,
+  "research_cutoff_last_open": "2022-06-21T00:00:00Z",
+  "row_count": 2221,
+  "schema_version": 1,
+  "venues": [
+    "coinbase-exchange"
+  ]
+}

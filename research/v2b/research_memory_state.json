@@ -1,0 +1,12 @@
+{
+  "candidate_family_count": 8,
+  "exposure_ledger_head_sha256": "6d9dac581bab0941aec57a98144404f9e6e8bbbb95ce438c719475cc02b4e0e6",
+  "exposure_ledger_sha256": "1d26e8d66309302e87070cbdb2d55e757c706dd725e88ba601e646cc447bafc7",
+  "family_catalog_sha256": "c445a7e6cefa3f5744f9931e8c66e9509a5bde5056da1e7e903caeda2d48d034",
+  "family_count": 10,
+  "milestone": "v2b",
+  "rejected_family_count": 8,
+  "rejected_family_index_sha256": "312c5e20cb08db14d9a014540728df087c778eebc05b149efc5aead07e85f38a",
+  "schema_version": 1,
+  "similarity_policy_sha256": "180473de891254ea3eddee19ae0ed11ea603f12ca980fc399b3a2fa0522a5c64"
+}

@@ -167,7 +167,7 @@ def _smoke(venv: Path, workdir: Path) -> None:
     exe = venv / "bin" / "eth-research"
 
     version = _run([str(exe), "version", "--json"], cwd=workdir)
-    assert json.loads(version.stdout)["package_version"] == "2.0.0.dev0"
+    assert json.loads(version.stdout)["package_version"] == "2.0.0.dev1"
 
     doctor = _run([str(exe), "doctor", "--json"], cwd=workdir)
     assert json.loads(doctor.stdout)["ok"] is True
@@ -182,7 +182,7 @@ def _smoke(venv: Path, workdir: Path) -> None:
     payload = json.loads(driver.stdout)
     assert "site-packages" in payload["package_file"], payload["package_file"]
     assert payload["repo_on_path"] is False
-    assert payload["version"] == "2.0.0.dev0"
+    assert payload["version"] == "2.0.0.dev1"
     assert payload["deterministic"] is True
     assert len(payload["result_id"]) == 64
     assert payload["base_currency"] == "USD"

@@ -1,0 +1,19 @@
+{
+  "actual_daily_opens": 2221,
+  "all_finite": true,
+  "all_prices_positive": true,
+  "content_fingerprint": "6896e6146d747d3b24295e07371eb8a1b8db4f7d8dbe991f2a797a720c1a39ce",
+  "contiguous_daily": true,
+  "duplicate_opens": 0,
+  "expected_daily_opens": 2221,
+  "first_open": "2016-05-23T00:00:00Z",
+  "kind": "btc_quality_report",
+  "last_open": "2022-06-21T00:00:00Z",
+  "max_close": 67554.84,
+  "min_close": 445.67,
+  "missing_opens": 0,
+  "no_row_at_or_after_cutoff": true,
+  "ohlcv_identity_holds": true,
+  "schema_version": 1,
+  "volume_nonnegative": true
+}
