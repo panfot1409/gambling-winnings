@@ -20,6 +20,7 @@ from eth_research.v2.strict import (
     require_bool,
     require_choice,
     require_exact_keys,
+    require_int,
     require_list,
     require_mapping,
     require_nonempty_str,
@@ -198,6 +199,11 @@ class CommercialOptions:
                 "honest_limitation",
             },
         )
+        if (
+            require_int("commercial_options.schema_version", obj["schema_version"])
+            != COMMERCIAL_OPTIONS_SCHEMA_VERSION
+        ):
+            raise CommercialOptionsError("schema_version drifted from the fixed definition")
         sell_ready = require_bool("commercial_options.sell_ready", obj["sell_ready"])
         if sell_ready:
             raise CommercialOptionsError("commercial_options.sell_ready must be false")

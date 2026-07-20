@@ -19,7 +19,8 @@ from eth_research.v2.strict import (
     require_choice,
     require_nonempty_str,
 )
-from eth_research.v2c.buyer.framing import read_frame, write_frame
+from eth_research.v2c.buyer.framing import FramingError, read_frame, write_frame
+from eth_research.v2c.firewall import KNOWN_LEGACY_CANDIDATE_IDS
 
 #: A conservative per-session request budget; a buyer needs only a handful of artifacts.
 MAX_REQUESTS_PER_SESSION: int = 32
@@ -86,9 +87,16 @@ def serve_request(
         text = gateway.serve(name)
     except GatewayError:
         return {"kind": RESPONSE_REFUSED, "item": name, "reason": "withheld_or_unknown"}
-    # Defense in depth: re-scan the served text; refuse to emit if anything trips the scanner.
+    # Defense in depth: re-scan the served text; refuse to emit if anything trips the scanner. For a
+    # gateway artifact the item name is also its redaction kind (both are drawn from the same
+    # allowlist), so the kind check is exact rather than coincidental.
     if policy.scan_artifact(name, name, text):
         return {"kind": RESPONSE_REFUSED, "item": name, "reason": "redaction_violation"}
+    # Extra defense in depth: a redacted artifact may name a provenance path, but must never carry a
+    # legacy candidate *id* (a strategy slug). Refuse if one leaks (the RedactionPolicy does not
+    # know candidate ids).
+    if any(candidate_id in text for candidate_id in KNOWN_LEGACY_CANDIDATE_IDS):
+        return {"kind": RESPONSE_REFUSED, "item": name, "reason": "candidate_id_leak"}
     return {"kind": RESPONSE_ARTIFACT, "item": name, "text": text}
 
 
@@ -105,7 +113,16 @@ def serve_session(
     received = artifacts = refusals = errors = response_bytes = 0
     quota_exceeded = False
     while True:
-        frame = read_frame(in_stream)
+        try:
+            frame = read_frame(in_stream)
+        except FramingError:
+            # A malformed or truncated frame desyncs the stream; answer once and end the session
+            # rather than let the error propagate out of the vendor loop.
+            errors += 1
+            response_bytes += write_frame(
+                out_stream, {"kind": RESPONSE_ERROR, "reason": "malformed_frame"}
+            )
+            break
         if frame is None:
             break
         received += 1

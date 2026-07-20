@@ -14,6 +14,7 @@ import ast
 import hashlib
 from pathlib import Path
 
+from eth_research.buyer.redaction import scan_text
 from eth_research.m3d.validation import M3DValidationError
 from eth_research.v2c.firewall import KNOWN_LEGACY_CANDIDATE_IDS
 
@@ -161,15 +162,35 @@ _README = (
 )
 
 
-def client_import_modules() -> frozenset[str]:
-    """The set of top-level modules the client imports (AST-parsed; proves stdlib-only, no repo)."""
-    tree = ast.parse(_CLIENT_SOURCE)
+#: Sentinel returned by :func:`client_import_modules` when the client uses a dynamic import
+#: (``__import__`` / ``importlib``), which hides the imported module from a static scan. It is never
+#: in the stdlib allowlist, so a client that dynamically imports fails the stdlib-only check.
+DYNAMIC_IMPORT_SENTINEL: str = "<dynamic-import>"
+
+
+def client_import_modules(source: str | None = None) -> frozenset[str]:
+    """The set of top-level modules the client imports (AST-parsed; proves stdlib-only, no repo).
+
+    Static ``import``/``from`` targets are returned by their top-level name. A dynamic import
+    (``__import__(...)`` or any ``importlib`` reference) is reported as
+    :data:`DYNAMIC_IMPORT_SENTINEL` so it cannot hide a non-stdlib import from the stdlib-only gate.
+    ``source`` defaults to the built-in client constant; pass the on-disk client text to bind the
+    proof to the artifact that will actually run.
+    """
+    tree = ast.parse(_CLIENT_SOURCE if source is None else source)
     modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             modules.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module is not None:
             modules.add(node.module.split(".")[0])
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == "__import__":
+                modules.add(DYNAMIC_IMPORT_SENTINEL)
+        elif (isinstance(node, ast.Name) and node.id == "importlib") or (
+            isinstance(node, ast.Attribute) and node.attr in {"import_module", "__import__"}
+        ):
+            modules.add(DYNAMIC_IMPORT_SENTINEL)
     return frozenset(modules)
 
 
@@ -213,6 +234,20 @@ def double_build_is_identical(tmp_root: str | Path) -> bool:
 # private-key hygiene scan; it still matches a real PEM header at scan time.
 _PEM_PRIVATE_KEY_MARKER: str = "-" * 5 + "BEGIN"
 
+# The only files a freshly built source-free harness may contain. Anything else -- a planted
+# strategy module, a pickled model, a raw-data table, a wheel -- is an unexpected file and a
+# violation regardless of its content or extension. This allowlist is the primary gate; the token
+# and suffix denylists below are defense in depth for the expected files themselves.
+EXPECTED_HARNESS_FILES: frozenset[str] = frozenset(
+    {
+        CLIENT_FILENAME,
+        REQUEST_PLAN_FILENAME,
+        RESPONSE_SCHEMA_FILENAME,
+        README_FILENAME,
+        CHECKSUMS_FILENAME,
+    }
+)
+
 # Tokens that must never appear in a source-free harness file.
 _FORBIDDEN_SUBSTRINGS: tuple[str, ...] = (
     "eth_research.v2.candidates",
@@ -224,18 +259,49 @@ _FORBIDDEN_SUBSTRINGS: tuple[str, ...] = (
     "coinbase",
     _PEM_PRIVATE_KEY_MARKER,
 )
-_FORBIDDEN_SUFFIXES: tuple[str, ...] = (".whl", ".pyc", ".csv", ".parquet")
+# Only these suffixes are ever expected; any other on-disk artifact type is refused by name below,
+# but the explicit binary/data suffixes are kept so a mis-named payload is still caught by type.
+_ALLOWED_SUFFIXES: frozenset[str] = frozenset({".py", ".json", ".md"})
+_FORBIDDEN_SUFFIXES: tuple[str, ...] = (
+    ".whl",
+    ".pyc",
+    ".pyd",
+    ".so",
+    ".csv",
+    ".parquet",
+    ".pkl",
+    ".pickle",
+    ".npy",
+    ".npz",
+    ".pt",
+    ".h5",
+    ".bin",
+)
 
 
 def scan_source_free(root: str | Path) -> list[str]:
-    """Return the list of source-free violations (empty == OK) over every file in the harness."""
+    """Return the list of source-free violations (empty == OK) over every file in the harness.
+
+    The gate is an allowlist: only :data:`EXPECTED_HARNESS_FILES` may be present, so any planted
+    file (strategy source, a pickled model, a raw-data table, a wheel) is refused by name whatever
+    its content. The token/suffix denylists and the redaction content scan add defense in depth for
+    the expected files themselves. Note this proves the *built* harness is source-free; it is not a
+    guarantee that a determined vendor could not construct a harness that leaks.
+    """
     base = Path(root)
     problems: list[str] = []
     for path in sorted(base.rglob("*")):
         if not path.is_file():
             continue
-        if path.suffix.lower() in _FORBIDDEN_SUFFIXES:
-            problems.append(f"{path.name}: forbidden artifact type {path.suffix}")
+        suffix = path.suffix.lower()
+        if path.name not in EXPECTED_HARNESS_FILES:
+            problems.append(f"{path.name}: unexpected file (not a source-free harness member)")
+        if suffix in _FORBIDDEN_SUFFIXES or suffix not in _ALLOWED_SUFFIXES:
+            problems.append(f"{path.name}: forbidden artifact type {path.suffix!r}")
+        # A known-binary payload is flagged by type and not decoded; every other file -- including a
+        # mis-suffixed text leak like ``leak.txt`` -- is still content-scanned, so a planted source
+        # is caught by its forbidden token even when its extension is also refused.
+        if suffix in _FORBIDDEN_SUFFIXES:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         for candidate_id in KNOWN_LEGACY_CANDIDATE_IDS:
@@ -244,6 +310,12 @@ def scan_source_free(root: str | Path) -> list[str]:
         for token in _FORBIDDEN_SUBSTRINGS:
             if token in text:
                 problems.append(f"{path.name}: contains forbidden token {token!r}")
+        # Content scan for secrets / raw data / private-key blocks (not embedded_source, since the
+        # client file is legitimately Python source). Applied only to non-client files.
+        if path.name != CLIENT_FILENAME:
+            for violation in scan_text(path.name, text):
+                if violation.category != "embedded_source":
+                    problems.append(f"{path.name}: {violation.category} ({violation.detail})")
     return problems
 
 
@@ -251,6 +323,8 @@ __all__ = [
     "CHECKSUMS_FILENAME",
     "CLIENT_FILENAME",
     "CLIENT_STDLIB_ALLOWLIST",
+    "DYNAMIC_IMPORT_SENTINEL",
+    "EXPECTED_HARNESS_FILES",
     "HARNESS_SCHEMA_VERSION",
     "README_FILENAME",
     "REQUEST_PLAN_FILENAME",

@@ -43,6 +43,11 @@ OQ_FIXTURE_COHORT_START: str = "2016-01-01T00:00:00Z"
 OQ_INTERVAL_SECONDS: int = 86400
 #: The qualification requires at least this many daily slots.
 OQ_MIN_EVENT_SLOTS: int = 3650
+#: The qualification requires at least this many *effectively accepted* events (the declared slots
+#: minus the gap/stale holes). At the minimum config the real fixture accepts 3607; this floor sits
+#: safely below that and far above a degenerate run, so the qualification verdict cannot pass on a
+#: near-empty accepted stream even when the declared slot count clears the floor above.
+OQ_MIN_ACCEPTED_EVENTS: int = 3500
 #: The fixture builds a comfortable margin above the floor so gaps never drop it below it.
 OQ_DEFAULT_SLOTS: int = 3800
 

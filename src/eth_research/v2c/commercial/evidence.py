@@ -61,7 +61,7 @@ def build_all(repo_root: str | Path) -> dict[str, bytes]:
 
 
 def write_all(repo_root: str | Path) -> list[Path]:
-    """(Re)write every committed artifact under ``release/private/v2c/``; return the paths."""
+    """(Re)write every committed artifact under ``governance/v2c/commercial/``; return the paths."""
     root = Path(repo_root)
     outdir = root / EVIDENCE_DIR
     outdir.mkdir(parents=True, exist_ok=True)

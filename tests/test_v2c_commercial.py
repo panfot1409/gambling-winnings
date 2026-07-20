@@ -18,9 +18,18 @@ import eth_research
 from eth_research.v2.constitution import STANDING_POSTURE
 from eth_research.v2.strict import V2ValidationError
 from eth_research.v2c.commercial import evidence
-from eth_research.v2c.commercial.deployment import DeploymentBlueprint, DeploymentBlueprintError
-from eth_research.v2c.commercial.ip_dossier import IPDossier, IPDossierError
+from eth_research.v2c.commercial.deployment import (
+    DEPLOYMENT_SCHEMA_VERSION,
+    DeploymentBlueprint,
+    DeploymentBlueprintError,
+)
+from eth_research.v2c.commercial.ip_dossier import (
+    IP_DOSSIER_SCHEMA_VERSION,
+    IPDossier,
+    IPDossierError,
+)
 from eth_research.v2c.commercial.options import (
+    COMMERCIAL_OPTIONS_SCHEMA_VERSION,
     SELL_READY,
     CommercialOptions,
     CommercialOptionsError,
@@ -61,6 +70,13 @@ def test_deployment_blueprint_rejects_a_met_precondition() -> None:
     tampered: dict[str, Any] = DeploymentBlueprint.current().to_canonical()
     tampered["activation_preconditions"][0]["met"] = True
     with pytest.raises(DeploymentBlueprintError):
+        DeploymentBlueprint.parse(tampered)
+
+
+def test_deployment_blueprint_rejects_a_schema_version_drift() -> None:
+    tampered: dict[str, Any] = DeploymentBlueprint.current().to_canonical()
+    tampered["schema_version"] = DEPLOYMENT_SCHEMA_VERSION + 1
+    with pytest.raises(DeploymentBlueprintError, match="schema_version"):
         DeploymentBlueprint.parse(tampered)
 
 
@@ -108,6 +124,13 @@ def test_ip_dossier_roundtrips_and_rejects_drift() -> None:
         IPDossier.parse(tampered)
 
 
+def test_ip_dossier_rejects_a_schema_version_drift() -> None:
+    tampered: dict[str, Any] = IPDossier.current().to_canonical()
+    tampered["schema_version"] = IP_DOSSIER_SCHEMA_VERSION + 1
+    with pytest.raises(IPDossierError, match="schema_version"):
+        IPDossier.parse(tampered)
+
+
 # --------------------------------------------------------------------------- #
 # Section 31: commercial options                                              #
 # --------------------------------------------------------------------------- #
@@ -134,6 +157,13 @@ def test_commercial_option_rejects_available_now() -> None:
     tampered: dict[str, Any] = CommercialOptions.current().to_canonical()
     tampered["options"][0]["available_now"] = True
     with pytest.raises(V2ValidationError):
+        CommercialOptions.parse(tampered)
+
+
+def test_commercial_options_rejects_a_schema_version_drift() -> None:
+    tampered: dict[str, Any] = CommercialOptions.current().to_canonical()
+    tampered["schema_version"] = COMMERCIAL_OPTIONS_SCHEMA_VERSION + 1
+    with pytest.raises(CommercialOptionsError, match="schema_version"):
         CommercialOptions.parse(tampered)
 
 

@@ -19,6 +19,7 @@ from eth_research.v2.strict import (
     require_bool,
     require_choice,
     require_exact_keys,
+    require_int,
     require_list,
     require_mapping,
     require_nonempty_str,
@@ -188,6 +189,11 @@ class IPDossier:
                 "honest_limitation",
             },
         )
+        if (
+            require_int("ip_dossier.schema_version", obj["schema_version"])
+            != IP_DOSSIER_SCHEMA_VERSION
+        ):
+            raise IPDossierError("schema_version drifted from the fixed definition")
         categories = tuple(
             require_list("ip_dossier.categories", obj["categories"], IPCategory.parse)
         )

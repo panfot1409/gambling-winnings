@@ -107,6 +107,35 @@ def test_cash_control_intent_refuses_bool_fills() -> None:
         )
 
 
+class _AlwaysEqualToZero:
+    """An object whose ``!= 0.0`` is always False -- it would slip past a bare zero-comparison."""
+
+    def __ne__(self, _other: object) -> bool:
+        return False
+
+    def __eq__(self, _other: object) -> bool:
+        return True
+
+    __hash__ = None  # type: ignore[assignment]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [_AlwaysEqualToZero(), float("nan"), float("inf"), float("-inf"), "0.0", None],
+)
+def test_cash_control_intent_rejects_non_real_exposure_fields(bad: object) -> None:
+    # An exposure field must be a real, finite number *before* the ``!= 0.0`` guard: an object whose
+    # ``__ne__`` returns False (or a NaN/inf, or a non-number) must not masquerade as zero exposure.
+    with pytest.raises(V2CFirewallError):
+        CashControlIntent(
+            as_of=_AS_OF_CANONICAL,
+            risky_target_weight=bad,  # type: ignore[arg-type]
+            requested_notional=0.0,
+            requested_fills=0,
+            requested_turnover=0.0,
+        )
+
+
 def test_cash_control_cannot_be_constructed_outside_the_firewall() -> None:
     with pytest.raises(V2CFirewallError):
         CashControl(_token=object())
@@ -179,6 +208,22 @@ def test_assert_no_candidate_reference_refuses_known_id_strings() -> None:
     for candidate_id in KNOWN_LEGACY_CANDIDATE_IDS:
         with pytest.raises(V2CFirewallError, match="legacy candidate id"):
             assert_no_candidate_reference("input", candidate_id)
+
+
+def test_assert_no_candidate_reference_refuses_normalized_id_variants() -> None:
+    # The screen normalizes (casefold + strip + drop zero-width) before the substring match, so a
+    # candidate id cannot evade it by case, padding, an embedding, or a zero-width split.
+    base = "cross_asset_btc_confirmed_eth_trend"
+    zero_width_split = base[:12] + chr(0x200B) + base[12:]  # ZWSP inserted mid-id
+    variants = (
+        base.upper(),
+        f"   {base}   ",
+        f"prefix::{base}::suffix",
+        zero_width_split,
+    )
+    for variant in variants:
+        with pytest.raises(V2CFirewallError, match="legacy candidate id"):
+            assert_no_candidate_reference("input", variant)
 
 
 # --------------------------------------------------------------------------- #

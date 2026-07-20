@@ -4,11 +4,13 @@ Aggregates the cash-control run, the deterministic resource reports, and the cra
 into one pass/fail verdict per criterion. These are **internal offline objectives**, not
 live-production SLAs. A criterion passes only if it holds for **every** instrument.
 
-Criteria: event-acceptance correctness, duplicate suppression, conflicting-duplicate detection,
-journal durability, checkpoint consistency, recovery idempotency, kill-switch trip latency, alert
-completeness, state reconstruction, bounded processing/memory, and -- the governing invariant --
-zero risky exposure (every fill zero-traded and zero-exposure, every intent zero-weight, no
-exposure-driven kill trip). The run computes no market performance.
+Criteria: qualification coverage (a non-emptiness + coverage floor, so a run with no instruments or
+uncovered evidence cannot pass vacuously through the quantified checks), event-acceptance
+correctness, duplicate suppression, conflicting-duplicate detection, journal durability, checkpoint
+consistency, recovery idempotency, kill-switch trip latency, alert completeness, state
+reconstruction, bounded processing/memory, and -- the governing invariant -- zero risky exposure
+(every fill zero-traded and zero-exposure, every intent zero-weight, no exposure-driven kill trip).
+The run computes no market performance.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from eth_research.v2c.oq.events import (
     FLAG_HIGH_VOLATILITY,
     FLAG_STALE,
     FLAG_ZERO_VOLUME,
+    OQ_MIN_ACCEPTED_EVENTS,
     OQ_MIN_EVENT_SLOTS,
     OUTCOME_CONFLICTING_REJECTED,
     OUTCOME_DUPLICATE_SUPPRESSED,
@@ -39,6 +42,7 @@ from eth_research.v2c.oq.resources import ResourceReport
 _ALERT_RAISED_EVENT: str = "alert_raised"
 
 QUALIFICATION_CRITERIA: tuple[str, ...] = (
+    "qualification_coverage",
     "event_acceptance_correctness",
     "duplicate_suppression",
     "conflicting_duplicate_detection",
@@ -70,6 +74,37 @@ class QualificationVerdict:
     passed: bool
 
 
+def _qualification_coverage(
+    run: QualificationRun,
+    resource_reports: Sequence[ResourceReport],
+    recovery_reports: Sequence[RecoveryReport],
+) -> SLOResult:
+    """Non-emptiness + coverage floor: a run with no instruments, or an instrument with no
+    resource/recovery evidence, cannot pass vacuously through the quantified criteria."""
+    problems: list[str] = []
+    instruments = tuple(qual.instrument_symbol for qual in run.instruments)
+    if not instruments:
+        problems.append("qualification run has no instruments")
+    if not resource_reports:
+        problems.append("no resource reports were produced")
+    if not recovery_reports:
+        problems.append("no recovery reports were produced")
+    resource_symbols = {report.instrument_symbol for report in resource_reports}
+    recovery_symbols = {report.instrument_symbol for report in recovery_reports}
+    for symbol in instruments:
+        if symbol not in resource_symbols:
+            problems.append(f"{symbol}: no resource report covers this instrument")
+        if symbol not in recovery_symbols:
+            problems.append(f"{symbol}: no recovery report covers this instrument")
+    return SLOResult(
+        "qualification_coverage",
+        not problems,
+        f"{len(instruments)} instrument(s) each covered by a resource and a recovery report"
+        if not problems
+        else "; ".join(problems),
+    )
+
+
 def _event_acceptance_correctness(run: QualificationRun) -> SLOResult:
     problems: list[str] = []
     for qual in run.instruments:
@@ -84,6 +119,13 @@ def _event_acceptance_correctness(run: QualificationRun) -> SLOResult:
             problems.append(f"{qual.instrument_symbol}: fixture slots {slots_built} < min slots")
         if not acc.accepted:
             problems.append(f"{qual.instrument_symbol}: accepted stream is empty")
+        elif len(acc.accepted) < OQ_MIN_ACCEPTED_EVENTS:
+            problems.append(
+                f"{qual.instrument_symbol}: accepted {len(acc.accepted)} events "
+                f"< {OQ_MIN_ACCEPTED_EVENTS} effective floor"
+            )
+        if acc.counts.get(OUTCOME_OUT_OF_ORDER_REJECTED, 0) <= 0:
+            problems.append(f"{qual.instrument_symbol}: no out-of-order/delayed rejections")
         for record in acc.records:
             if record.outcome == OUTCOME_OUT_OF_ORDER_REJECTED and record.injected_fault not in (
                 FAULT_OUT_OF_ORDER,
@@ -230,6 +272,7 @@ def evaluate_qualification(
 ) -> QualificationVerdict:
     """Evaluate every qualification criterion against the run and its resource/recovery evidence."""
     results: tuple[SLOResult, ...] = (
+        _qualification_coverage(run, resource_reports, recovery_reports),
         _event_acceptance_correctness(run),
         _duplicate_suppression(run),
         _conflicting_duplicate_detection(run),

@@ -24,7 +24,6 @@ from eth_research.m3d.validation import (
     require_exact,
     require_mapping,
     require_nonempty_str,
-    require_nonnegative_int,
     require_positive_int,
     require_sha256_hex,
 )
@@ -157,7 +156,7 @@ class ProspectiveUpdateProposal:
             completed_exclusive_end=require_nonempty_str(
                 f"{label}.completed_exclusive_end", obj["completed_exclusive_end"]
             ),
-            expected_row_count=require_nonnegative_int(
+            expected_row_count=require_positive_int(
                 f"{label}.expected_row_count", obj["expected_row_count"]
             ),
         )

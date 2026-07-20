@@ -14,7 +14,13 @@ acquisition remains a separate future human decision under its own governance.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+#: A positive rule: any active permission set to ``write`` (``<name>: write``) is forbidden, so the
+#: template cannot grant packages/actions/deployments/id-token/... write even though those are not
+#: individually enumerated in the marker denylist below.
+_ACTIVE_WRITE_PERMISSION = re.compile(r"(?im)^\s*([A-Za-z][\w-]*)\s*:\s*write\b")
 
 #: The inactive template's repo-relative path. Kept OUTSIDE ``.github/workflows`` on purpose.
 INACTIVE_TEMPLATE_RELPATH: str = (
@@ -78,6 +84,11 @@ def verify_inactive_activation_template(repo_root: str | Path) -> list[str]:
     for marker in _FORBIDDEN_MARKERS:
         if marker in active:
             problems.append(f"the activation template must not contain an active {marker!r}")
+    # Positive rule: refuse ANY active write permission, not just the enumerated ones.
+    for match in _ACTIVE_WRITE_PERMISSION.finditer(active):
+        problems.append(
+            f"the activation template must not grant an active {match.group(1)!r}: write permission"
+        )
 
     # Belt and suspenders: no active workflow may live at this path under .github/workflows.
     installed = root / ".github" / "workflows" / Path(rel).name

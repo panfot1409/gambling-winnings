@@ -21,6 +21,7 @@ from eth_research.v2.strict import (
     require_bool,
     require_choice,
     require_exact_keys,
+    require_int,
     require_list,
     require_mapping,
     require_nonempty_str,
@@ -235,6 +236,11 @@ class QualificationReadiness:
     def parse(raw: object) -> QualificationReadiness:
         obj = require_mapping("qualification_readiness", raw)
         require_exact_keys("qualification_readiness", obj, _READINESS_KEYS)
+        if (
+            require_int("qualification_readiness.schema_version", obj["schema_version"])
+            != READINESS_SCHEMA_VERSION
+        ):
+            raise ReadinessError("readiness schema_version drifted from the fixed definition")
         gates = ReadinessInputs.parse("qualification_readiness.gates", obj["gates"])
         dimensions = tuple(
             require_list(
@@ -255,6 +261,14 @@ class QualificationReadiness:
         record = QualificationReadiness(gates=gates, dimensions=dimensions)
         if list(record.blocking_gates) != list(obj["blocking_gates"]):
             raise ReadinessError("blocking_gates does not match the derivation from the gates")
+        expected_limitation = record.to_canonical()["honest_limitation"]
+        if (
+            require_nonempty_str(
+                "qualification_readiness.honest_limitation", obj["honest_limitation"]
+            )
+            != expected_limitation
+        ):
+            raise ReadinessError("honest_limitation drifted from the fixed definition")
         if record.fingerprint() != QualificationReadiness.current().fingerprint():
             raise ReadinessError("readiness record drifted from the fixed definition")
         return record

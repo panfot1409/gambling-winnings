@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+from eth_research.m3d.validation import M3DValidationError
 from eth_research.v2c.activation_template import (
     INACTIVE_TEMPLATE_RELPATH,
     verify_inactive_activation_template,
@@ -246,6 +247,18 @@ def test_proposal_from_mapping_rejects_a_tampered_window() -> None:
         ProspectiveUpdateProposal.from_mapping("p", tampered)
 
 
+def test_proposal_from_mapping_rejects_a_nonpositive_row_count() -> None:
+    # A proposal must cover at least one completed observation; a zero window is refused up front by
+    # the strict positive-int check (not merely as an idempotency-key mismatch).
+    d = _descriptor()
+    proposal = generate_offline_proposal(d, "2026-07-25T00:00:00Z").proposal
+    assert proposal is not None
+    tampered = proposal.to_canonical()
+    tampered["expected_row_count"] = 0
+    with pytest.raises(M3DValidationError, match="must be > 0"):
+        ProspectiveUpdateProposal.from_mapping("p", tampered)
+
+
 # --------------------------------------------------------------------------- #
 # Section 19: maturity policy                                                 #
 # --------------------------------------------------------------------------- #
@@ -320,6 +333,19 @@ def test_verifier_flags_a_write_capable_or_active_template(tmp_path: Path) -> No
     assert any("contents: write" in p for p in problems)
     assert any("uses:" in p for p in problems)
     assert any("git push" in p for p in problems)
+
+
+def test_verifier_flags_a_write_scope_beyond_the_enumerated_markers(tmp_path: Path) -> None:
+    # ``packages: write`` is NOT in the enumerated forbidden-marker denylist; the positive
+    # ``<name>: write`` rule must still refuse it, so no unlisted write scope slips through.
+    _write_template(
+        tmp_path,
+        "# INACTIVE TEMPLATE - NOT INSTALLED\n"
+        "permissions:\n  contents: read\n"
+        "jobs:\n  probe:\n    permissions:\n      packages: write\n",
+    )
+    problems = verify_inactive_activation_template(tmp_path)
+    assert any("packages" in p and "write" in p for p in problems)
 
 
 def test_verifier_flags_a_template_not_declared_inactive(tmp_path: Path) -> None:

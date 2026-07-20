@@ -19,6 +19,7 @@ from eth_research.v2.strict import (
     require_bool,
     require_choice,
     require_exact_keys,
+    require_int,
     require_list,
     require_mapping,
     require_nonempty_str,
@@ -258,6 +259,11 @@ class DeploymentBlueprint:
     def parse(raw: object) -> DeploymentBlueprint:
         obj = require_mapping("deployment_blueprint", raw)
         require_exact_keys("deployment_blueprint", obj, _BLUEPRINT_KEYS)
+        if (
+            require_int("deployment_blueprint.schema_version", obj["schema_version"])
+            != DEPLOYMENT_SCHEMA_VERSION
+        ):
+            raise DeploymentBlueprintError("schema_version drifted from the fixed definition")
         require_choice(
             "deployment_blueprint.status", obj["status"], frozenset({DEPLOYMENT_STATUS_INACTIVE})
         )

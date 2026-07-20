@@ -14,6 +14,7 @@ import pytest
 
 from eth_research.v2.constitution import RESERVED_STATUSES, STANDING_POSTURE
 from eth_research.v2c.readiness import (
+    READINESS_SCHEMA_VERSION,
     SELL_READY_GATES,
     QualificationReadiness,
     ReadinessError,
@@ -81,4 +82,18 @@ def test_rejects_a_non_standing_posture() -> None:
     tampered: dict[str, Any] = QualificationReadiness.current().to_canonical()
     tampered["posture"] = "research_only_observation"
     with pytest.raises(ReadinessError):
+        QualificationReadiness.parse(tampered)
+
+
+def test_rejects_a_schema_version_drift() -> None:
+    tampered: dict[str, Any] = QualificationReadiness.current().to_canonical()
+    tampered["schema_version"] = READINESS_SCHEMA_VERSION + 1
+    with pytest.raises(ReadinessError, match="schema_version"):
+        QualificationReadiness.parse(tampered)
+
+
+def test_rejects_a_tampered_honest_limitation() -> None:
+    tampered: dict[str, Any] = QualificationReadiness.current().to_canonical()
+    tampered["honest_limitation"] = "a shorter, drifted limitation statement."
+    with pytest.raises(ReadinessError, match="honest_limitation"):
         QualificationReadiness.parse(tampered)

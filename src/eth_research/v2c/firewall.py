@@ -34,6 +34,7 @@ import pandas as pd
 from eth_research.v2.strict import (
     V2ValidationError,
     require_nonempty_str,
+    require_real,
     require_utc_timestamp,
 )
 
@@ -95,6 +96,13 @@ _CANDIDATE_ATTRIBUTE_MARKERS: frozenset[str] = frozenset(
     }
 )
 
+#: Zero-width / invisible characters stripped before the candidate-id substring screen, so an id
+#: cannot be split by an invisible separator to evade it (ZWSP, ZWNJ, ZWJ, word-joiner, BOM). Built
+#: from codepoints so no literal invisible character appears in this source file.
+_ZERO_WIDTH_CHARS: frozenset[str] = frozenset(
+    chr(codepoint) for codepoint in (0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF)
+)
+
 _TARGET_SENTINEL: object = object()
 
 
@@ -133,9 +141,9 @@ def _canonical_utc(label: str, value: object) -> str:
 class CashControlIntent:
     """A single cash-control instruction: exactly zero risky exposure, at an as-of instant.
 
-    Every field is validated to be exactly zero on construction, so a ``CashControlIntent`` can
-    never carry exposure. It names no candidate, computes no return, and references no market
-    performance.
+    Every field is validated to be a real, finite, exactly-zero value on construction (a non-number
+    or NaN/inf is refused), so a well-formed ``CashControlIntent`` carries no exposure. It names no
+    candidate, computes no return, and references no market performance.
     """
 
     as_of: str
@@ -148,12 +156,16 @@ class CashControlIntent:
         # bool is an int subclass; refuse it explicitly so ``True`` cannot masquerade as a count.
         if isinstance(self.requested_fills, bool) or not isinstance(self.requested_fills, int):
             raise V2CFirewallError("cash_control requested_fills must be a plain int (0)")
-        if (
-            self.risky_target_weight != 0.0
-            or self.requested_notional != 0.0
-            or self.requested_turnover != 0.0
-            or self.requested_fills != 0
-        ):
+        # Validate the exposure fields as *real finite numbers* before comparing to zero, so an
+        # object whose ``__ne__`` merely returns False (or a NaN/inf) cannot slip through the
+        # ``!= 0.0`` guard and masquerade as zero exposure.
+        try:
+            weight = require_real("cash_control.risky_target_weight", self.risky_target_weight)
+            notional = require_real("cash_control.requested_notional", self.requested_notional)
+            turnover = require_real("cash_control.requested_turnover", self.requested_turnover)
+        except V2ValidationError as exc:
+            raise V2CFirewallError(str(exc)) from exc
+        if weight != 0.0 or notional != 0.0 or turnover != 0.0 or self.requested_fills != 0:
             raise V2CFirewallError(
                 "cash_control intent must request exactly zero exposure, notional, fills, and "
                 "turnover"
@@ -206,13 +218,23 @@ class CashControl:
         return CashControlIntent.zero(as_of)
 
 
-def assert_no_candidate_reference(label: str, value: object) -> None:
-    """Refuse any object that is (or points at) a candidate/strategy/research artifact.
+def _normalize_for_scan(text: str) -> str:
+    """Casefold, strip surrounding whitespace, and drop zero-width characters so a candidate id
+    cannot evade the substring screen by case, padding, or an invisible separator."""
+    stripped = "".join(ch for ch in text if ch not in _ZERO_WIDTH_CHARS)
+    return stripped.strip().casefold()
 
-    Fail-closed: a callable (a strategy or signal function), a module (a candidate/engine module),
-    an object carrying a candidate/strategy marker attribute, or a known legacy candidate id string
-    all raise :class:`V2CFirewallError`. Plain data (scalars, timestamps, non-candidate strings,
-    containers of the same) passes.
+
+def assert_no_candidate_reference(label: str, value: object) -> None:
+    """Best-effort structural screen: refuse an object that *appears* to be, or point at, a
+    candidate/strategy/research artifact.
+
+    Fail-closed on the shapes it recognizes: a callable (a strategy or signal function), a module (a
+    candidate/engine module), an object carrying a candidate/strategy marker attribute, or a string
+    that (after normalization) contains a known legacy candidate id all raise
+    :class:`V2CFirewallError`. This is a screen, not a proof -- the authoritative gate is
+    :func:`resolve_operational_target`'s exact ``cash_control`` allowlist, which admits no candidate
+    id in any form. Plain data (scalars, timestamps, non-candidate strings, containers) passes.
     """
     if isinstance(value, ModuleType):
         raise V2CFirewallError(f"{label} refused: a module cannot enter the candidate-free layer")
@@ -220,8 +242,13 @@ def assert_no_candidate_reference(label: str, value: object) -> None:
         raise V2CFirewallError(
             f"{label} refused: a callable (possible strategy/signal function) is not admissible"
         )
-    if isinstance(value, str) and value in KNOWN_LEGACY_CANDIDATE_IDS:
-        raise V2CFirewallError(f"{label} refused: {value!r} is a legacy candidate id")
+    if isinstance(value, str):
+        normalized = _normalize_for_scan(value)
+        for candidate_id in KNOWN_LEGACY_CANDIDATE_IDS:
+            if candidate_id in normalized:
+                raise V2CFirewallError(
+                    f"{label} refused: contains legacy candidate id {candidate_id!r}"
+                )
     present = sorted(m for m in _CANDIDATE_ATTRIBUTE_MARKERS if hasattr(value, m))
     if present:
         raise V2CFirewallError(

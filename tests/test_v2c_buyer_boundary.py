@@ -9,6 +9,9 @@ perturb the vendor, and writes nothing outside its temp root but a transcript.
 from __future__ import annotations
 
 import io
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -26,12 +29,13 @@ from eth_research.v2c.buyer.framing import FramingError, read_frame, write_frame
 from eth_research.v2c.buyer.harness import (
     CLIENT_FILENAME,
     CLIENT_STDLIB_ALLOWLIST,
+    DYNAMIC_IMPORT_SENTINEL,
     build_harness,
     client_import_modules,
     double_build_is_identical,
     scan_source_free,
 )
-from eth_research.v2c.buyer.isolation import run_isolated_buyer_evaluation
+from eth_research.v2c.buyer.isolation import ISOLATION_FLAGS, run_isolated_buyer_evaluation
 
 
 # --------------------------------------------------------------------------- #
@@ -123,6 +127,50 @@ def test_harness_is_source_free_and_double_builds_identically(tmp_path: Path) ->
 def test_client_imports_only_stdlib() -> None:
     assert client_import_modules() <= CLIENT_STDLIB_ALLOWLIST
     assert client_import_modules() == frozenset({"json", "pathlib", "sys"})
+
+
+def test_client_import_modules_flags_a_dynamic_import() -> None:
+    # A dynamic import (``__import__`` / ``importlib``) hides its target from a static scan; it must
+    # surface as the sentinel so a client that dynamically imports fails the stdlib-only gate.
+    via_importlib = "import importlib\nmod = importlib.import_module('eth_research')\n"
+    via_builtin = "mod = __import__('eth_research')\n"
+    assert DYNAMIC_IMPORT_SENTINEL in client_import_modules(via_importlib)
+    assert DYNAMIC_IMPORT_SENTINEL in client_import_modules(via_builtin)
+    assert not (client_import_modules(via_importlib) <= CLIENT_STDLIB_ALLOWLIST)
+
+
+def test_isolation_flags_block_importing_the_repository_package(tmp_path: Path) -> None:
+    # The ``-S`` in the isolation argv disables site.py so the editable-install ``.pth`` is never
+    # processed: a child run with these flags genuinely cannot import the repository package, while
+    # the same child WITHOUT ``-S`` can -- proving ``-S`` is the flag that makes the isolation real.
+    probe = tmp_path / "probe.py"
+    probe.write_text(
+        "import json, sys\n"
+        "try:\n"
+        "    import eth_research  # noqa: F401\n"
+        "    sys.stdout.write('IMPORTED')\n"
+        "except Exception:\n"
+        "    sys.stdout.write('BLOCKED')\n",
+        encoding="utf-8",
+    )
+    minimal_env = {"PATH": os.environ.get("PATH", "")}
+    blocked = subprocess.run(
+        [sys.executable, *ISOLATION_FLAGS, str(probe)],
+        capture_output=True,
+        text=True,
+        env=minimal_env,
+        check=False,
+    )
+    assert blocked.stdout == "BLOCKED", f"stdout={blocked.stdout!r} stderr={blocked.stderr!r}"
+    # Control: the same run WITHOUT ``-S`` reaches the package; ``-S`` is the isolating flag.
+    without_s = tuple(flag for flag in ISOLATION_FLAGS if flag != "-S")
+    imported = subprocess.run(
+        [sys.executable, *without_s, str(probe)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert imported.stdout == "IMPORTED", f"stdout={imported.stdout!r} stderr={imported.stderr!r}"
 
 
 def test_scan_flags_planted_source_and_forbidden_types(tmp_path: Path) -> None:

@@ -139,6 +139,17 @@ def test_full_qualification_verdict_passes(
     assert {r.criterion for r in verdict.results} == set(QUALIFICATION_CRITERIA)
 
 
+@pytest.mark.slow
+def test_qualification_fails_without_coverage_evidence(eth_run: QualificationRun) -> None:
+    # Coverage gate: without resource/recovery evidence the quantified recovery/resource criteria
+    # pass vacuously, so the verdict must FAIL on the coverage floor, not pass on no evidence.
+    verdict = evaluate_qualification(eth_run, resource_reports=[], recovery_reports=[])
+    assert not verdict.passed
+    coverage = next(r for r in verdict.results if r.criterion == "qualification_coverage")
+    assert not coverage.passed
+    assert "no resource reports" in coverage.detail or "no recovery reports" in coverage.detail
+
+
 # --------------------------------------------------------------------------- #
 # The OQ surface imports no candidate/engine module                           #
 # --------------------------------------------------------------------------- #
