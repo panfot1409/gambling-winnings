@@ -1,0 +1,218 @@
+{
+  "candidates_evaluated": 5,
+  "claims": [
+    {
+      "claim_id": "two_governed_programs_completed",
+      "evidence_path": "research/v2b/v2b_results.json",
+      "evidence_pointer": "run_id",
+      "statement": "Two governed V2 research programs (V2A and V2B) ran to completion under a pre-registered, hash-pinned protocol.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "five_candidates_evaluated",
+      "evidence_path": "research/v2a/results.json",
+      "evidence_pointer": "evaluation.evaluations",
+      "statement": "Five V2 candidate families were evaluated in total: three in V2A and two in V2B.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "zero_nominated",
+      "evidence_path": "research/v2b/v2b_results.json",
+      "evidence_pointer": "result.decision.nominated_candidate_id",
+      "statement": "Zero of the evaluated candidates were nominated; both governed decisions are null.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "no_development_gate_access",
+      "evidence_path": "research/m3a/development_gate_access.jsonl",
+      "evidence_pointer": "byte_count",
+      "statement": "The sealed development-gate partition was never read; its access ledger is byte-empty.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "no_final_holdout_access",
+      "evidence_path": "research/m2b/test_evaluations.jsonl",
+      "evidence_pointer": "byte_count",
+      "statement": "The sealed final-holdout partition was never read; its access ledger is byte-empty.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "no_forward_strategy_record",
+      "evidence_path": "research/m3d/prospective_evaluations.jsonl",
+      "evidence_pointer": "byte_count",
+      "statement": "No forward or prospective strategy record exists; the prospective ledger is byte-empty.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "no_validated_edge",
+      "evidence_path": "research/v2b/v2b_results.json",
+      "evidence_pointer": "result.decision.eligible_candidate_ids",
+      "statement": "No validated edge was established; no candidate cleared the eligibility gates.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "offline_operational_platform_exists",
+      "evidence_path": "research/v2b/multi_asset_shadow.json",
+      "evidence_pointer": "signal_only",
+      "statement": "An offline, signal-only operational platform exists for the ETH/BTC/cash universe.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "signal_risk_killswitch_tested_synthetically",
+      "evidence_path": "src/eth_research/shadow/kill_switch.py",
+      "evidence_pointer": "module",
+      "statement": "Signal generation, risk limits, and the kill switch are exercised on synthetic panels only.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "no_live_adapter",
+      "evidence_path": "research/v2b/multi_asset_shadow.json",
+      "evidence_pointer": "prohibitions",
+      "statement": "There is no live exchange adapter; the platform never connects to a network.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "no_money_movement",
+      "evidence_path": "research/v2b/multi_asset_shadow.json",
+      "evidence_pointer": "prohibitions",
+      "statement": "No money movement is possible; the platform holds no credentials and places no orders.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "buyer_interface_is_reference_boundary",
+      "evidence_path": "src/eth_research/buyer/contract.py",
+      "evidence_pointer": "module",
+      "statement": "The buyer interface is a source-free reference boundary, not a deployable product.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "source_free_deployment_not_complete",
+      "evidence_path": "src/eth_research/buyer/contract.py",
+      "evidence_pointer": "WITHHELD",
+      "statement": "Source-free commercial deployment is not complete; source and the governed run are withheld.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "no_project_license",
+      "evidence_path": "pyproject.toml",
+      "evidence_pointer": "classifiers",
+      "statement": "The repository ships no project license; license selection is an external human decision.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "ip_transferability_unresolved",
+      "evidence_path": "docs/V2A_IP_READINESS.md",
+      "evidence_pointer": "document",
+      "statement": "Contributor IP transferability is unresolved and documented as a readiness gap.",
+      "status": "research_only_observation"
+    },
+    {
+      "claim_id": "v2_not_sell_ready",
+      "evidence_path": "research/v2b/buyer_evidence.json",
+      "evidence_pointer": "posture",
+      "statement": "V2 is not sell-ready; the standing commercial posture is not_sell_ready.",
+      "status": "not_sell_ready"
+    }
+  ],
+  "evidence": [
+    {
+      "byte_count": 3653,
+      "path": "research/v2a/results.json",
+      "sha256": "6327de21759c21a97c8b1ee9c14782bb36534c8d968d6792eba54b7c9c58cbca"
+    },
+    {
+      "byte_count": 5622,
+      "path": "research/v2b/v2b_results.json",
+      "sha256": "d0b668f45c9e1f6adfeb606e16003a4bd5649d39bb0676a444cb691ec9fe6f1f"
+    },
+    {
+      "byte_count": 2882,
+      "path": "research/v2b/buyer_evidence.json",
+      "sha256": "8ce6ff481ee0c02e8f160f9babca054377030670ee04908ca9a590430327de43"
+    },
+    {
+      "byte_count": 980,
+      "path": "research/v2b/research_multiplicity_state.json",
+      "sha256": "df97daa788ca291aeb7e897ddc75e66a6a9e601ee4ddce0bf94cf166d68846b6"
+    },
+    {
+      "byte_count": 659,
+      "path": "research/v2b/multi_asset_shadow.json",
+      "sha256": "0459bb44c0423f2a53b7de951e980ca5ae0d9c321b4c845bff8a1df8077b2d70"
+    },
+    {
+      "byte_count": 0,
+      "path": "research/m3a/development_gate_access.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "byte_count": 0,
+      "path": "research/m2b/test_evaluations.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "byte_count": 0,
+      "path": "research/m3d/prospective_evaluations.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "nominated_candidate_count": 0,
+  "posture": "not_sell_ready",
+  "programs": [
+    {
+      "candidates_evaluated": 3,
+      "nominated": false,
+      "program": "v2a",
+      "run_id": "run_001"
+    },
+    {
+      "candidates_evaluated": 2,
+      "nominated": false,
+      "program": "v2b",
+      "run_id": "v2b_run_001"
+    }
+  ],
+  "readiness": {
+    "bootstrap_monte_carlo_completed": true,
+    "buyer_can_deploy_without_source": false,
+    "buyer_can_evaluate_without_repository": false,
+    "capacity_estimate_completed": false,
+    "claims_fully_evidence_backed": true,
+    "contributor_ip_clearance_complete": false,
+    "deployment_failure_controls_tested": false,
+    "development_gate_completed": false,
+    "final_holdout_completed": false,
+    "forward_shadow_record_completed": false,
+    "independent_reproduction": true,
+    "legal_terms_reviewed": false,
+    "not_single_parameter_dependent": false,
+    "parameter_sensitivity_completed": true,
+    "project_license_chosen": false,
+    "realistic_cost_suite_completed": true,
+    "sell_ready": false,
+    "survives_realistic_costs": false,
+    "unattended_operation_demonstrated": false,
+    "uncontrolled_exposure_prevented": false,
+    "untouched_out_of_sample_completed": false
+  },
+  "schema_version": 1,
+  "sell_ready_blockers": [
+    "no_nominated_candidate: zero of the evaluated V2 candidates were nominated",
+    "out_of_sample_not_completed: no untouched out-of-sample evaluation has been completed",
+    "development_gate_not_completed: the sealed development-gate access ledger is byte-empty",
+    "final_holdout_not_completed: the sealed final-holdout access ledger is byte-empty",
+    "edge_does_not_survive_realistic_costs: no nominated edge, so cost survival is not shown",
+    "single_parameter_dependence_not_ruled_out: no nominee cleared parameter sensitivity",
+    "no_capacity_estimate: no capacity artifact is committed (proxy-only)",
+    "no_forward_shadow_record: the sealed prospective ledger is byte-empty",
+    "unattended_operation_not_demonstrated: shadow is synthetic and offline only",
+    "deployment_failure_controls_not_tested: controls exercised synthetically only",
+    "uncontrolled_exposure_not_proven_prevented: no live evidence exists",
+    "buyer_cannot_evaluate_without_repository: no standalone evaluation bundle is committed",
+    "buyer_cannot_deploy_without_source: source and the governed run are withheld",
+    "legal_terms_not_reviewed: no legal-terms review record is committed",
+    "no_project_license: the repository ships no LICENSE",
+    "contributor_ip_clearance_incomplete: no contributor IP-clearance record is committed"
+  ],
+  "truth_digest": "8a415067a4bb8220f4571ac415d2d52763f90d047c81ecbec8e50e103a9d305c"
+}
