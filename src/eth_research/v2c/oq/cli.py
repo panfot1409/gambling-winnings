@@ -24,7 +24,11 @@ from eth_research.m3d.validation import M3DValidationError
 from eth_research.v2.strict import V2ValidationError, sha256_bytes
 from eth_research.v2c.oq import finalize as _finalize
 from eth_research.v2c.oq.completion import OQ_COMPLETION_INTENT_RELPATH
-from eth_research.v2c.oq.freeze import verify_oq_source_freeze
+from eth_research.v2c.oq.freeze import (
+    OQ_E2_ACTIVATION_RELPATH,
+    verify_oq_e2_activation,
+    verify_oq_source_freeze,
+)
 from eth_research.v2c.oq.oracle import assert_independent_acceptance
 from eth_research.v2c.oq.orchestrator import PREMATURE_OQ_FREEZE_COMMIT
 from eth_research.v2c.oq.protocol import verify_oq_protocol_bundle
@@ -70,6 +74,11 @@ def replay(root: Path, reg: Path) -> list[str]:
     checks: list[str] = []
     verify_oq_source_freeze(root)
     checks.append("source_freeze_reproduces")
+    # The OQ-E2A activation anchor is written in the follow-on governance commit; once present it
+    # must reproduce from the live OQ-E2 freeze it names (absent before then -- a pristine posture).
+    if (root / OQ_E2_ACTIVATION_RELPATH).exists():
+        verify_oq_e2_activation(root)
+        checks.append("oq_e2_activation_anchor_reproduces")
     verify_oq_protocol_bundle(root)
     checks.append("protocol_bundle_reproduces")
     problems = verify_supersession(root / OQ_SUPERSESSION_PATH)
