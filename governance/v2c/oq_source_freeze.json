@@ -15,7 +15,7 @@
     "src/eth_research/v2c/oq/events.py": "bd6299ca264d929222a9772890fecc20a41a849004337319abdb24ea76fb5285",
     "src/eth_research/v2c/oq/harness.py": "f249f50dcbed5c12ce7b49e4bac781b6c120af2408cf4e4e61c7fa29ec261edc",
     "src/eth_research/v2c/oq/recovery.py": "c45adbcf652ceb3b228f72dabbeae52f86a73a7e0fb8d07d99334367ffbf4f4c",
-    "src/eth_research/v2c/oq/registry.py": "bea59eb035e1bb7bb1b66b1dc7caaaa2b40c4a4ddd414f6ebcf7099e20d5233d",
+    "src/eth_research/v2c/oq/registry.py": "a9b51d8230d48f9b315f226e028089a1a3eb0681f177f592a696203b7aaaafd0",
     "src/eth_research/v2c/oq/resources.py": "9936c450df0fac5047085e22a80a12b72a204916bed296a9da9d8734cc1ad221",
     "src/eth_research/v2c/oq/slo.py": "fdc207e0857ecf76745c382d051f97fba7b5ae781e2b27b37c01dbbb9b35a801",
     "src/eth_research/v2c/proposal.py": "562921c4bf10e94a4fb31913ec0b9abc4e224bc36e4ed7b0e2182fcb41c1faa3",
@@ -24,6 +24,6 @@
     "src/eth_research/v2c/readiness.py": "dd357510d86e1d6afb39a85b130f5e44c34336444bda1395988938743aeb7580"
   },
   "schema_version": 1,
-  "source_freeze_digest": "3969eaef249d541f611ed92df640c5a8a522e369d4eddabb037e67b205195e6f",
+  "source_freeze_digest": "c1454ff108ed9eba204fbffc54fc2d0d2f3186a243a00362852536241fff074b",
   "statement": "The source that defines the V2C offline operational qualification -- the candidate-free firewall, the synthetic event stream and fault schedule, the virtual-time harness, the resource and crash/recovery campaigns, the SLO contract, the OQ registry, the prospective governance, the inactive activation template, the process-isolated buyer boundary, and the readiness derivation -- was fixed on a green tree before the qualification was registered (OQ-R) and executed (OQ-P). It evaluates no strategy and computes no market performance."
 }
