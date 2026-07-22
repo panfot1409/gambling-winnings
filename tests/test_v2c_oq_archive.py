@@ -147,7 +147,11 @@ def test_completion_intent_refuses_artifact_outside_archive(
     _, token = _started(tmp_path)
     raw = json.loads(_intent(archive, token).to_json_bytes())
     raw["artifacts"] = [["governance/v2c/elsewhere.json", "a" * 64]]
-    with pytest.raises(C.OQCompletionIntentError, match="outside the archive"):
+    # The intent's artifact relpaths are bound to the exact known archive artifacts (a hardening
+    # that closes a startswith-prefix path-traversal), so an out-of-archive relpath is refused.
+    with pytest.raises(
+        C.OQCompletionIntentError, match="not one of the published archive artifacts"
+    ):
         C.OQCompletionIntent.from_json_bytes(json.dumps(raw).encode())
 
 
