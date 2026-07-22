@@ -294,7 +294,13 @@ def build_supersession_record(
     replacement_freeze_status: str = REPLACEMENT_PENDING,
     replacement_freeze_commit: str | None = None,
 ) -> SupersessionRecord:
-    """Build a chained supersession record, validating the pristine-state preconditions."""
+    """Build a chained supersession record from CALLER-SUPPLIED preconditions.
+
+    This validates only the self-reported fields -- that the caller *asserts* the registry is
+    byte-empty/unconsumed and every sealed ledger empty -- and reads no live state. Use
+    :func:`record_supersession`, the sanctioned entry point, to bind the record to the live registry
+    and the on-disk sealed ledgers; that is the only path that proves the pristine state truly held.
+    """
     return _validated(
         supersession_id=supersession_id,
         superseded_commit=superseded_commit,
@@ -437,7 +443,10 @@ def append_supersession(
     replacement_freeze_status: str = REPLACEMENT_PENDING,
     replacement_freeze_commit: str | None = None,
 ) -> SupersessionRecord:
-    """Append a chained supersession record, re-verifying the ledger and pristine precondition."""
+    """Append a chained supersession record from caller-supplied preconditions, re-verifying the
+    ledger chain. Like :func:`build_supersession_record`, it trusts the caller's self-reported
+    pristine fields and reads no live state; :func:`record_supersession` binds live state instead.
+    """
     file = Path(path)
     existing = list(read_supersession(file))
     prev = existing[-1].entry_hash if existing else GENESIS_PREV_HASH
@@ -468,7 +477,11 @@ def append_supersession(
 def _sha256_of(path: Path) -> str:
     if path.is_symlink():
         raise OQSupersessionError(f"{path} is a symlink")
-    return hashlib.sha256(path.read_bytes() if path.exists() else b"").hexdigest()
+    if not path.is_file():
+        # A missing sealed ledger is NOT byte-empty -- refuse it, matching the strict is_file()
+        # checks in the orchestrator gate and the CLI (an absent file cannot attest emptiness).
+        raise OQSupersessionError(f"{path} is missing (a missing sealed ledger is not byte-empty)")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def record_supersession(

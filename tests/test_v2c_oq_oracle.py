@@ -102,8 +102,17 @@ def built() -> tuple[dict[str, Any], Path, Path]:
 # Independence / drift                                                        #
 # --------------------------------------------------------------------------- #
 def test_oracle_copies_do_not_drift_from_source() -> None:
+    from eth_research.v2c.oq import result as RES
+
     assert OR.OQ_ORACLE_CRITERIA == QUALIFICATION_CRITERIA
-    assert OR.OQ_ORACLE_MIN_ACCEPTED_EVENTS <= OQ_MIN_ACCEPTED_EVENTS
+    # Exact equality, not <=: lowering the oracle floor below the source floor would silently open a
+    # band of under-qualified runs the oracle would still accept.
+    assert OR.OQ_ORACLE_MIN_ACCEPTED_EVENTS == OQ_MIN_ACCEPTED_EVENTS
+    # The oracle's independent forbidden-vocab and field copies must not silently rot weaker than
+    # the source: a term added to result.py without updating the oracle would blind the screen.
+    assert OR._ORACLE_FORBIDDEN == RES.FORBIDDEN_PERFORMANCE_TERMS
+    assert OR._ORACLE_ZERO_EXPOSURE_FIELDS == RES.ZERO_EXPOSURE_FIELDS
+    assert OR._ORACLE_SUMMED_FIELDS == RES.SUMMED_COUNT_FIELDS
 
 
 def test_oracle_shares_no_slo_or_result_import() -> None:
@@ -193,3 +202,52 @@ def test_forgery_verdict_mismatch_is_refused(built: tuple[dict[str, Any], Path, 
     verdict = OR.oq_oracle_verdict(forged)
     assert not verdict.accepted
     assert verdict.derived_verdict == OQ_VERDICT_QUALIFIED
+
+
+def _reseal(body: dict[str, Any]) -> dict[str, Any]:
+    from eth_research.v2.strict import canonical_sha256
+
+    inner = {key: value for key, value in body.items() if key != "result_digest"}
+    body["result_digest"] = canonical_sha256(inner)
+    return body
+
+
+def test_forgery_per_instrument_nonzero_hidden_by_zero_aggregate_is_refused(
+    built: tuple[dict[str, Any], Path, Path],
+) -> None:
+    # A lied top-level aggregate (0) that hides nonzero per-instrument risky fills must be refused:
+    # the oracle re-sums the per-instrument counts and requires the aggregate equals the sum.
+    result, _, _ = built
+    forged = copy.deepcopy(result)
+    symbol = next(iter(forged["instruments"]))
+    forged["instruments"][symbol]["risky_fill_count"] = 7
+    forged["instruments"][symbol]["turnover"] = 12.5
+    # operational_counts left at zero -- the aggregate now lies about the per-instrument evidence.
+    _reseal(forged)
+    assert not OR.oq_oracle_verdict(forged).accepted
+
+
+def test_forgery_nonzero_approved_exposure_is_refused(
+    built: tuple[dict[str, Any], Path, Path],
+) -> None:
+    # Nonzero approved risky exposure (aggregate == per-instrument sum, so the sum check passes)
+    # must still be refused by the zero-exposure screen that now covers requested/approved exposure.
+    result, _, _ = built
+    forged = copy.deepcopy(result)
+    symbol = next(iter(forged["instruments"]))
+    forged["instruments"][symbol]["approved_risky_exposure"] = 5.0
+    forged["operational_counts"]["approved_risky_exposure"] = 5.0
+    _reseal(forged)
+    assert not OR.oq_oracle_verdict(forged).accepted
+
+
+def test_forgery_non_boolean_passed_flag_is_refused(
+    built: tuple[dict[str, Any], Path, Path],
+) -> None:
+    # A criterion flag that is a truthy non-boolean ("false" the string, or 1) must be refused, not
+    # coerced to a pass (fail-closed decode).
+    result, _, _ = built
+    forged = copy.deepcopy(result)
+    forged["criteria"][0]["passed"] = "false"
+    _reseal(forged)
+    assert not OR.oq_oracle_verdict(forged).accepted

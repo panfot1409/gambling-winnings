@@ -17,6 +17,11 @@ on:
       - "src/eth_research/**"
       - "tests/test_v2c_*.py"
       - "governance/v2c/**"
+      # The three sealed access ledgers this job asserts byte-empty -- a push that touches only a
+      # sealed ledger must still trigger the emptiness check.
+      - "research/m3a/development_gate_access.jsonl"
+      - "research/m2b/test_evaluations.jsonl"
+      - "research/m3d/prospective_evaluations.jsonl"
       - "uv.lock"
       - "pyproject.toml"
       - ".github/workflows/v2c-replay.yml"
@@ -58,11 +63,16 @@ jobs:
         run: uv run --no-sync --python 3.12.3 python -m eth_research.v2c.oq.protocol --repo-root .
       - name: State-aware OQ replay (governance invariants; archive + oracle once completed)
         run: uv run --no-sync --python 3.12.3 python -m eth_research.v2c.oq.cli replay --repo-root .
-      - name: The canonical OQ registry is byte-empty until a run is deliberately registered
+      - name: Report the OQ registry state (byte-empty until a run is deliberately registered)
+        # Not a guard: the registry legitimately becomes non-empty after OQ-R, and the state-aware
+        # replay step above is what actually certifies it (pristine posture, or a deep-verified +
+        # oracle-accepted completed run). This step only reports, so it never fails on a real run.
         run: |
           reg=governance/v2c/oq_registry.jsonl
           if [ -s "$reg" ]; then
-            echo "note: the OQ registry is non-empty (a run has been registered); replay covers it" >&2
+            echo "the OQ registry is non-empty (a run has been registered); replay certifies it"
+          else
+            echo "the OQ registry is byte-empty (no run registered); replay confirms the posture"
           fi
       - name: All three sealed ledgers are byte-empty throughout
         run: |

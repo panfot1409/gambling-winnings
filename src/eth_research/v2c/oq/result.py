@@ -36,22 +36,49 @@ OQ_RESULT_SCHEMA_VERSION: int = 1
 #: report. Matched case-insensitively on word boundaries (``returns?`` covers return/returns). These
 #: are the metrics V2C may not compute (milestone scope section 0); the qualification measures event
 #: acceptance, durability, recovery, and zero exposure, none of which needs this vocabulary.
+#: Each term is a regex fragment that also catches its common inflections, so a smuggled plural or
+#: possessive (``drawdowns``, ``profits``, ``equities``) cannot slip past a bare word match -- only
+#: ``returns?`` was inflection-aware before, which let every other plural through.
 FORBIDDEN_PERFORMANCE_TERMS: tuple[str, ...] = (
     "returns?",
-    "equity",
-    "pnl",
-    "cagr",
-    "sharpe",
-    "sortino",
-    "calmar",
-    "drawdown",
-    "alpha",
-    "profit",
-    "roi",
-    "benchmark",
+    "equit(?:y|ies)",
+    "pnls?",
+    "cagrs?",
+    "sharpes?",
+    "sortinos?",
+    "calmars?",
+    "drawdowns?",
+    "alphas?",
+    "profits?",
+    "rois?",
+    "benchmarks?",
 )
 
 _FORBIDDEN_RE = re.compile(r"\b(?:" + "|".join(FORBIDDEN_PERFORMANCE_TERMS) + r")\b", re.IGNORECASE)
+
+#: The per-instrument count fields the aggregate ``operational_counts`` sum. The archive verifier
+#: and the independent OQ-Q oracle both re-sum these and require the aggregate equals the
+#: per-instrument sum, so a lied aggregate that hides nonzero per-instrument exposure never passes.
+SUMMED_COUNT_FIELDS: tuple[str, ...] = (
+    "requested_risky_exposure",
+    "approved_risky_exposure",
+    "risky_intent_count",
+    "risky_fill_count",
+    "turnover",
+    "terminal_book_units",
+    "total_cash_control_instructions",
+)
+
+#: The subset of the summed fields that must be exactly zero -- every field except the instruction
+#: count, which is legitimately nonzero. Screened per-instrument and in the aggregate by both gates.
+ZERO_EXPOSURE_FIELDS: tuple[str, ...] = (
+    "requested_risky_exposure",
+    "approved_risky_exposure",
+    "risky_intent_count",
+    "risky_fill_count",
+    "turnover",
+    "terminal_book_units",
+)
 
 _RESULT_STATEMENT = (
     "This is an offline operational-qualification result. It reports event-acceptance, durability, "
@@ -116,11 +143,22 @@ def _instrument_summary(outcome: QualificationOutcome) -> dict[str, Any]:
             "recovery_checks": [
                 {"name": check.name, "passed": check.passed} for check in recovery.checks
             ],
-            # The governing zero-exposure counts, measured from the actual run.
+            # The governing zero-exposure counts, all measured from the actual run (never asserted).
+            # Requested exposure is the sum of the fills' target weights; approved exposure is the
+            # sum of the dispatched intents' approved weights -- both zero under cash_control, but
+            # measured so the published evidence proves the invariant rather than restating it.
+            "requested_risky_exposure": sum(abs(fill.target_weight) for fill in fills),
+            "approved_risky_exposure": sum(
+                abs(intent.approved_weight) for intent in qual.dispatched_intents
+            ),
             "risky_intent_count": sum(
                 1 for intent in qual.dispatched_intents if intent.approved_weight != 0.0
             ),
-            "risky_fill_count": sum(1 for fill in fills if fill.traded_units != 0.0),
+            # A fill is risky if it traded OR left a nonzero book position -- matching the SLO's own
+            # zero-exposure definition (a held-but-not-traded position is still risky exposure).
+            "risky_fill_count": sum(
+                1 for fill in fills if fill.traded_units != 0.0 or fill.units_after != 0.0
+            ),
             "turnover": sum(abs(fill.traded_units) for fill in fills),
             "terminal_book_units": abs(qual.result.final_account.units),
             "total_cash_control_instructions": len(qual.dispatched_intents),
@@ -129,17 +167,10 @@ def _instrument_summary(outcome: QualificationOutcome) -> dict[str, Any]:
 
 
 def _operational_counts(instruments: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "total_cash_control_instructions": sum(
-            i["total_cash_control_instructions"] for i in instruments.values()
-        ),
-        "requested_risky_exposure": 0.0,  # cash_control requests exactly zero by construction
-        "approved_risky_exposure": 0.0,
-        "risky_intent_count": sum(i["risky_intent_count"] for i in instruments.values()),
-        "risky_fill_count": sum(i["risky_fill_count"] for i in instruments.values()),
-        "turnover": sum(i["turnover"] for i in instruments.values()),
-        "terminal_book_units": sum(i["terminal_book_units"] for i in instruments.values()),
-    }
+    # Every aggregate is exactly the per-instrument sum -- no figure is asserted by fiat. The
+    # archive verifier and the independent oracle both re-derive this equality, so an aggregate that
+    # hides nonzero per-instrument exposure (a lied top-level sum) can never pass acceptance.
+    return {field: sum(i[field] for i in instruments.values()) for field in SUMMED_COUNT_FIELDS}
 
 
 def build_oq_result(
@@ -229,6 +260,8 @@ def build_oq_report(result: dict[str, Any]) -> str:
 __all__ = [
     "FORBIDDEN_PERFORMANCE_TERMS",
     "OQ_RESULT_SCHEMA_VERSION",
+    "SUMMED_COUNT_FIELDS",
+    "ZERO_EXPOSURE_FIELDS",
     "ForbiddenVocabularyError",
     "build_oq_report",
     "build_oq_result",

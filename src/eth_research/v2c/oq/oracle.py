@@ -53,24 +53,42 @@ OQ_ORACLE_CRITERIA: tuple[str, ...] = (
 #: The oracle's OWN copy of the accepted-event floor (cross-checked by a drift test).
 OQ_ORACLE_MIN_ACCEPTED_EVENTS: int = 3500
 
-#: The oracle's OWN forbidden financial-performance vocabulary (independent of result.py).
+#: The oracle's OWN forbidden financial-performance vocabulary (independent of result.py, but a
+#: drift test locks it equal). Each fragment catches its common inflections so a smuggled plural
+#: cannot slip past a bare word match.
 _ORACLE_FORBIDDEN = (
     "returns?",
-    "equity",
-    "pnl",
-    "cagr",
-    "sharpe",
-    "sortino",
-    "calmar",
-    "drawdown",
-    "alpha",
-    "profit",
-    "roi",
-    "benchmark",
+    "equit(?:y|ies)",
+    "pnls?",
+    "cagrs?",
+    "sharpes?",
+    "sortinos?",
+    "calmars?",
+    "drawdowns?",
+    "alphas?",
+    "profits?",
+    "rois?",
+    "benchmarks?",
 )
 _ORACLE_FORBIDDEN_RE = re.compile(r"\b(?:" + "|".join(_ORACLE_FORBIDDEN) + r")\b", re.IGNORECASE)
 
-_ZERO_EXPOSURE_FIELDS: tuple[str, ...] = (
+#: The oracle's OWN copy of the per-instrument fields whose aggregate the oracle re-derives (a lied
+#: top-level sum that hides nonzero per-instrument exposure is caught by the aggregate==sum check).
+_ORACLE_SUMMED_FIELDS: tuple[str, ...] = (
+    "requested_risky_exposure",
+    "approved_risky_exposure",
+    "risky_intent_count",
+    "risky_fill_count",
+    "turnover",
+    "terminal_book_units",
+    "total_cash_control_instructions",
+)
+
+#: The subset that must be exactly zero in the aggregate AND in every instrument. Includes the
+#: requested/approved exposure the report renders but earlier releases never re-checked.
+_ORACLE_ZERO_EXPOSURE_FIELDS: tuple[str, ...] = (
+    "requested_risky_exposure",
+    "approved_risky_exposure",
     "risky_intent_count",
     "risky_fill_count",
     "turnover",
@@ -106,9 +124,14 @@ def _oracle_strings(obj: Any) -> list[str]:
     return found
 
 
+def _is_number(value: object) -> bool:
+    """True only for a real int or float; a bool never counts as a number."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 def _is_zero(value: object) -> bool:
     """True only for a real numeric zero (int 0 or float 0.0); a bool never counts."""
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0
+    return _is_number(value) and value == 0
 
 
 def oq_oracle_verdict(result: object) -> OQOracleVerdict:
@@ -134,23 +157,63 @@ def oq_oracle_verdict(result: object) -> OQOracleVerdict:
             findings.append(f"forbidden financial-performance vocabulary {match.group(0)!r}")
             break
 
-    # The criteria set and per-criterion pass flags.
+    # The criteria set and per-criterion pass flags. Each flag must be a real boolean -- a coerced
+    # string or int is refused, not silently treated as a pass (fail-closed decode).
     criteria = result.get("criteria")
     pass_by_name: dict[str, bool] = {}
     names: tuple[str, ...] = ()
     if isinstance(criteria, list) and all(isinstance(c, dict) for c in criteria):
         names = tuple(str(c.get("criterion")) for c in criteria)
-        pass_by_name = {str(c.get("criterion")): bool(c.get("passed")) for c in criteria}
+        for crit in criteria:
+            raw = crit.get("passed")
+            if not isinstance(raw, bool):
+                findings.append(f"criterion {crit.get('criterion')!r} passed flag is not a boolean")
+            else:
+                pass_by_name[str(crit.get("criterion"))] = raw
     if names != OQ_ORACLE_CRITERIA:
         findings.append(f"criteria set does not match the expected twelve: {names}")
 
-    # The zero-exposure invariant, re-derived from the operational counts.
+    # The zero-exposure invariant, re-derived from BOTH the aggregate and the per-instrument
+    # summaries: every aggregate must equal the per-instrument sum (a lied top-level count that
+    # hides nonzero per-instrument exposure is caught here), and every zero-exposure field must be
+    # exactly zero in the aggregate and in every instrument.
     counts = result.get("operational_counts")
-    zero_exposure_holds = isinstance(counts, dict) and all(
-        _is_zero(counts.get(field)) for field in _ZERO_EXPOSURE_FIELDS
-    )
-    if not zero_exposure_holds:
-        findings.append("operational_counts do not show exactly zero risky exposure")
+    instruments = result.get("instruments")
+    if not isinstance(counts, dict):
+        findings.append("result has no operational_counts map")
+    summaries: list[dict[str, Any]] = []
+    instruments_well_formed = isinstance(instruments, dict) and len(instruments) >= 1
+    if not instruments_well_formed:
+        findings.append("result has no instruments map")
+    if isinstance(instruments, dict):
+        for symbol, summary in instruments.items():
+            if isinstance(summary, dict):
+                summaries.append(summary)
+            else:
+                instruments_well_formed = False
+                findings.append(f"instrument {symbol} summary is not an object")
+
+    aggregate_ok = isinstance(counts, dict) and instruments_well_formed
+    if isinstance(counts, dict) and summaries:
+        for field in _ORACLE_SUMMED_FIELDS:
+            per = [s.get(field) for s in summaries]
+            if not _is_number(counts.get(field)) or not all(_is_number(v) for v in per):
+                findings.append(f"operational_counts.{field} or an instrument value is non-numeric")
+                aggregate_ok = False
+            elif counts.get(field) != sum(v for v in per if isinstance(v, (int, float))):
+                findings.append(f"operational_counts.{field} is not the per-instrument sum")
+                aggregate_ok = False
+
+    zero_ok = isinstance(counts, dict) and bool(summaries)
+    if isinstance(counts, dict) and summaries:
+        for field in _ORACLE_ZERO_EXPOSURE_FIELDS:
+            in_aggregate = _is_zero(counts.get(field))
+            in_every_instrument = all(_is_zero(s.get(field)) for s in summaries)
+            if not in_aggregate or not in_every_instrument:
+                zero_ok = False
+    if not zero_ok:
+        findings.append("operational_counts/instruments do not show exactly zero risky exposure")
+    zero_exposure_holds = bool(aggregate_ok) and bool(zero_ok)
     # The zero_risky_exposure criterion's own flag must agree with the derived invariant.
     if "zero_risky_exposure" in pass_by_name and pass_by_name["zero_risky_exposure"] != (
         zero_exposure_holds
@@ -158,19 +221,17 @@ def oq_oracle_verdict(result: object) -> OQOracleVerdict:
         findings.append("zero_risky_exposure criterion flag disagrees with the operational counts")
 
     # Every instrument must clear the accepted-event floor.
-    instruments = result.get("instruments")
-    floors_ok = isinstance(instruments, dict) and len(instruments) >= 1
+    floors_ok = instruments_well_formed
     if isinstance(instruments, dict):
         for symbol, summary in instruments.items():
             accepted_count = summary.get("accepted_count") if isinstance(summary, dict) else None
             if (
                 not isinstance(accepted_count, int)
+                or isinstance(accepted_count, bool)
                 or accepted_count < OQ_ORACLE_MIN_ACCEPTED_EVENTS
             ):
                 floors_ok = False
                 findings.append(f"instrument {symbol} does not clear the accepted-event floor")
-    else:
-        findings.append("result has no instruments map")
 
     # Re-derive the verdict: qualified iff the criteria set matches, every flag is true, exposure is
     # zero, and the floors hold.

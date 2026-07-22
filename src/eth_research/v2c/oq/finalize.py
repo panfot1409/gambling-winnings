@@ -16,6 +16,9 @@ the run is finalizable, then clears the intent. On a clean tree with no pending 
 
 from __future__ import annotations
 
+import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -63,6 +66,104 @@ def _verify_artifacts(repo_root: Path, intent: OQCompletionIntent) -> list[str]:
         elif sha256_bytes(path.read_bytes()) != sha:
             problems.append(f"{relpath} (hash mismatch)")
     return problems
+
+
+def _reconcile_intent_with_archive(repo_root: Path, intent: OQCompletionIntent) -> list[str]:
+    """Re-derive the completed event's verdict and terminal digests from the ON-DISK archive bytes
+    and require the intent's recorded values match.
+
+    The intent's five terminal hashes and verdict are recorded once at build time; a corrupt or
+    tampered intent that still names the real artifacts (so :func:`_verify_artifacts` passes) but
+    carries a mismatched ``verdict`` / ``evidence_sha256`` / ``result_bundle_sha256`` would
+    otherwise make the finalizer append a ``completed`` event the published archive cannot support
+    -- which the deep verifier and oracle reject forever, permanently bricking an append-only,
+    one-shot run. This reconciles the intent against the archive so nothing unsupported is appended.
+    """
+    from eth_research.m3d.validation import M3DValidationError
+    from eth_research.v2.strict import (
+        V2ValidationError,
+        canonical_sha256,
+        sha256_bytes,
+        strict_json_loads,
+    )
+    from eth_research.v2c.oq.archive import (
+        OQ_ARCHIVE_MANIFEST_RELNAME,
+        OQ_ARCHIVE_REPORT_RELNAME,
+        OQ_ARCHIVE_RESULT_RELNAME,
+        archive_relpath,
+    )
+
+    problems: list[str] = []
+
+    def _read(relname: str) -> bytes | None:
+        path = repo_root / archive_relpath(relname)
+        if path.is_symlink() or not path.is_file():
+            problems.append(f"{relname} (absent or not a regular file)")
+            return None
+        return path.read_bytes()
+
+    result_bytes = _read(OQ_ARCHIVE_RESULT_RELNAME)
+    report_bytes = _read(OQ_ARCHIVE_REPORT_RELNAME)
+    manifest_bytes = _read(OQ_ARCHIVE_MANIFEST_RELNAME)
+    if result_bytes is None or report_bytes is None or manifest_bytes is None:
+        return problems
+
+    try:
+        result = strict_json_loads(result_bytes)
+    except (V2ValidationError, M3DValidationError) as exc:
+        problems.append(f"oq_result.json does not parse: {exc}")
+        return problems
+    if not isinstance(result, dict):
+        problems.append("oq_result.json is not a JSON object")
+        return problems
+
+    result_sha = sha256_bytes(result_bytes)
+    report_sha = sha256_bytes(report_bytes)
+    manifest_sha = sha256_bytes(manifest_bytes)
+    evidence_sha = canonical_sha256({k: v for k, v in result.items() if k != "result_digest"})
+    bundle_sha = canonical_sha256(
+        {
+            "result_sha256": result_sha,
+            "report_sha256": report_sha,
+            "evidence_sha256": evidence_sha,
+            "archive_manifest_sha256": manifest_sha,
+        }
+    )
+    if result.get("result_digest") != evidence_sha:
+        problems.append("oq_result.json result_digest does not re-derive from its body")
+    for name, recorded, derived in (
+        ("result_sha256", intent.result_sha256, result_sha),
+        ("report_sha256", intent.report_sha256, report_sha),
+        ("archive_manifest_sha256", intent.archive_manifest_sha256, manifest_sha),
+        ("evidence_sha256", intent.evidence_sha256, evidence_sha),
+        ("result_bundle_sha256", intent.result_bundle_sha256, bundle_sha),
+        ("verdict", intent.verdict, result.get("verdict")),
+    ):
+        if recorded != derived:
+            problems.append(f"intent {name} {recorded!r} != archive-derived {derived!r}")
+    return problems
+
+
+@contextmanager
+def _finalize_lock(registry_path: Path) -> Iterator[None]:
+    """Hold an exclusive lock for the read-assess-append critical section.
+
+    Two concurrent ``recover --finalize`` invocations would otherwise each assess FINALIZABLE and
+    each append a ``completed`` event, leaving two ordinal-2 lines that make the registry unreadable
+    forever. The ``O_EXCL`` lock makes the second invocation fail closed instead of corrupting.
+    """
+    lock = registry_path.with_name(registry_path.name + ".finalize.lock")
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError as exc:
+        raise OQCompletionIntentError(
+            "another finalize holds the registry lock; refusing to double-finalize"
+        ) from exc
+    try:
+        yield
+    finally:
+        os.close(fd)
+        lock.unlink(missing_ok=True)
 
 
 def _rebuild_completed(registry_path: Path, intent: OQCompletionIntent) -> OQEvent:
@@ -119,6 +220,14 @@ def assess(repo_root: str | Path, registry_path: str | Path) -> RecoveryStatus:
             "the published archive is incomplete (publication did not finish before the crash): "
             + "; ".join(problems),
         )
+    mismatches = _reconcile_intent_with_archive(root, intent)
+    if mismatches:
+        return RecoveryStatus(
+            STATE_NOT_FINALIZABLE,
+            "the completion intent does not reconcile with the published archive "
+            "(refusing to append a completed event the archive cannot support): "
+            + "; ".join(mismatches),
+        )
     return RecoveryStatus(
         STATE_FINALIZABLE,
         f"qualification {intent.qualification_id!r} published and verified; ready to complete",
@@ -133,22 +242,28 @@ def finalize(repo_root: str | Path, registry_path: str | Path) -> RecoveryStatus
     intent; otherwise it returns the non-finalizable assessment and appends nothing.
     """
     root = Path(repo_root)
-    status = assess(root, registry_path)
-    if status.state == STATE_ALREADY_FINALIZED:
+    reg = Path(registry_path)
+    # Hold an exclusive lock across assess-then-append so two concurrent finalizes cannot both
+    # append a completed event (which would leave two ordinal-2 lines and brick the registry).
+    with _finalize_lock(reg):
+        status = assess(root, reg)
+        if status.state == STATE_ALREADY_FINALIZED:
+            clear_completion_intent(root)
+            return status
+        if status.state != STATE_FINALIZABLE:
+            return status
+        intent = read_completion_intent(root)
+        if intent is None:  # pragma: no cover - just assessed finalizable
+            raise OQCompletionIntentError(
+                "completion intent vanished between assessment and finalize"
+            )
+        _rebuild_completed(reg, intent)
         clear_completion_intent(root)
-        return status
-    if status.state != STATE_FINALIZABLE:
-        return status
-    intent = read_completion_intent(root)
-    if intent is None:  # pragma: no cover - just assessed finalizable
-        raise OQCompletionIntentError("completion intent vanished between assessment and finalize")
-    _rebuild_completed(Path(registry_path), intent)
-    clear_completion_intent(root)
-    return RecoveryStatus(
-        STATE_FINALIZED,
-        f"re-appended the recorded completed event for {intent.qualification_id!r} "
-        "(calculation-free)",
-    )
+        return RecoveryStatus(
+            STATE_FINALIZED,
+            f"re-appended the recorded completed event for {intent.qualification_id!r} "
+            "(calculation-free)",
+        )
 
 
 __all__ = [

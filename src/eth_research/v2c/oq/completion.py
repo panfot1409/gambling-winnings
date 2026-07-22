@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from eth_research.m3d.validation import M3DValidationError
 from eth_research.publication import durable_remove, durable_write_bytes
 from eth_research.v2.strict import (
     V2ValidationError,
@@ -32,7 +33,14 @@ from eth_research.v2.strict import (
     require_nonempty_str,
     strict_json_loads,
 )
-from eth_research.v2c.oq.archive import OQ_ARCHIVE_DIR, OQArchive, archive_artifact_digests
+from eth_research.v2c.oq.archive import (
+    OQ_ARCHIVE_MANIFEST_RELNAME,
+    OQ_ARCHIVE_REPORT_RELNAME,
+    OQ_ARCHIVE_RESULT_RELNAME,
+    OQArchive,
+    archive_artifact_digests,
+    archive_relpath,
+)
 from eth_research.v2c.oq.registry import (
     OQ_VERDICT_NOT_QUALIFIED,
     OQ_VERDICT_QUALIFIED,
@@ -62,6 +70,18 @@ _INTENT_KEYS: frozenset[str] = frozenset(
         "artifacts",
         *_TERMINAL_HASH_FIELDS,
     }
+)
+
+#: The exact set of relpaths a completion intent may name -- the three published archive artifacts
+#: and nothing else. Binding to the known relpaths (not a ``startswith`` prefix) makes a ``..``
+#: traversal or any out-of-archive path structurally impossible: the finalizer reads only these.
+_ALLOWED_ARTIFACT_RELPATHS: frozenset[str] = frozenset(
+    archive_relpath(relname)
+    for relname in (
+        OQ_ARCHIVE_RESULT_RELNAME,
+        OQ_ARCHIVE_REPORT_RELNAME,
+        OQ_ARCHIVE_MANIFEST_RELNAME,
+    )
 )
 
 
@@ -107,7 +127,10 @@ class OQCompletionIntent:
     def from_json_bytes(cls, data: bytes) -> OQCompletionIntent:
         try:
             payload = require_mapping("oq_completion_intent", strict_json_loads(data))
-        except V2ValidationError as exc:
+        except (V2ValidationError, M3DValidationError) as exc:
+            # strict_json_loads raises StrictJSONError (the M3D ValueError tree), not
+            # V2ValidationError -- catch both so a dup-key/NaN/bad-UTF-8 intent surfaces as the
+            # advertised OQCompletionIntentError, never a raw StrictJSONError.
             raise OQCompletionIntentError(str(exc)) from exc
         require_exact_keys("oq_completion_intent", payload, _INTENT_KEYS)
         if payload["schema_version"] != OQ_COMPLETION_INTENT_SCHEMA_VERSION:
@@ -123,8 +146,11 @@ class OQCompletionIntent:
             if not isinstance(item, list) or len(item) != 2:
                 raise OQCompletionIntentError("each artifact must be a [relpath, sha256] pair")
             relpath = require_nonempty_str("artifact.relpath", item[0])
-            if not relpath.startswith(f"{OQ_ARCHIVE_DIR}/"):
-                raise OQCompletionIntentError(f"artifact {relpath!r} is outside the archive dir")
+            if relpath not in _ALLOWED_ARTIFACT_RELPATHS:
+                raise OQCompletionIntentError(
+                    f"artifact {relpath!r} is not one of the published archive artifacts "
+                    "(a path-traversal or out-of-archive relpath is refused)"
+                )
             artifacts.append((relpath, require_hex64("artifact.sha256", item[1])))
         return cls(
             qualification_id=require_nonempty_str("qualification_id", payload["qualification_id"]),

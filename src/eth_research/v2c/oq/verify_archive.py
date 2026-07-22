@@ -42,7 +42,12 @@ from eth_research.v2c.oq.registry import (
     OQ_EVENT_STARTED,
     read_oq_registry,
 )
-from eth_research.v2c.oq.result import build_oq_report, scan_for_forbidden_vocabulary
+from eth_research.v2c.oq.result import (
+    SUMMED_COUNT_FIELDS,
+    ZERO_EXPOSURE_FIELDS,
+    build_oq_report,
+    scan_for_forbidden_vocabulary,
+)
 from eth_research.v2c.oq.supersession import EMPTY_SHA256, SEALED_LEDGER_RELPATHS
 
 
@@ -57,6 +62,16 @@ def _read_archive_file(repo_root: Path, relname: str) -> bytes:
     if not raw.is_file():
         raise OQRunArchiveError(f"archive artifact {relname} is missing")
     return raw.read_bytes()
+
+
+def _is_number(value: object) -> bool:
+    """True only for a real int or float; a bool never counts as a number."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_zero(value: object) -> bool:
+    """True only for a real numeric zero; a JSON ``false`` never counts as zero."""
+    return _is_number(value) and value == 0
 
 
 def verify_oq_run_archive(repo_root: str | Path, registry_path: str | Path) -> tuple[str, ...]:
@@ -119,11 +134,30 @@ def verify_oq_run_archive(repo_root: str | Path, registry_path: str | Path) -> t
     counts = result.get("operational_counts")
     if not isinstance(counts, dict):
         raise OQRunArchiveError("oq_result.json has no operational_counts")
-    for field in ("risky_intent_count", "risky_fill_count", "turnover", "terminal_book_units"):
-        if counts.get(field) != 0 and counts.get(field) != 0.0:
-            raise OQRunArchiveError(
-                f"operational_counts.{field} is not zero: {counts.get(field)!r}"
-            )
+    instruments = result.get("instruments")
+    if not isinstance(instruments, dict) or not instruments:
+        raise OQRunArchiveError("oq_result.json has no instruments map")
+    summaries = list(instruments.values())
+    if not all(isinstance(summary, dict) for summary in summaries):
+        raise OQRunArchiveError("an oq_result.json instrument summary is not an object")
+    # Every aggregate must be exactly the per-instrument sum: a lied top-level count that hides
+    # nonzero per-instrument exposure is caught here, never trusted.
+    for field in SUMMED_COUNT_FIELDS:
+        per = [summary.get(field) for summary in summaries]
+        if not _is_number(counts.get(field)) or not all(_is_number(value) for value in per):
+            raise OQRunArchiveError(f"{field} aggregate or an instrument value is non-numeric")
+        if counts.get(field) != sum(per):
+            raise OQRunArchiveError(f"operational_counts.{field} is not the per-instrument sum")
+    # Every zero-exposure field must be exactly zero in the aggregate AND in every instrument (a
+    # JSON ``false`` never counts as zero -- the strict check rejects the bool the old one took).
+    for field in ZERO_EXPOSURE_FIELDS:
+        if not _is_zero(counts.get(field)):
+            raise OQRunArchiveError(f"operational_counts.{field} nonzero: {counts.get(field)!r}")
+        for summary in summaries:
+            if not _is_zero(summary.get(field)):
+                raise OQRunArchiveError(
+                    f"an instrument's {field} is not zero: {summary.get(field)!r}"
+                )
     checks.append("result_rescans_clean_and_zero_exposure")
 
     # 5. The aggregate result bundle re-derives from the four content/marker digests.

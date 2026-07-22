@@ -20,6 +20,7 @@ import json
 import sys
 from pathlib import Path
 
+from eth_research.m3d.validation import M3DValidationError
 from eth_research.v2.strict import V2ValidationError, sha256_bytes
 from eth_research.v2c.oq import finalize as _finalize
 from eth_research.v2c.oq.completion import OQ_COMPLETION_INTENT_RELPATH
@@ -128,7 +129,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps({"ok": ok, "state": result.state, "detail": result.detail}))
         return 0 if ok else 1
-    except (OSError, V2ValidationError, OQRunArchiveError) as exc:
+    except (OSError, V2ValidationError, M3DValidationError, OQRunArchiveError) as exc:
+        # Freeze/protocol/CLI errors are V2ValidationError; registry/supersession/strict-JSON errors
+        # are the M3DValidationError (StrictJSONError) tree -- a different ValueError branch. Catch
+        # both so a malformed governance file surfaces as structured JSON, not a raw traceback.
         print(json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"}), file=sys.stderr)
         return 1
 

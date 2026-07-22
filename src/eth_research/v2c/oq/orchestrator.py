@@ -301,10 +301,50 @@ def _gate_registry_state_permits(ctx: QualificationContext, expect: str) -> str:
     return f"registry state is {expect!r}, as required for this transition"
 
 
+def _gate_no_prior_run_artifacts(ctx: QualificationContext, _expect: str) -> str:
+    # A register (pristine) or start (registered) transition must not proceed over a prior run's
+    # surviving evidence. A keyless registry chain can be truncated to byte-empty (reading pristine)
+    # to reset the one-shot budget, but a completed run leaves a published archive and a completion
+    # intent survives an unfinalized crash -- either betrays the prior run the truncation hid, so we
+    # refuse. (The legitimate crash-recovery path is finalize.py, which never runs these gates.)
+    from eth_research.v2c.oq.archive import OQ_ARCHIVE_DIR
+    from eth_research.v2c.oq.completion import OQ_COMPLETION_INTENT_RELPATH
+
+    intent = ctx.repo_root / OQ_COMPLETION_INTENT_RELPATH
+    if intent.is_symlink() or intent.exists():
+        raise OQOrchestratorError(
+            "a completion intent is present -- a prior run exists; refusing to register/start over "
+            "it (the registry may have been truncated to reset the one-shot budget)"
+        )
+    archive_dir = ctx.repo_root / OQ_ARCHIVE_DIR
+    if archive_dir.exists() and any(archive_dir.iterdir()):
+        raise OQOrchestratorError(
+            "a published run archive is present -- a prior run exists; refusing to register/start "
+            "over it (the registry may have been truncated to reset the one-shot budget)"
+        )
+    return "no prior run archive or completion intent is present"
+
+
 def _gate_ci_terminal_success_attested(ctx: QualificationContext, _expect: str) -> str:
+    # The orchestrator cannot itself query a CI provider offline, so terminal-green CI is an
+    # attestation the trusted CI caller makes -- but it is bound to a concrete 40-hex source-freeze
+    # commit (not a bare flag), and every other gate has already proven the live source reproduces
+    # that exact freeze, so the attestation cannot float free of the frozen code it vouches for.
+    commit = ctx.source_freeze_commit
+    is_sha40 = (
+        isinstance(commit, str)
+        and len(commit) == 40
+        and all(c in "0123456789abcdef" for c in commit)
+    )
+    if not is_sha40:
+        raise OQOrchestratorError(
+            "CI attestation is not bound to a 40-hex lowercase source-freeze commit"
+        )
     if ctx.ci_terminal_success is not True:
-        raise OQOrchestratorError("OQ-E2 CI is not attested terminal-success")
-    return "OQ-E2 CI is attested terminal-success"
+        raise OQOrchestratorError(
+            f"OQ-E2 CI is not attested terminal-success for source-freeze commit {commit}"
+        )
+    return f"OQ-E2 CI is attested terminal-success for source-freeze commit {commit}"
 
 
 #: The ordered pre-start gate sequence. Order is part of the contract: structural preconditions
@@ -332,6 +372,7 @@ _GATE_SEQUENCE: tuple[tuple[str, Callable[[QualificationContext, str], str]], ..
     ("no_candidate_reference_in_identity", _gate_no_candidate_reference_in_identity),
     ("registry_is_not_symlink", _gate_registry_is_not_symlink),
     ("registry_state_permits", _gate_registry_state_permits),
+    ("no_prior_run_artifacts", _gate_no_prior_run_artifacts),
     ("ci_terminal_success_attested", _gate_ci_terminal_success_attested),
 )
 
