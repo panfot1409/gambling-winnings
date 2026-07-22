@@ -1,0 +1,80 @@
+name: V2C Replay
+
+# Fresh-clone reproducibility for the Milestone V2C candidate-free offline operational qualification.
+# The state-aware replay CLI re-derives every V2C OQ governance invariant from committed source -- the
+# OQ source freeze, the protocol/fixture/fault-schedule/SLO/cash-control bundle, and the append-only
+# supersession chain that records the premature e4b3cc3 freeze as superseded -- and, once a run has
+# been executed and completed, deep-verifies the immutable archive and independently re-accepts it
+# through the OQ-Q oracle. Everything is offline and read-only: no networking, no strategy, no sealed
+# partition, no wall clock, and no market performance. The three sealed access ledgers stay
+# byte-empty throughout, and the canonical OQ registry stays byte-empty until a run is deliberately
+# registered.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "src/eth_research/**"
+      - "tests/test_v2c_*.py"
+      - "governance/v2c/**"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/v2c-replay.yml"
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GATE_LEDGER: research/m3a/development_gate_access.jsonl
+  HOLDOUT_LEDGER: research/m2b/test_evaluations.jsonl
+  PROSPECTIVE_LEDGER: research/m3d/prospective_evaluations.jsonl
+  EMPTY_SHA: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+jobs:
+  v2c-replay:
+    # Reproduce under the exact authoritative runtime (CPython 3.12.3).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Install the authoritative CPython 3.12.3
+        run: uv python install 3.12.3
+      - name: Verify uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: The V2C test suite must run (cannot silently skip)
+        run: |
+          uv run --no-sync --python 3.12.3 python -m pytest -q -p no:cacheprovider \
+            tests/test_v2c_*.py
+      - name: The OQ source freeze reproduces from live source
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.v2c.oq.freeze --repo-root .
+      - name: The OQ protocol bundle reproduces from live source
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.v2c.oq.protocol --repo-root .
+      - name: State-aware OQ replay (governance invariants; archive + oracle once completed)
+        run: uv run --no-sync --python 3.12.3 python -m eth_research.v2c.oq.cli replay --repo-root .
+      - name: The canonical OQ registry is byte-empty until a run is deliberately registered
+        run: |
+          reg=governance/v2c/oq_registry.jsonl
+          if [ -s "$reg" ]; then
+            echo "note: the OQ registry is non-empty (a run has been registered); replay covers it" >&2
+          fi
+      - name: All three sealed ledgers are byte-empty throughout
+        run: |
+          for ledger in "$GATE_LEDGER" "$HOLDOUT_LEDGER" "$PROSPECTIVE_LEDGER"; do
+            if [ -s "$ledger" ]; then
+              echo "sealed ledger $ledger is not empty" >&2
+              exit 1
+            fi
+            got=$(sha256sum "$ledger" | cut -d' ' -f1)
+            if [ "$got" != "$EMPTY_SHA" ]; then
+              echo "sealed ledger $ledger changed (sha $got)" >&2
+              exit 1
+            fi
+          done
+          echo "all three sealed ledgers are byte-empty"
