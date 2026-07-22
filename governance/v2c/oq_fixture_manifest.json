@@ -1,0 +1,80 @@
+{
+  "artifact_id": "v2c_oq_fixture_manifest",
+  "cohort_start": "2016-01-01T00:00:00Z",
+  "fixture_digest": "9799d3262136b4bba303f8da29697d59d8e97f2e427616973ed196036f246d88",
+  "instruments": {
+    "btc_usd": {
+      "accepted_count": 3757,
+      "accepted_stream_sha256": "28b2455f446588a382c68d359950f6962909dced8f2145218b1ac4fc79e28ce2",
+      "cohort_start": "2016-01-01T00:00:00Z",
+      "conflict_alert_count": 8,
+      "fixture_digest": "7605600d11e4bc08ff1a8f26e02b1f738a9b6be2b94bdd55843d2472df78948f",
+      "flag_counts": {
+        "gap": 23,
+        "high_volatility": 26,
+        "stale": 10,
+        "zero_volume": 19
+      },
+      "injected_fault_counts": {
+        "conflicting_duplicate": 16,
+        "delayed_receive": 16,
+        "duplicate": 32,
+        "gap": 0,
+        "high_volatility": 26,
+        "normal": 3672,
+        "out_of_order": 16,
+        "stale": 0,
+        "zero_volume": 19
+      },
+      "interval_seconds": 86400,
+      "outcome_counts": {
+        "accepted": 3757,
+        "conflicting_duplicate_rejected": 8,
+        "duplicate_suppressed": 16,
+        "out_of_order_rejected": 16
+      },
+      "raw_event_count": 3797,
+      "schema_version": 1,
+      "slots": 3800
+    },
+    "eth_usd": {
+      "accepted_count": 3757,
+      "accepted_stream_sha256": "2d9318cef205e9a1a186fea114970ccbc02e0ef25d74726b05a48ba070ea841e",
+      "cohort_start": "2016-01-01T00:00:00Z",
+      "conflict_alert_count": 8,
+      "fixture_digest": "7605600d11e4bc08ff1a8f26e02b1f738a9b6be2b94bdd55843d2472df78948f",
+      "flag_counts": {
+        "gap": 23,
+        "high_volatility": 26,
+        "stale": 10,
+        "zero_volume": 19
+      },
+      "injected_fault_counts": {
+        "conflicting_duplicate": 16,
+        "delayed_receive": 16,
+        "duplicate": 32,
+        "gap": 0,
+        "high_volatility": 26,
+        "normal": 3672,
+        "out_of_order": 16,
+        "stale": 0,
+        "zero_volume": 19
+      },
+      "interval_seconds": 86400,
+      "outcome_counts": {
+        "accepted": 3757,
+        "conflicting_duplicate_rejected": 8,
+        "duplicate_suppressed": 16,
+        "out_of_order_rejected": 16
+      },
+      "raw_event_count": 3797,
+      "schema_version": 1,
+      "slots": 3800
+    }
+  },
+  "interval_seconds": 86400,
+  "min_accepted_events": 3500,
+  "min_event_slots": 3650,
+  "schema_version": 1,
+  "slots": 3800
+}

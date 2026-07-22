@@ -1,0 +1,44 @@
+{
+  "allowed_request_kinds": [
+    "cash_control_operation"
+  ],
+  "artifact_id": "v2c_oq_cash_control_identity",
+  "forbidden_request_kinds": [
+    "benchmark",
+    "candidate_fingerprint",
+    "candidate_id",
+    "candidate_module",
+    "equity_metric",
+    "financial_data_endpoint",
+    "market_performance_report",
+    "nomination_rule",
+    "optimization_request",
+    "research_protocol",
+    "return_metric",
+    "signal_callable",
+    "strategy_callable"
+  ],
+  "identity_digest": "25d8fd71618af7817d84739cffecaaf89240f48a6dd1b473cd4005bcaa09c137",
+  "is_strategy": false,
+  "reads_market_data_for_decision": false,
+  "refused_legacy_candidate_ids": [
+    "cross_asset_btc_confirmed_eth_trend",
+    "cross_asset_eth_btc_relative_strength_rotation",
+    "meanrev_zscore_accumulation",
+    "trend_regime_single_horizon",
+    "vol_scaled_hold_drawdown_guard"
+  ],
+  "schema_version": 1,
+  "statement": "cash_control is the only operational target V2C resolves. It is not a strategy: it references no candidate, makes no market-data-driven decision, and every intent it emits requests exactly zero risky exposure, notional, fills, and turnover.",
+  "target_id": "cash_control",
+  "zero_exposure_invariant": {
+    "approved_weight": 0.0,
+    "fill_count": 0,
+    "requested_fills": 0,
+    "requested_notional": 0.0,
+    "requested_risky_target_weight": 0.0,
+    "requested_turnover": 0.0,
+    "risky_intent_count": 0,
+    "turnover": 0.0
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "artifact_id": "v2c_oq_protocol",
+  "cash_control_identity_sha256": "f9ffb33451a5fbe9992c85d342499d70cb7bc47d97a4c0f857d4d45f7d9bcd28",
+  "criteria": [
+    "qualification_coverage",
+    "event_acceptance_correctness",
+    "duplicate_suppression",
+    "conflicting_duplicate_detection",
+    "journal_durability",
+    "checkpoint_consistency",
+    "recovery_idempotency",
+    "kill_switch_trip_latency",
+    "alert_completeness",
+    "state_reconstruction",
+    "bounded_processing_memory",
+    "zero_risky_exposure"
+  ],
+  "fault_schedule_sha256": "289263e44dc75a1e0699ff1b0f824f56640b19fbee7e597a5448ea423fa923d2",
+  "fixture_sha256": "1ff358d0761e14f1e82ca5c38dd97c6b40c1a9b9a29f3bc3c29738173f8ff6ab",
+  "instruments": [
+    "btc_usd",
+    "eth_usd"
+  ],
+  "methodology_id": "v2c_offline_operational_qualification",
+  "package_version": "2.0.0.dev2",
+  "parameters": {
+    "cohort_start": "2016-01-01T00:00:00Z",
+    "interval_seconds": 86400,
+    "max_drawdown_fraction": 0.5,
+    "min_accepted_events": 3500,
+    "min_event_slots": 3650,
+    "slots": 3800,
+    "staleness_seconds": 259200,
+    "starting_cash": 10000.0
+  },
+  "protocol_digest": "9295324dba8ac6ce91afbad997738bd7b82f6e2fe4af51695e236f08a9a78fe7",
+  "qualification_id": "v2c_offline_operational_qualification_run_001",
+  "schema_version": 1,
+  "slo_contract_sha256": "0bd69e071b40437597de9c51ce4f8bdce8b87c232b68596af9d0827363681fc9",
+  "statement": "The V2C offline operational qualification exercises the candidate-free cash_control target through the shadow platform under a deterministic synthetic ETH/BTC event stream carrying a full fault taxonomy, in virtual time. It resolves no strategy, reads no market data, and computes no return, equity, or market-performance metric. Its governing invariant is exactly zero risky exposure: every requested and realized exposure, notional, fill count, and turnover is zero, and the paper book holds 100% cash throughout.",
+  "zero_exposure_invariant": {
+    "approved_weight": 0.0,
+    "fill_count": 0,
+    "requested_fills": 0,
+    "requested_notional": 0.0,
+    "requested_risky_target_weight": 0.0,
+    "requested_turnover": 0.0,
+    "risky_intent_count": 0,
+    "turnover": 0.0
+  }
+}
