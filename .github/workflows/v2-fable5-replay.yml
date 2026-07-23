@@ -1,0 +1,114 @@
+name: V2 Fable 5 Replay
+
+# Fresh-clone reproducibility for the Fable 5 full-system audit of the merged V2 platform. This job
+# re-derives every Fable 5 audit invariant from committed source: the machine-readable system
+# inventory, the paper-readiness gate, and the audit source freeze. It then asserts the honest
+# terminal state -- paper activation NOT authorized, paper trading NOT active, sell-readiness NOT
+# derived -- and that the three sealed access ledgers remain byte-empty throughout. Everything is
+# offline and read-only: no networking, no strategy evaluation, no sealed partition access, no wall
+# clock, no market performance, no order routing, and no paper/prospective activation. The job runs
+# on the two supported interpreters (CPython 3.12 authoritative + 3.13) so a reproducibility
+# regression on either is caught.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "src/eth_research/v2/fable5/**"
+      - "src/eth_research/fractional/engine.py"
+      - "src/eth_research/v2ab/commercial_truth.py"
+      - "tests/test_v2_fable5_*.py"
+      - "governance/v2/fable5_system_inventory.json"
+      - "governance/v2/fable5_findings.json"
+      - "governance/v2/fable5_remediation_state.json"
+      - "governance/v2/fable5_audit_manifest.json"
+      - "governance/v2/fable5_source_freeze.json"
+      - "governance/v2/paper_readiness_state.json"
+      # The three sealed access ledgers this job asserts byte-empty -- a push that touches only a
+      # sealed ledger must still trigger the emptiness check.
+      - "research/m3a/development_gate_access.jsonl"
+      - "research/m2b/test_evaluations.jsonl"
+      - "research/m3d/prospective_evaluations.jsonl"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/v2-fable5-replay.yml"
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GATE_LEDGER: research/m3a/development_gate_access.jsonl
+  HOLDOUT_LEDGER: research/m2b/test_evaluations.jsonl
+  PROSPECTIVE_LEDGER: research/m3d/prospective_evaluations.jsonl
+  EMPTY_SHA: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+jobs:
+  v2-fable5-replay:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Install CPython ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Verify uv.lock matches pyproject.toml
+        run: uv lock --check
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
+      - name: The Fable 5 audit test suite must run (cannot silently skip)
+        run: |
+          uv run --no-sync --python ${{ matrix.python-version }} python -m pytest -q -p no:cacheprovider \
+            tests/test_v2_fable5_inventory.py \
+            tests/test_v2_fable5_remediation.py \
+            tests/test_v2_fable5_paper_readiness.py \
+            tests/test_v2_fable5_catastrophe.py \
+            tests/test_v2_fable5_freeze.py
+      - name: The system inventory re-derives from live source (no drift, no structural red flag)
+        run: uv run --no-sync --python ${{ matrix.python-version }} python -m eth_research.v2.fable5 verify --repo-root .
+      - name: The audit source freeze reproduces from live source
+        run: uv run --no-sync --python ${{ matrix.python-version }} python -m eth_research.v2.fable5 freeze-verify --repo-root .
+      - name: The committed paper-readiness state re-derives and fails closed on any forced activation
+        run: uv run --no-sync --python ${{ matrix.python-version }} python -m eth_research.v2.fable5 verify-paper --repo-root .
+      - name: Assert the honest terminal state (nothing authorized, no trading, not sell-ready)
+        run: |
+          uv run --no-sync --python ${{ matrix.python-version }} python - <<'PY'
+          import sys
+          from eth_research.v2.fable5 import derive_paper_readiness
+
+          state = derive_paper_readiness(".")
+          problems = []
+          if state.paper_activation_authorized:
+              problems.append("paper_activation_authorized derived true")
+          if state.paper_trading_active:
+              problems.append("paper_trading_active derived true")
+          if state.sell_ready:
+              problems.append("sell_ready derived true")
+          if state.eligible_paper_candidate_present:
+              problems.append("eligible_paper_candidate_present derived true (no candidate exists)")
+          if problems:
+              print("HONEST-STATE ASSERTION FAILED:", "; ".join(problems), file=sys.stderr)
+              sys.exit(1)
+          print("honest terminal state confirmed: nothing authorized, no trading, not sell-ready")
+          PY
+      - name: All three sealed ledgers are byte-empty throughout
+        run: |
+          for ledger in "$GATE_LEDGER" "$HOLDOUT_LEDGER" "$PROSPECTIVE_LEDGER"; do
+            if [ -s "$ledger" ]; then
+              echo "sealed ledger $ledger is not empty" >&2
+              exit 1
+            fi
+            got=$(sha256sum "$ledger" | cut -d' ' -f1)
+            if [ "$got" != "$EMPTY_SHA" ]; then
+              echo "sealed ledger $ledger changed (sha $got)" >&2
+              exit 1
+            fi
+          done
+          echo "all three sealed ledgers are byte-empty"

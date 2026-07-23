@@ -837,10 +837,17 @@ _NEGATORS: frozenset[str] = frozenset(
 )
 
 #: How many preceding words (spanning the previous physical line) count as a negation window.
-_NEGATION_WINDOW: int = 12
+_NEGATION_WINDOW: int = 4
 
+#: Adverbs that, placed between a negator and the phrase, AFFIRM the claim rather than negate it
+#: ("not merely a proven alpha" asserts the claim more strongly). A negator followed by one of
+#: these never exempts the phrase (F5-C3).
+_AFFIRMING_ADVERBS: frozenset[str] = frozenset({"merely", "just", "only", "simply", "purely"})
+
+#: Each phrase also matches a simple plural/-es inflection of its final word ("proven alphas",
+#: "profitable systems") — the same overclaim hidden behind an inflection (F5-C3).
 _PHRASE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
-    (phrase, re.compile(rf"\b{re.escape(phrase)}\b")) for phrase in FORBIDDEN_PHRASES
+    (phrase, re.compile(rf"\b{re.escape(phrase)}(?:e?s)?\b")) for phrase in FORBIDDEN_PHRASES
 )
 
 #: The buyer/commercial-facing surface scanned by ``scan_repo_sales_material`` (plus generated
@@ -875,20 +882,51 @@ def _is_block_sentinel(collapsed: str) -> bool:
     return _BLOCK_BEGIN in collapsed or _BLOCK_END in collapsed
 
 
+_CLAUSE_TERMINATORS: tuple[str, ...] = (".", ";", "!", "?")
+
+
 def _is_negated(norm_lines: list[str], index: int, start: int) -> bool:
+    """A forbidden phrase counts as negated only when a negator sits within a short window
+    immediately before it, in the same clause, with no affirming adverb in between.
+
+    Earlier this scanned any negator within a 12-word window that even spanned the previous line,
+    which fails OPEN: a distant or cross-clause negator ("this is *not* a drill: ... proven alpha",
+    "there is *no* reason to doubt ... validated alpha") silently exempted a genuine overclaim. The
+    window is now short and stops at a clause boundary. A negator followed by an affirming adverb
+    ("not *merely* a proven alpha") asserts the claim rather than negating it, so it never exempts
+    (F5-C3). An immediate genuine negation ("not a proven alpha") — including one that wraps to the
+    previous physical line — is still recognised. This remains a short-window heuristic over the
+    project's own committed sales text, not a semantic parser.
+    """
     context = ""
     if index > 0:
         context = norm_lines[index - 1] + " "
     context += norm_lines[index][:start]
     words = context.split()
-    return any(word in _NEGATORS for word in words[-_NEGATION_WINDOW:])
+    between: list[str] = []
+    for word in reversed(words[-_NEGATION_WINDOW:]):
+        if word in _NEGATORS:
+            # "not merely/just/only ... <phrase>" affirms the phrase; do not exempt it.
+            return not any(w in _AFFIRMING_ADVERBS for w in between)
+        if any(word.endswith(term) for term in _CLAUSE_TERMINATORS):
+            break  # a clause boundary separates the phrase from any earlier negator
+        between.append(word)
+    return False
 
 
 def _paragraph_marker_flags(lines: list[str], collapsed: list[str]) -> list[bool]:
     """Flag each line whose paragraph (a run of non-blank lines) carries an example marker.
 
     Markers are paragraph-scoped so a specification/example that names the forbidden phrases still
-    passes when the marker and the enumerated phrases wrap across adjacent physical lines.
+    passes when the marker and the enumerated phrases wrap across adjacent physical lines (the
+    committed acceptance plan relies on exactly this: an enumeration line sits next to its
+    "false-claim examples" marker line). This scope is a deliberate, author-controlled exemption
+    over
+    the project's *own* committed sales/spec text — it is not an adversarial-input boundary — and it
+    cannot be tightened to line scope without flagging that legitimate enumeration. The Fable 5
+    audit
+    reviewed and accepted this as a low-severity, author-controlled property; the fenced
+    ``FALSE-CLAIM-EXAMPLES`` block remains the primary mechanism for anything sensitive.
     """
     count = len(lines)
     flags = [False] * count
