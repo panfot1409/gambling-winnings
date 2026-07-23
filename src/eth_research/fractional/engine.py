@@ -18,7 +18,7 @@ reported alongside (it adds no fill and is excluded from trade counts).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
@@ -347,7 +347,23 @@ def _terminal_liquidation_equity(
     """
     if state.quantity <= 0.0:
         return state.cash
-    sell_price = fill_price(scenario, last_close, "sell", state.quantity, lagged_dollar_volume)
+    if scenario.impact_coefficient != 0.0 and (
+        lagged_dollar_volume is None or lagged_dollar_volume <= 0.0
+    ):
+        # Impact pricing needs a positive causal lagged dollar-volume; if the trailing window has
+        # collapsed to no liquidity (e.g. a run of zero-volume bars into the terminal bar) there is
+        # nothing to estimate impact from. Mirror the active-fill contract (a participation-capped
+        # fill with no liquidity yields no fill, never infinite impact) by pricing this
+        # *hypothetical*
+        # terminal mark impact-free (spread + base slippage only) rather than letting a
+        # CostModelError escape the backtest. This path is unreachable for the committed runs —
+        # real daily dollar volume is strictly positive over every trailing window — so no
+        # accepted result changes.
+        sell_price = fill_price(
+            replace(scenario, impact_coefficient=0.0), last_close, "sell", state.quantity, None
+        )
+    else:
+        sell_price = fill_price(scenario, last_close, "sell", state.quantity, lagged_dollar_volume)
     gross = state.quantity * sell_price
     fee = gross * fee_rate
     return state.cash + gross - fee

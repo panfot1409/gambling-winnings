@@ -837,7 +837,7 @@ _NEGATORS: frozenset[str] = frozenset(
 )
 
 #: How many preceding words (spanning the previous physical line) count as a negation window.
-_NEGATION_WINDOW: int = 12
+_NEGATION_WINDOW: int = 4
 
 _PHRASE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (phrase, re.compile(rf"\b{re.escape(phrase)}\b")) for phrase in FORBIDDEN_PHRASES
@@ -875,20 +875,46 @@ def _is_block_sentinel(collapsed: str) -> bool:
     return _BLOCK_BEGIN in collapsed or _BLOCK_END in collapsed
 
 
+_CLAUSE_TERMINATORS: tuple[str, ...] = (".", ";", "!", "?")
+
+
 def _is_negated(norm_lines: list[str], index: int, start: int) -> bool:
+    """A forbidden phrase counts as negated only when a negator sits within a short window
+    immediately before it, in the same clause.
+
+    Earlier this scanned any negator within a 12-word window that even spanned the previous line,
+    which fails OPEN: a distant or cross-clause negator ("this is *not* a drill: ... proven alpha",
+    "there is *no* reason to doubt ... validated alpha") silently exempted a genuine overclaim. The
+    window is now short and stops at a clause boundary, so only a real negation of the phrase itself
+    exempts it, while an immediate negation ("not a proven alpha") — including one that wraps to the
+    previous physical line — is still recognised.
+    """
     context = ""
     if index > 0:
         context = norm_lines[index - 1] + " "
     context += norm_lines[index][:start]
     words = context.split()
-    return any(word in _NEGATORS for word in words[-_NEGATION_WINDOW:])
+    for word in reversed(words[-_NEGATION_WINDOW:]):
+        if word in _NEGATORS:
+            return True
+        if any(word.endswith(term) for term in _CLAUSE_TERMINATORS):
+            break  # a clause boundary separates the phrase from any earlier negator
+    return False
 
 
 def _paragraph_marker_flags(lines: list[str], collapsed: list[str]) -> list[bool]:
     """Flag each line whose paragraph (a run of non-blank lines) carries an example marker.
 
     Markers are paragraph-scoped so a specification/example that names the forbidden phrases still
-    passes when the marker and the enumerated phrases wrap across adjacent physical lines.
+    passes when the marker and the enumerated phrases wrap across adjacent physical lines (the
+    committed acceptance plan relies on exactly this: an enumeration line sits next to its
+    "false-claim examples" marker line). This scope is a deliberate, author-controlled exemption
+    over
+    the project's *own* committed sales/spec text — it is not an adversarial-input boundary — and it
+    cannot be tightened to line scope without flagging that legitimate enumeration. The Fable 5
+    audit
+    reviewed and accepted this as a low-severity, author-controlled property; the fenced
+    ``FALSE-CLAIM-EXAMPLES`` block remains the primary mechanism for anything sensitive.
     """
     count = len(lines)
     flags = [False] * count
