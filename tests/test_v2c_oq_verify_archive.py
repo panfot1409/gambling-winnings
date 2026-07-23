@@ -51,7 +51,7 @@ def _identity() -> QualificationIdentity:
 
 
 @pytest.fixture(scope="module")
-def completed_bytes() -> dict[str, bytes]:
+def completed_bytes(pristine_oq_repo: Path) -> dict[str, bytes]:
     """Execute + publish + finalize one run; capture the completed-run tree as relpath -> bytes."""
     if sys.version_info[:2] != (3, 12):
         pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
@@ -64,9 +64,9 @@ def completed_bytes() -> dict[str, bytes]:
     reg.parent.mkdir(parents=True, exist_ok=True)
     reg.write_bytes(b"")
     ctx = O.QualificationContext(
-        repo_root=REPO,
+        repo_root=pristine_oq_repo,
         registry_path=reg,
-        supersession_path=REPO / OQ_SUPERSESSION_PATH,
+        supersession_path=pristine_oq_repo / OQ_SUPERSESSION_PATH,
         identity=ident,
         source_freeze_id="oq_e2",
         source_freeze_commit="a" * 40,

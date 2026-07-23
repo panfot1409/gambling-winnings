@@ -98,7 +98,14 @@ def test_committed_ledger_is_clean_and_records_e4b3cc3() -> None:
 
 
 def test_committed_ledger_leaves_the_registry_pristine() -> None:
-    assert (REPO / "governance/v2c/oq_registry.jsonl").stat().st_size == 0
+    # The supersession of e4b3cc3 was recorded while the OQ registry was byte-empty. The completed
+    # qualification run has since advanced the live registry, but the record's binding to a pristine
+    # registry-at-supersession is immutable and is what certifies the correction changed no run.
+    record = read_supersession(REPO / OQ_SUPERSESSION_PATH)[0]
+    assert record.registry_relpath == "governance/v2c/oq_registry.jsonl"
+    assert record.registry_byte_count == 0
+    assert record.registry_sha256 == EMPTY_SHA256
+    assert record.registry_event_count == 0
 
 
 # --------------------------------------------------------------------------- #

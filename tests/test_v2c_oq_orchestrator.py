@@ -89,8 +89,11 @@ def test_gate_order_is_nonempty_and_unique() -> None:
 
 
 @_OQ_312_ONLY
-def test_full_preflight_passes_on_the_real_tree(tmp_path: Path) -> None:
-    ctx = _ctx(_pristine_registry(tmp_path))
+def test_full_preflight_passes_on_the_pristine_tree(tmp_path: Path, pristine_oq_repo: Path) -> None:
+    # The canonical tree now carries a completed run; the pristine (pre-run) tree is reconstructed
+    # in an isolated copy so the happy path -- every gate green, including no_prior_run_artifacts --
+    # is still proven.
+    ctx = _ctx(_pristine_registry(tmp_path), repo_root=pristine_oq_repo)
     report = O.preflight_report(ctx, expect_state="pristine")
     assert report.passed, _failed_gates(report)
     # assert_preflight (fail-closed) returns one detail per gate.
@@ -102,9 +105,9 @@ def test_full_preflight_passes_on_the_real_tree(tmp_path: Path) -> None:
 # The lifecycle transitions + the calculation-before-start proof              #
 # --------------------------------------------------------------------------- #
 @_OQ_312_ONLY
-def test_register_then_start_yields_a_started_token(tmp_path: Path) -> None:
+def test_register_then_start_yields_a_started_token(tmp_path: Path, pristine_oq_repo: Path) -> None:
     reg = _pristine_registry(tmp_path)
-    ctx = _ctx(reg)
+    ctx = _ctx(reg, repo_root=pristine_oq_repo)
     O.register_qualification(ctx, event_time_utc="2026-07-22T00:00:00Z", reason="OQ-R")
     assert registry_state(reg) == "registered"
     token = O.start_qualification(ctx, event_time_utc="2026-07-22T00:00:01Z", reason="OQ-P")
@@ -119,16 +122,16 @@ def test_register_then_start_yields_a_started_token(tmp_path: Path) -> None:
 
 
 @_OQ_312_ONLY
-def test_start_refuses_a_pristine_registry(tmp_path: Path) -> None:
-    ctx = _ctx(_pristine_registry(tmp_path))
+def test_start_refuses_a_pristine_registry(tmp_path: Path, pristine_oq_repo: Path) -> None:
+    ctx = _ctx(_pristine_registry(tmp_path), repo_root=pristine_oq_repo)
     with pytest.raises(O.OQOrchestratorError, match=r"registry state|does not permit"):
         O.start_qualification(ctx, event_time_utc="2026-07-22T00:00:00Z", reason="OQ-P")
 
 
 @_OQ_312_ONLY
-def test_register_refuses_a_non_pristine_registry(tmp_path: Path) -> None:
+def test_register_refuses_a_non_pristine_registry(tmp_path: Path, pristine_oq_repo: Path) -> None:
     reg = _pristine_registry(tmp_path)
-    ctx = _ctx(reg)
+    ctx = _ctx(reg, repo_root=pristine_oq_repo)
     O.register_qualification(ctx, event_time_utc="2026-07-22T00:00:00Z", reason="OQ-R")
     with pytest.raises(O.OQOrchestratorError, match=r"registry state|does not permit"):
         O.register_qualification(ctx, event_time_utc="2026-07-22T00:00:02Z", reason="again")

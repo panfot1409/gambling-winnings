@@ -60,7 +60,7 @@ def _identity() -> QualificationIdentity:
 
 
 @pytest.fixture(scope="module")
-def built() -> tuple[dict[str, Any], Path, Path]:
+def built(pristine_oq_repo: Path) -> tuple[dict[str, Any], Path, Path]:
     """Publish + finalize one run; return (result dict, repo_root, registry_path)."""
     if sys.version_info[:2] != (3, 12):
         pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
@@ -73,9 +73,9 @@ def built() -> tuple[dict[str, Any], Path, Path]:
     reg.parent.mkdir(parents=True, exist_ok=True)
     reg.write_bytes(b"")
     ctx = O.QualificationContext(
-        repo_root=REPO,
+        repo_root=pristine_oq_repo,
         registry_path=reg,
-        supersession_path=REPO / OQ_SUPERSESSION_PATH,
+        supersession_path=pristine_oq_repo / OQ_SUPERSESSION_PATH,
         identity=ident,
         source_freeze_id="oq_e2",
         source_freeze_commit="a" * 40,

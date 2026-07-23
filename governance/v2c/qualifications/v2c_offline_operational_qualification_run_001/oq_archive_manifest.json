@@ -1,0 +1,14 @@
+{
+  "artifact_id": "v2c_oq_archive_manifest",
+  "artifacts": {
+    "oq_report.md": "9658ffc1feda560fe6434401ada1bbf0b264921ae3217c8689f391896c7c0c4e",
+    "oq_result.json": "739cec5dca07b984d6fb624384e490dcab7722c5341053790d5ba8cd1945b897"
+  },
+  "evidence_sha256": "216c14473ec0f23e31326e9f62082586e746d4706a0e7b3251e8f9abcbbdd103",
+  "manifest_digest": "24ad1f4dd26d512c435039a3e5f275f2dc5297f13237401c084ef68c8130300e",
+  "methodology_id": "v2c_offline_operational_qualification",
+  "package_version": "2.0.0.dev2",
+  "qualification_id": "v2c_offline_operational_qualification_run_001",
+  "schema_version": 1,
+  "verdict": "qualified"
+}

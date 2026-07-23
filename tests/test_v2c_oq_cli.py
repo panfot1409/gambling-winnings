@@ -60,15 +60,17 @@ def _run(argv: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, dict
 # --------------------------------------------------------------------------- #
 # Pristine (not-yet-run) tree                                                 #
 # --------------------------------------------------------------------------- #
-def test_status_pristine(capsys: pytest.CaptureFixture[str]) -> None:
-    code, payload = _run(["status", "--repo-root", str(REPO)], capsys)
+def test_status_pristine(pristine_oq_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    code, payload = _run(["status", "--repo-root", str(pristine_oq_repo)], capsys)
     assert code == 0
     assert payload["registry_state"] == "pristine"
     assert payload["pending_completion_intent"] is False
 
 
-def test_replay_pristine_reproduces_governance(capsys: pytest.CaptureFixture[str]) -> None:
-    code, payload = _run(["replay", "--repo-root", str(REPO)], capsys)
+def test_replay_pristine_reproduces_governance(
+    pristine_oq_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, payload = _run(["replay", "--repo-root", str(pristine_oq_repo)], capsys)
     assert code == 0
     checks = payload["checks"]
     assert isinstance(checks, list)
@@ -79,14 +81,18 @@ def test_replay_pristine_reproduces_governance(capsys: pytest.CaptureFixture[str
     assert "registry_pristine_no_run_registered" in checks
 
 
-def test_verify_pristine_is_a_noop(capsys: pytest.CaptureFixture[str]) -> None:
-    code, payload = _run(["verify", "--repo-root", str(REPO)], capsys)
+def test_verify_pristine_is_a_noop(
+    pristine_oq_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, payload = _run(["verify", "--repo-root", str(pristine_oq_repo)], capsys)
     assert code == 0
     assert payload["checks"] == []
 
 
-def test_recover_pristine_has_no_intent(capsys: pytest.CaptureFixture[str]) -> None:
-    code, payload = _run(["recover", "--repo-root", str(REPO)], capsys)
+def test_recover_pristine_has_no_intent(
+    pristine_oq_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, payload = _run(["recover", "--repo-root", str(pristine_oq_repo)], capsys)
     assert code == 0
     assert payload["state"] == Fz.STATE_NO_INTENT
 
@@ -95,7 +101,7 @@ def test_recover_pristine_has_no_intent(capsys: pytest.CaptureFixture[str]) -> N
 # Completed run in a temp tree                                                #
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
-def completed_repo() -> tuple[Path, Path]:
+def completed_repo(pristine_oq_repo: Path) -> tuple[Path, Path]:
     if sys.version_info[:2] != (3, 12):
         pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
     ident = _identity()
@@ -107,9 +113,9 @@ def completed_repo() -> tuple[Path, Path]:
     reg.parent.mkdir(parents=True, exist_ok=True)
     reg.write_bytes(b"")
     ctx = O.QualificationContext(
-        repo_root=REPO,
+        repo_root=pristine_oq_repo,
         registry_path=reg,
-        supersession_path=REPO / OQ_SUPERSESSION_PATH,
+        supersession_path=pristine_oq_repo / OQ_SUPERSESSION_PATH,
         identity=ident,
         source_freeze_id="oq_e2",
         source_freeze_commit="a" * 40,

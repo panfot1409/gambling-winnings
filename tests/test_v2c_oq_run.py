@@ -47,11 +47,11 @@ def _identity() -> QualificationIdentity:
     )
 
 
-def _ctx(reg: Path) -> O.QualificationContext:
+def _ctx(reg: Path, repo_root: Path) -> O.QualificationContext:
     return O.QualificationContext(
-        repo_root=REPO,
+        repo_root=repo_root,
         registry_path=reg,
-        supersession_path=REPO / OQ_SUPERSESSION_PATH,
+        supersession_path=repo_root / OQ_SUPERSESSION_PATH,
         identity=_identity(),
         source_freeze_id="oq_e2",
         source_freeze_commit="a" * 40,
@@ -60,14 +60,14 @@ def _ctx(reg: Path) -> O.QualificationContext:
 
 
 @pytest.fixture(scope="module")
-def outcome() -> R.QualificationOutcome:
+def outcome(pristine_oq_repo: Path) -> R.QualificationOutcome:
     """Run the full qualification once (expensive) and share it across the module's tests."""
     if sys.version_info[:2] != (3, 12):
         pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
     tmp = Path(tempfile.mkdtemp())
     reg = tmp / "reg.jsonl"
     reg.write_bytes(b"")
-    ctx = _ctx(reg)
+    ctx = _ctx(reg, pristine_oq_repo)
     O.register_qualification(ctx, event_time_utc="2026-07-22T00:00:00Z", reason="OQ-R")
     token = O.start_qualification(ctx, event_time_utc="2026-07-22T00:00:01Z", reason="OQ-P")
     return R.execute_qualification(token, workdir=tmp / "work", slots=_SLOTS)

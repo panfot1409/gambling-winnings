@@ -56,11 +56,11 @@ def _identity() -> QualificationIdentity:
     )
 
 
-def _ctx(reg: Path) -> O.QualificationContext:
+def _ctx(reg: Path, repo_root: Path) -> O.QualificationContext:
     return O.QualificationContext(
-        repo_root=REPO,
+        repo_root=repo_root,
         registry_path=reg,
-        supersession_path=REPO / OQ_SUPERSESSION_PATH,
+        supersession_path=repo_root / OQ_SUPERSESSION_PATH,
         identity=_identity(),
         source_freeze_id="oq_e2",
         source_freeze_commit="a" * 40,
@@ -68,24 +68,24 @@ def _ctx(reg: Path) -> O.QualificationContext:
     )
 
 
-def _started(tmp_path: Path) -> tuple[Path, O.StartedToken]:
+def _started(tmp_path: Path, repo_root: Path) -> tuple[Path, O.StartedToken]:
     """A fresh registry advanced to registered -> started (fast; no execution)."""
     if sys.version_info[:2] != (3, 12):
         pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
     reg = tmp_path / "governance/v2c/oq_registry.jsonl"
     reg.parent.mkdir(parents=True, exist_ok=True)
     reg.write_bytes(b"")
-    ctx = _ctx(reg)
+    ctx = _ctx(reg, repo_root)
     O.register_qualification(ctx, event_time_utc="2026-07-22T00:00:00Z", reason="OQ-R")
     token = O.start_qualification(ctx, event_time_utc="2026-07-22T00:00:01Z", reason="OQ-P")
     return reg, token
 
 
 @pytest.fixture(scope="module")
-def archive() -> A.OQArchive:
+def archive(pristine_oq_repo: Path) -> A.OQArchive:
     """Execute the qualification once and assemble its archive (shared across the module)."""
     tmp = Path(tempfile.mkdtemp())
-    _, token = _started(tmp)
+    _, token = _started(tmp, pristine_oq_repo)
     outcome = R.execute_qualification(token, workdir=tmp / "work", slots=_SLOTS)
     return A.build_oq_archive(outcome, identity=_identity())
 
@@ -135,8 +135,10 @@ def test_publish_writes_immutable_artifacts_and_refuses_overwrite(
 # --------------------------------------------------------------------------- #
 # The completion intent                                                       #
 # --------------------------------------------------------------------------- #
-def test_completion_intent_round_trips(archive: A.OQArchive, tmp_path: Path) -> None:
-    _, token = _started(tmp_path)
+def test_completion_intent_round_trips(
+    archive: A.OQArchive, tmp_path: Path, pristine_oq_repo: Path
+) -> None:
+    _, token = _started(tmp_path, pristine_oq_repo)
     intent = _intent(archive, token)
     parsed = C.OQCompletionIntent.from_json_bytes(intent.to_json_bytes())
     assert parsed == intent
@@ -145,9 +147,9 @@ def test_completion_intent_round_trips(archive: A.OQArchive, tmp_path: Path) -> 
 
 
 def test_completion_intent_refuses_artifact_outside_archive(
-    archive: A.OQArchive, tmp_path: Path
+    archive: A.OQArchive, tmp_path: Path, pristine_oq_repo: Path
 ) -> None:
-    _, token = _started(tmp_path)
+    _, token = _started(tmp_path, pristine_oq_repo)
     raw = json.loads(_intent(archive, token).to_json_bytes())
     raw["artifacts"] = [["governance/v2c/elsewhere.json", "a" * 64]]
     # The intent's artifact relpaths are bound to the exact known archive artifacts (a hardening
@@ -158,8 +160,10 @@ def test_completion_intent_refuses_artifact_outside_archive(
         C.OQCompletionIntent.from_json_bytes(json.dumps(raw).encode())
 
 
-def test_completion_intent_refuses_bad_verdict(archive: A.OQArchive, tmp_path: Path) -> None:
-    _, token = _started(tmp_path)
+def test_completion_intent_refuses_bad_verdict(
+    archive: A.OQArchive, tmp_path: Path, pristine_oq_repo: Path
+) -> None:
+    _, token = _started(tmp_path, pristine_oq_repo)
     raw = json.loads(_intent(archive, token).to_json_bytes())
     raw["verdict"] = "spectacular"
     with pytest.raises(C.OQCompletionIntentError, match="verdict"):
@@ -170,9 +174,9 @@ def test_completion_intent_refuses_bad_verdict(archive: A.OQArchive, tmp_path: P
 # The calculation-free finalizer                                              #
 # --------------------------------------------------------------------------- #
 def test_crash_after_publish_finalizes_without_recomputation(
-    archive: A.OQArchive, tmp_path: Path
+    archive: A.OQArchive, tmp_path: Path, pristine_oq_repo: Path
 ) -> None:
-    reg, token = _started(tmp_path)
+    reg, token = _started(tmp_path, pristine_oq_repo)
     intent = _intent(archive, token)
     C.write_completion_intent(tmp_path, intent)
     A.publish_oq_archive(tmp_path, archive)  # crash here: 'completed' never appended
@@ -185,14 +189,16 @@ def test_crash_after_publish_finalizes_without_recomputation(
     assert C.read_completion_intent(tmp_path) is None  # cleared
 
 
-def test_finalize_is_noop_without_an_intent(tmp_path: Path) -> None:
-    reg, _ = _started(tmp_path)
+def test_finalize_is_noop_without_an_intent(tmp_path: Path, pristine_oq_repo: Path) -> None:
+    reg, _ = _started(tmp_path, pristine_oq_repo)
     assert F.assess(tmp_path, reg).state == F.STATE_NO_INTENT
     assert F.finalize(tmp_path, reg).state == F.STATE_NO_INTENT
 
 
-def test_finalize_refuses_a_missing_artifact(archive: A.OQArchive, tmp_path: Path) -> None:
-    reg, token = _started(tmp_path)
+def test_finalize_refuses_a_missing_artifact(
+    archive: A.OQArchive, tmp_path: Path, pristine_oq_repo: Path
+) -> None:
+    reg, token = _started(tmp_path, pristine_oq_repo)
     C.write_completion_intent(tmp_path, _intent(archive, token))
     # Never published the archive: the recorded artifacts are absent.
     status = F.assess(tmp_path, reg)
@@ -200,8 +206,10 @@ def test_finalize_refuses_a_missing_artifact(archive: A.OQArchive, tmp_path: Pat
     assert "incomplete" in status.detail
 
 
-def test_finalize_refuses_a_mismatched_started_chain(archive: A.OQArchive, tmp_path: Path) -> None:
-    reg, _ = _started(tmp_path)
+def test_finalize_refuses_a_mismatched_started_chain(
+    archive: A.OQArchive, tmp_path: Path, pristine_oq_repo: Path
+) -> None:
+    reg, _ = _started(tmp_path, pristine_oq_repo)
     intent = C.build_completion_intent(
         archive,
         identity=_identity(),

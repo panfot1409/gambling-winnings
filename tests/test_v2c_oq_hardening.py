@@ -67,7 +67,9 @@ def _identity() -> QualificationIdentity:
 
 
 @pytest.fixture(scope="module")
-def published() -> tuple[Path, Path, OQCompletionIntent, QualificationIdentity]:
+def published(
+    pristine_oq_repo: Path,
+) -> tuple[Path, Path, OQCompletionIntent, QualificationIdentity]:
     """Register + start + execute + publish one run WITHOUT finalizing; keep the intent/archive."""
     if sys.version_info[:2] != (3, 12):
         pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
@@ -80,9 +82,9 @@ def published() -> tuple[Path, Path, OQCompletionIntent, QualificationIdentity]:
     reg.parent.mkdir(parents=True, exist_ok=True)
     reg.write_bytes(b"")
     ctx = O.QualificationContext(
-        repo_root=REPO,
+        repo_root=pristine_oq_repo,
         registry_path=reg,
-        supersession_path=REPO / OQ_SUPERSESSION_PATH,
+        supersession_path=pristine_oq_repo / OQ_SUPERSESSION_PATH,
         identity=ident,
         source_freeze_id="oq_e2",
         source_freeze_commit="a" * 40,
