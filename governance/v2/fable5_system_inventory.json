@@ -372,6 +372,7 @@
     "src/eth_research/v2/fable5/__init__.py",
     "src/eth_research/v2/fable5/__main__.py",
     "src/eth_research/v2/fable5/inventory.py",
+    "src/eth_research/v2/fable5/paper_readiness.py",
     "src/eth_research/v2/lineage.py",
     "src/eth_research/v2/orchestrator.py",
     "src/eth_research/v2/partitions.py",
@@ -545,8 +546,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "440c34d72e966528904579d5c77266192ea9de916b6370ca69a2dc251d84365e",
-  "tracked_file_count": 994,
+  "surface_digest": "b229254fbfe676cf84612f0e579444a35196ecdf1e6a330b3c40534b261d5d5d",
+  "tracked_file_count": 1001,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
