@@ -13,6 +13,13 @@ It evaluates **no strategy**, reads **no** sealed value, and mutates **no** gove
 
 from __future__ import annotations
 
+from eth_research.v2.fable5.freeze import (
+    FABLE5_SOURCE_FREEZE_RELPATH,
+    Fable5FreezeError,
+    build_source_freeze,
+    load_committed_freeze,
+    verify_source_freeze,
+)
 from eth_research.v2.fable5.inventory import (
     FABLE5_INVENTORY_RELPATH,
     Fable5InventoryError,
@@ -30,13 +37,18 @@ from eth_research.v2.fable5.paper_readiness import (
 
 __all__ = [
     "FABLE5_INVENTORY_RELPATH",
+    "FABLE5_SOURCE_FREEZE_RELPATH",
     "PAPER_ACTIVATION_GATES",
     "PAPER_READINESS_RELPATH",
+    "Fable5FreezeError",
     "Fable5InventoryError",
     "PaperReadinessError",
     "PaperReadinessState",
+    "build_source_freeze",
     "build_system_inventory",
     "derive_paper_readiness",
+    "load_committed_freeze",
     "verify_paper_readiness",
+    "verify_source_freeze",
     "verify_system_inventory",
 ]

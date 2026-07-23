@@ -187,13 +187,30 @@ def _has_unpinned_uses(text: str) -> bool:
     return False
 
 
+# The Fable 5 audit's own governance outputs. These are the audit's *records*, frozen by
+# ``governance/v2/fable5_source_freeze.json`` (and, for the inventory, by build-then-verify), not
+# part of the platform surface the inventory snapshots. They are excluded from the governed
+# enumeration to avoid a circular pin between the inventory and the source freeze; they are still
+# structurally confined by the scan above.
+FABLE5_AUDIT_GOVERNANCE_RELPATHS: frozenset[str] = frozenset(
+    {
+        FABLE5_INVENTORY_RELPATH,
+        "governance/v2/fable5_findings.json",
+        "governance/v2/fable5_remediation_state.json",
+        "governance/v2/fable5_audit_manifest.json",
+        "governance/v2/paper_readiness_state.json",
+        "governance/v2/fable5_source_freeze.json",
+    }
+)
+
+
 def _enumerate_governed(root: Path) -> dict[str, str]:
     governed: dict[str, str] = {}
     for rel_root in ("governance", "release"):
         for path in _iter_files(root, rel_root):
             relpath = _rel(root, path)
-            if relpath == FABLE5_INVENTORY_RELPATH:
-                continue  # the inventory cannot record its own hash
+            if relpath in FABLE5_AUDIT_GOVERNANCE_RELPATHS:
+                continue  # audit's own records; frozen by the source freeze, not governed here
             governed[relpath] = _sha256_file(path)
     return governed
 

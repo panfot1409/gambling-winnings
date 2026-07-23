@@ -371,6 +371,7 @@
     "src/eth_research/v2/evidence.py",
     "src/eth_research/v2/fable5/__init__.py",
     "src/eth_research/v2/fable5/__main__.py",
+    "src/eth_research/v2/fable5/freeze.py",
     "src/eth_research/v2/fable5/inventory.py",
     "src/eth_research/v2/fable5/paper_readiness.py",
     "src/eth_research/v2/lineage.py",
@@ -546,8 +547,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "b229254fbfe676cf84612f0e579444a35196ecdf1e6a330b3c40534b261d5d5d",
-  "tracked_file_count": 1001,
+  "surface_digest": "926913c7846b2124c02f2a17eae5a14d79cc22b697299b8e525e30282949c7b2",
+  "tracked_file_count": 1009,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
@@ -625,6 +626,12 @@
       "declares_write_permission": false,
       "has_unpinned_uses": false,
       "sha256": "049a43b31e826249d90245c4a6d9cec6fba74135fd7c6a79ac6c7a99b6de6bc9",
+      "uses_secrets": false
+    },
+    "v2-fable5-replay.yml": {
+      "declares_write_permission": false,
+      "has_unpinned_uses": false,
+      "sha256": "2d0ccd6852ba64cf55186a5557cea4bd437fef8f98f70fd418783db94f81506f",
       "uses_secrets": false
     },
     "v2a-replay.yml": {

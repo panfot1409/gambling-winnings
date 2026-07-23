@@ -1,0 +1,36 @@
+{
+  "baseline_merge_commit": "09fc9c0204a3cd71e0c7c84ba9dd605b9a5f811b",
+  "expected_sealed_ledgers": {
+    "research/m2b/test_evaluations.jsonl": {
+      "byte_count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "research/m3a/development_gate_access.jsonl": {
+      "byte_count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "research/m3d/prospective_evaluations.jsonl": {
+      "byte_count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "forbidden_capabilities_absent": true,
+  "frozen_governance_sha256": {
+    "governance/v2/fable5_audit_manifest.json": "f2df23b2a080a09045280a568d75f66e5e129748c35f79d40e8063b5defbb371",
+    "governance/v2/fable5_findings.json": "b43ca17929bf7c8ad5dc66890efb1fb5216140d461cd77c62cf41593a47c72a1",
+    "governance/v2/fable5_remediation_state.json": "0871ca0c91fa98c096fcc400d76ed540aa35752eee7e41d5d3eb368162b39847",
+    "governance/v2/fable5_system_inventory.json": "681c214adcb72daa00d396900b4c7344a51b7583888cdc64db9f9381e17fccc3",
+    "governance/v2/paper_readiness_state.json": "972278500259782b8a8ddaa2540dd308f1f6b8d6fee26a1a12ab0858e94e1971"
+  },
+  "frozen_source_sha256": {
+    "src/eth_research/fractional/engine.py": "68a746c8b1b8391f7956600831d917fcc59ebc61bb2a52fc16883065c1b6b4f7",
+    "src/eth_research/v2/fable5/__init__.py": "4132cea542d78bf791f4c84028c1e48bc48f4726a2af675313d1643919d3b108",
+    "src/eth_research/v2/fable5/__main__.py": "ff37771c94fa72ed694bc6c83debd64faf4c6bbd7170f479e672274984b53645",
+    "src/eth_research/v2/fable5/freeze.py": "0cdd0553915ddb277aec4c23dd01931354736aa5f33db460a60acc1506ba338c",
+    "src/eth_research/v2/fable5/inventory.py": "2760364e552a2060b6da287bd7831f770b596b0b97f9869499460a950ab616f5",
+    "src/eth_research/v2/fable5/paper_readiness.py": "5755f5aba6dfde514270b5479b67ed45b98bcf3ff1d548286f684e2e7d543e41",
+    "src/eth_research/v2ab/commercial_truth.py": "9ff0f1f7f827cba0cf7ba37baf11f678c214edf6554ce6983a9ec4c2f638bc70"
+  },
+  "schema_version": 1
+}
+

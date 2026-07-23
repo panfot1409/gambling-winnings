@@ -1,0 +1,82 @@
+{
+  "audit_branch": "claude/v2-fable5-full-system-audit",
+  "baseline_merge_commit": "09fc9c0204a3cd71e0c7c84ba9dd605b9a5f811b",
+  "class_counts": {
+    "A": 0,
+    "B": 0,
+    "C": 5,
+    "D": 0
+  },
+  "findings": [
+    {
+      "accepted_artifact_impact": "none",
+      "class": "C",
+      "id": "F5-C1",
+      "regression_tests": [
+        "tests/test_v2_fable5_remediation.py::test_scanner_negation_no_longer_fails_open",
+        "tests/test_v2_fable5_remediation.py::test_scanner_still_exempts_legitimate_negations_and_markers",
+        "tests/test_v2_fable5_remediation.py::test_committed_sales_surface_stays_clean"
+      ],
+      "sealed_impact": "none",
+      "severity": "low",
+      "status": "fixed_forward",
+      "title": "Sales-honesty scanner failed OPEN on a distant / cross-clause negator"
+    },
+    {
+      "accepted_artifact_impact": "none",
+      "class": "C",
+      "id": "F5-C1-note",
+      "regression_tests": [
+        "tests/test_v2_fable5_remediation.py::test_paragraph_marker_exemption_is_intentional_author_controlled"
+      ],
+      "sealed_impact": "none",
+      "severity": "low",
+      "status": "accepted_by_design",
+      "title": "Paragraph example-marker exemption (author-controlled, by design)"
+    },
+    {
+      "accepted_artifact_impact": "none",
+      "class": "C",
+      "id": "F5-C2",
+      "regression_tests": [
+        "tests/test_v2_fable5_remediation.py::test_terminal_liquidation_never_crashes_on_collapsed_liquidity",
+        "tests/test_v2_fable5_catastrophe.py::test_cat5_collapsed_liquidity_is_finite_and_safe"
+      ],
+      "sealed_impact": "none",
+      "severity": "low",
+      "status": "fixed_forward",
+      "title": "Terminal hypothetical liquidation crashed on collapsed trailing liquidity"
+    },
+    {
+      "accepted_artifact_impact": "none",
+      "class": "C",
+      "id": "F5-N1",
+      "regression_tests": [],
+      "sealed_impact": "none",
+      "severity": "low",
+      "status": "documented_readiness_gap",
+      "title": "`failed` OQ terminal event has no producer (documented readiness gap)"
+    },
+    {
+      "accepted_artifact_impact": "none",
+      "class": "C",
+      "id": "F5-N2",
+      "regression_tests": [
+        "tests/test_v2c_oq_committed_run.py::test_committed_digests_re_derive_from_the_frozen_source"
+      ],
+      "sealed_impact": "none",
+      "severity": "low",
+      "status": "covered_by_v2c_c001",
+      "title": "Offline verifier does not self-re-bind frozen-input digests (covered by V2C C-001)"
+    }
+  ],
+  "no_unresolved_class_abd": true,
+  "schema_version": 1,
+  "taxonomy": {
+    "A": "scientific / accounting / financial / evidence / claim",
+    "B": "security / governance / provenance / lifecycle / buyer-boundary",
+    "C": "defense-in-depth / diagnostics / docs / test-strength",
+    "D": "sealed-partition access / immutable accepted-result drift / one-shot corruption / public exposure / uncontrolled-exposure capability (hard stop)"
+  }
+}
+

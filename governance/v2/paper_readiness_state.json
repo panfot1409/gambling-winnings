@@ -1,0 +1,29 @@
+{
+  "blocking_gates": [
+    "eligible_paper_candidate_present",
+    "candidate_lineage_valid",
+    "strategy_specification_immutable",
+    "paper_release_candidate_frozen",
+    "paper_duration_and_success_criteria_preregistered",
+    "human_activation_approval_recorded"
+  ],
+  "eligible_paper_candidate_present": false,
+  "gates": {
+    "candidate_lineage_valid": false,
+    "eligible_paper_candidate_present": false,
+    "human_activation_approval_recorded": false,
+    "no_unresolved_class_abd_finding": true,
+    "paper_duration_and_success_criteria_preregistered": false,
+    "paper_release_candidate_frozen": false,
+    "platform_audit_complete": true,
+    "platform_hardened": true,
+    "repository_private": true,
+    "sealed_partitions_untouched": true,
+    "strategy_specification_immutable": false
+  },
+  "paper_activation_authorized": false,
+  "paper_trading_active": false,
+  "schema_version": 1,
+  "sell_ready": false
+}
+
