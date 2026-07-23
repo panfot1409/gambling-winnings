@@ -1,7 +1,8 @@
 {
   "categories": {
     "activation_anchors": [
-      "governance/v2c/oq_e2_activation.json"
+      "governance/v2c/oq_e2_activation.json",
+      "governance/v2d/prospective_activation.json"
     ],
     "archives": [
       "governance/v2c/qualifications/v2c_offline_operational_qualification_run_001/oq_archive_manifest.json",
@@ -89,7 +90,8 @@
     "src/eth_research/v2c/oq/cli.py",
     "src/eth_research/v2c/oq/freeze.py",
     "src/eth_research/v2c/oq/protocol.py",
-    "src/eth_research/v2c/oq/verify_archive.py"
+    "src/eth_research/v2c/oq/verify_archive.py",
+    "src/eth_research/v2d/__main__.py"
   ],
   "console_scripts": [
     "eth-research"
@@ -114,6 +116,7 @@
     "governance/v2c/qualifications/v2c_offline_operational_qualification_run_001/oq_archive_manifest.json": "68f6c49ef2d7ad94f077e1d75c10582073b347420b55e401ee9ea7d447721980",
     "governance/v2c/qualifications/v2c_offline_operational_qualification_run_001/oq_report.md": "9658ffc1feda560fe6434401ada1bbf0b264921ae3217c8689f391896c7c0c4e",
     "governance/v2c/qualifications/v2c_offline_operational_qualification_run_001/oq_result.json": "739cec5dca07b984d6fb624384e490dcab7722c5341053790d5ba8cd1945b897",
+    "governance/v2d/prospective_activation.json": "6f6d7410a05bd21515fb398e73b99aca7ef6dc1574f8b2aa88899827b809d746",
     "release/private/v1.1.0/README.md": "44635eaaf44ad252c788e1e463d1c4a5e5b59d592f8931e9ce370b951a3071ab",
     "release/private/v1.1.0/private_distribution_policy.json": "22f42d7854eec8a8f59fc37b2e1fd85e027d337d0b03ce006797c227f2e1a081",
     "release/private/v1.1.0/private_install_contract.json": "b8db651e26ad517381e5e15d2e9c27a05ecf44a0cd6d808ddf6e9d9021b36d51",
@@ -459,6 +462,9 @@
     "src/eth_research/v2c/proposal_generator.py",
     "src/eth_research/v2c/prospective.py",
     "src/eth_research/v2c/readiness.py",
+    "src/eth_research/v2d/__init__.py",
+    "src/eth_research/v2d/__main__.py",
+    "src/eth_research/v2d/activation.py",
     "src/eth_research/walkforward.py"
   ],
   "public_api": [
@@ -547,8 +553,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "926913c7846b2124c02f2a17eae5a14d79cc22b697299b8e525e30282949c7b2",
-  "tracked_file_count": 1009,
+  "surface_digest": "1f64aec819a306e5d81cb4b1fef23c314d98c5eb59ed5d316cd4a930cb2737ab",
+  "tracked_file_count": 1019,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
