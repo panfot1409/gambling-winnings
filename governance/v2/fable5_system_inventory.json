@@ -261,6 +261,7 @@
     "src/eth_research/m3d/replay.py",
     "src/eth_research/m3d/segment.py",
     "src/eth_research/m3d/status.py",
+    "src/eth_research/m3d/update_attempts.py",
     "src/eth_research/m3d/validation.py",
     "src/eth_research/m3d/verify_m3d_program.py",
     "src/eth_research/m3e/__init__.py",
@@ -553,8 +554,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "1f64aec819a306e5d81cb4b1fef23c314d98c5eb59ed5d316cd4a930cb2737ab",
-  "tracked_file_count": 1019,
+  "surface_digest": "8cb3d87b06e7dc2be8295993a9fd9219633a23844ddd86711a364c204447953f",
+  "tracked_file_count": 1020,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
