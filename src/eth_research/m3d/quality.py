@@ -22,7 +22,7 @@ from typing import Any
 import pandas as pd
 
 from eth_research.m3d import _upstream as up
-from eth_research.m3d.raw_bundle import build_raw_bundles, combined_canonical_rows
+from eth_research.m3d.raw_bundle import combined_canonical_rows
 from eth_research.m3d.validation import (
     M3DValidationError,
     canonical_json_bytes,
@@ -62,8 +62,9 @@ _ERROR_CATEGORIES = (
 
 def _build_document(repo_root: str | Path) -> dict[str, Any]:
     from eth_research.m3d import M3D_PACKAGE_VERSION
+    from eth_research.m3d.update_attempts import build_accepted_raw_bundles
 
-    bundles = build_raw_bundles(repo_root, PRIMARY_ATTEMPT_ID)
+    bundles, update_entries = build_accepted_raw_bundles(repo_root)
     rows = combined_canonical_rows(bundles)
     if not rows:
         raise M3DValidationError("no prospective rows to audit")
@@ -98,7 +99,7 @@ def _build_document(repo_root: str | Path) -> dict[str, Any]:
         if earlier[4] > 0.0 and abs(later[4] / earlier[4] - 1.0) > _EXTREME_MOVE_FRACTION
     ]
 
-    return {
+    document: dict[str, Any] = {
         "schema_version": QUALITY_SCHEMA_VERSION,
         "kind": QUALITY_KIND,
         "package_version": M3D_PACKAGE_VERSION,
@@ -117,6 +118,11 @@ def _build_document(repo_root: str | Path) -> dict[str, Any]:
         ],
         "total_errors": sum(errors.values()),
     }
+    # V2D growth: audited rows span genesis + landed updates. The key appears only
+    # once an update has landed, so the pre-growth report stays byte-identical.
+    if update_entries:
+        document["update_attempt_ids"] = [str(e["attempt_id"]) for e in update_entries]
+    return document
 
 
 def _finding(category: str, timestamps: list[str]) -> dict[str, Any]:

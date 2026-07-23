@@ -56,6 +56,7 @@ _ALLOWED_ETH_RESEARCH: frozenset[str] = frozenset(
         "eth_research.m3d.receipt",
         "eth_research.m3d.raw_bundle",
         "eth_research.m3d.segment",
+        "eth_research.m3d.update_attempts",
         "eth_research.m3d.cohort",
         "eth_research.m3d.protocol",
         "eth_research.m3d.quality",
