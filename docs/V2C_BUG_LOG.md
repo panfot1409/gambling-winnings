@@ -39,3 +39,42 @@ irreversible-governance) defect is a terminal stop.
   supersession is refused; symlink substitution, duplicate ids, and a bound replacement that is
   itself superseded are refused; the live-state recorder binds the real registry/sealed-ledger SHAs.
 - **Status:** fixed; committed before the first registry mutation.
+
+## C-001 — Committed OQ digest did not re-derive from the frozen source (provenance)
+
+- **Class:** C (robustness / provenance). No scientific impact; no sealed-state impact.
+- **Found:** by the post-qualification red team (Auditor A Finding 1; Auditor B item 4, independently),
+  against the committed run at `530f182`.
+- **Symptom:** the shipped offline verifier (`verify_oq_run_archive`, the `replay`/`verify` CLIs, the
+  OQ-Q oracle) proves the published archive is internally consistent, independently accepted, and
+  hash-immutable, but never re-executes the frozen source — so it cannot distinguish a genuine run
+  from a self-consistent fabrication of `oq_result.json` (with every dependent digest and the registry
+  chain recomputed). The certification test pinned the terminal digests only as string literals (a
+  self-referential read-back). Auditor A demonstrated a PoC forgery (`accepted_count = 3999`,
+  structurally impossible for the frozen source) that passed `replay`(16), `verify`(10), and the
+  oracle.
+- **Why it is not a hard stop:** no false scientific claim and no sealed-state change. The genuine
+  committed run is unaffected; the gap was in *detection strength*, not in the run. Re-executing the
+  frozen source at the canonical `slots = 3800` reproduces the committed digests exactly, so the
+  committed run is provably genuine.
+- **Fix:** `tests/test_v2c_oq_committed_run.py::test_committed_digests_re_derive_from_the_frozen_source`
+  registers → starts → executes → `build_oq_archive` from the isolated `pristine_oq_repo` copy of the
+  frozen source at `slots = 3800` and asserts the re-derived `result_sha256` / `result_bundle_sha256`
+  equal the committed literals. A forged result cannot pass both this and the read-back assertions
+  unless the frozen source itself were altered — which `verify_oq_source_freeze` independently
+  refuses. The fix is in the test layer because the verifier/CLI/oracle source is frozen and
+  unmodifiable post-freeze; it runs on the authoritative CPython 3.12 leg (re-execution requires the
+  OQ runtime), while the read-only certification covers 3.13.
+- **Regression tests:** the new test above (3.12 → 9 passed; 3.13 → 8 passed, 1 skipped). The whole
+  V2C OQ suite stays green on both interpreters.
+- **Status:** fixed forward (`a7dee93`); committed after the run, no run artifact changed.
+
+## Post-qualification red team — other findings
+
+Auditors A, B, C, D, E (five independent read-only auditors) raised no other actionable defect. The
+remaining items are Low / by-design / document-only and are recorded in `docs/V2C_FINDINGS.md`
+(F-2, F-3, F-5, F-6, F-7): the pristine-branch CLIs not flagging an orphaned archive (frozen CLI,
+non-forgeable), the fixture's literal relpaths (fail-safe), the frozen narration-vocabulary regex not
+stripping zero-width characters (non-exploitable; authoritative gates are the firewall + numeric
+zero-exposure), the keyless integrity chain (git-anchored, disclosed), and the branch advancing
+during the audit (additive, clean). No Class-A or Class-D defect was found.
