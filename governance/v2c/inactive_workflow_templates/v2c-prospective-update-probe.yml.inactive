@@ -1,0 +1,49 @@
+# =============================================================================
+# INACTIVE TEMPLATE - NOT INSTALLED - NOT A GITHUB ACTIONS WORKFLOW
+# =============================================================================
+# This is a reference template for a FUTURE, separately-human-authorized,
+# read-only "prospective update-due probe" for V2C. It is deliberately kept
+# OUTSIDE .github/workflows and carries a non-YAML ".yml.inactive" suffix, so
+# GitHub Actions never loads it. The final V2C HEAD therefore contains NO new
+# standing write-capable workflow.
+#
+# Activating any prospective-data acquisition is a SEPARATE FUTURE HUMAN
+# DECISION under its own governance. V2C grants no such authorization: it does
+# not fetch real market data, does not install a standing acquisition workflow,
+# and does not create a forward performance record.
+#
+# Even as a template this describes only a READ-ONLY probe: it would compute,
+# offline, whether new completed observations WOULD be due. It fetches no
+# candles, writes nothing, uploads nothing, pushes nothing, opens or merges no
+# pull request, references no secret, and authorizes no evaluation. The actual
+# (write-capable) acquisition is intentionally NOT provided here.
+# =============================================================================
+name: v2c-prospective-update-probe (INACTIVE TEMPLATE - do not install as-is)
+
+on:
+  workflow_dispatch: {}
+  # A future authorized installation MIGHT add a low-frequency schedule here.
+  # Left commented so this template, even if mis-copied, does nothing on its own:
+  # schedule:
+  #   - cron: "0 0 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    # Guard so a mis-copy cannot run outside the owning repository.
+    if: ${{ github.repository == 'panfot1409/gambling-winnings' }}
+    runs-on: ubuntu-latest
+    steps:
+      # On activation, add a checkout pinned to a FULL 40-hex commit SHA, e.g.:
+      #   - uses: actions/checkout@<FULL_40_HEX_COMMIT_SHA>   # never a tag/branch
+      #     with:
+      #       persist-credentials: false
+      - name: Report whether a prospective update would be due (read-only)
+        run: |
+          echo "INACTIVE TEMPLATE: a future authorized probe would compute,"
+          echo "offline, whether new completed observations are due for the"
+          echo "prospective cohort. It fetches nothing, writes nothing, and"
+          echo "authorizes no evaluation. Acquisition requires a separate,"
+          echo "future human authorization that V2C does not grant."

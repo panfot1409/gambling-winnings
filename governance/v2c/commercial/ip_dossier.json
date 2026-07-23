@@ -1,0 +1,52 @@
+{
+  "categories": [
+    {
+      "category_id": "research_methodology",
+      "description": "The pre-registered, cost-aware, bootstrapped research methodology and its firewalled partitions and governance ledgers.",
+      "disclosed_publicly": false,
+      "protection": "private_source_withheld"
+    },
+    {
+      "category_id": "evaluated_candidate_families",
+      "description": "The candidate families evaluated on the research-train partition and the negative evidence that none was nominated; described only in aggregate.",
+      "disclosed_publicly": false,
+      "protection": "private_source_withheld"
+    },
+    {
+      "category_id": "operational_qualification_platform",
+      "description": "The signal-only shadow platform and virtual-time qualification harness, including the fault taxonomy and offline SLO model.",
+      "disclosed_publicly": false,
+      "protection": "private_source_withheld"
+    },
+    {
+      "category_id": "buyer_evaluation_boundary",
+      "description": "The process-isolated buyer boundary, redaction policy, and reference evaluation gateway that serve only a redacted surface.",
+      "disclosed_publicly": false,
+      "protection": "private_source_withheld"
+    },
+    {
+      "category_id": "prospective_governance",
+      "description": "The offline prospective-proposal lifecycle, maturity policy, and source-independent update-proposal format.",
+      "disclosed_publicly": false,
+      "protection": "private_source_withheld"
+    }
+  ],
+  "dossier_id": "v2c_ip_dossier",
+  "honest_limitation": "This dossier is a catalog of IP categories, not the IP itself. It discloses no candidate id, strategy rule, or sealed value. Its purpose is an honest inventory of what is held and how weakly or strongly it is protected.",
+  "not_protected_by": [
+    "no_patent",
+    "no_registered_trademark",
+    "no_license_granted",
+    "no_in_code_enforcement_of_any_nda_or_contract",
+    "no_guarantee_against_reverse_engineering"
+  ],
+  "protected_by": [
+    "private_repository_visibility",
+    "redaction_policy_on_the_buyer_surface",
+    "source_free_buyer_harness",
+    "no_public_publication_vector",
+    "process_isolation_of_the_buyer_client"
+  ],
+  "reverse_engineering_exposure": "A buyer who runs the vendor process observes only the redacted evaluation surface (factsheet, claims catalog, readiness scorecard, contract) and never the private source. That is process isolation and redaction, not a guarantee: it does not prove the core IP cannot be reverse engineered from observed behaviour over time.",
+  "schema_version": 1
+}

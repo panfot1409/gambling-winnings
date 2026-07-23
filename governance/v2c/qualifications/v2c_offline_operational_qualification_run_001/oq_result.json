@@ -1,0 +1,168 @@
+{
+  "artifact_id": "v2c_oq_result",
+  "criteria": [
+    {
+      "criterion": "qualification_coverage",
+      "detail": "2 instrument(s) each covered by a resource and a recovery report",
+      "passed": true
+    },
+    {
+      "criterion": "event_acceptance_correctness",
+      "detail": "every accepted stream monotonic/unique; rejections map to their fault; all flags fired",
+      "passed": true
+    },
+    {
+      "criterion": "duplicate_suppression",
+      "detail": "exact duplicates suppressed on every instrument",
+      "passed": true
+    },
+    {
+      "criterion": "conflicting_duplicate_detection",
+      "detail": "conflicting duplicates rejected and alerted 1:1",
+      "passed": true
+    },
+    {
+      "criterion": "journal_durability",
+      "detail": "journal_durability held",
+      "passed": true
+    },
+    {
+      "criterion": "checkpoint_consistency",
+      "detail": "checkpoint_consistency held",
+      "passed": true
+    },
+    {
+      "criterion": "recovery_idempotency",
+      "detail": "restart_determinism held",
+      "passed": true
+    },
+    {
+      "criterion": "kill_switch_trip_latency",
+      "detail": "kill_switch_trip_drill held",
+      "passed": true
+    },
+    {
+      "criterion": "alert_completeness",
+      "detail": "every runner alert is journaled",
+      "passed": true
+    },
+    {
+      "criterion": "state_reconstruction",
+      "detail": "journal + checkpoint reconstruct exactly",
+      "passed": true
+    },
+    {
+      "criterion": "bounded_processing_memory",
+      "detail": "within deterministic resource bounds",
+      "passed": true
+    },
+    {
+      "criterion": "zero_risky_exposure",
+      "detail": "every fill/intent is zero-exposure; book stays 100% cash",
+      "passed": true
+    }
+  ],
+  "instruments": {
+    "btc_usd": {
+      "accepted_count": 3757,
+      "approved_risky_exposure": 0.0,
+      "fixture_digest": "7605600d11e4bc08ff1a8f26e02b1f738a9b6be2b94bdd55843d2472df78948f",
+      "journal_bytes": 4838928,
+      "journal_events": 15040,
+      "processing_steps": 3757,
+      "recovery_checks": [
+        {
+          "name": "restart_determinism",
+          "passed": true
+        },
+        {
+          "name": "journal_durability",
+          "passed": true
+        },
+        {
+          "name": "checkpoint_consistency",
+          "passed": true
+        },
+        {
+          "name": "corrupted_checkpoint_rejected",
+          "passed": true
+        },
+        {
+          "name": "disk_write_failure_fail_closed",
+          "passed": true
+        },
+        {
+          "name": "kill_switch_trip_drill",
+          "passed": true
+        }
+      ],
+      "recovery_passed": true,
+      "requested_risky_exposure": 0.0,
+      "risky_fill_count": 0,
+      "risky_intent_count": 0,
+      "terminal_book_units": 0.0,
+      "total_cash_control_instructions": 3757,
+      "turnover": 0.0,
+      "within_resource_bounds": true
+    },
+    "eth_usd": {
+      "accepted_count": 3757,
+      "approved_risky_exposure": 0.0,
+      "fixture_digest": "7605600d11e4bc08ff1a8f26e02b1f738a9b6be2b94bdd55843d2472df78948f",
+      "journal_bytes": 4838928,
+      "journal_events": 15040,
+      "processing_steps": 3757,
+      "recovery_checks": [
+        {
+          "name": "restart_determinism",
+          "passed": true
+        },
+        {
+          "name": "journal_durability",
+          "passed": true
+        },
+        {
+          "name": "checkpoint_consistency",
+          "passed": true
+        },
+        {
+          "name": "corrupted_checkpoint_rejected",
+          "passed": true
+        },
+        {
+          "name": "disk_write_failure_fail_closed",
+          "passed": true
+        },
+        {
+          "name": "kill_switch_trip_drill",
+          "passed": true
+        }
+      ],
+      "recovery_passed": true,
+      "requested_risky_exposure": 0.0,
+      "risky_fill_count": 0,
+      "risky_intent_count": 0,
+      "terminal_book_units": 0.0,
+      "total_cash_control_instructions": 3757,
+      "turnover": 0.0,
+      "within_resource_bounds": true
+    }
+  },
+  "methodology_id": "v2c_offline_operational_qualification",
+  "operational_counts": {
+    "approved_risky_exposure": 0.0,
+    "requested_risky_exposure": 0.0,
+    "risky_fill_count": 0,
+    "risky_intent_count": 0,
+    "terminal_book_units": 0.0,
+    "total_cash_control_instructions": 7514,
+    "turnover": 0.0
+  },
+  "package_version": "2.0.0.dev2",
+  "qualification_id": "v2c_offline_operational_qualification_run_001",
+  "result_digest": "216c14473ec0f23e31326e9f62082586e746d4706a0e7b3251e8f9abcbbdd103",
+  "schema_version": 1,
+  "slots": 3800,
+  "statement": "This is an offline operational-qualification result. It reports event-acceptance, durability, resource, and crash/recovery outcomes and the governing zero-exposure counts for the candidate-free cash_control target. It evaluates no strategy and computes no market performance: every risky intent, risky fill, and unit of turnover is zero and the paper book holds 100% cash throughout.",
+  "verdict": "qualified"
+}

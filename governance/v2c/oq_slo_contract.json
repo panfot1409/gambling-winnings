@@ -1,0 +1,37 @@
+{
+  "artifact_id": "v2c_oq_slo_contract",
+  "computes_market_performance": false,
+  "criteria": [
+    "qualification_coverage",
+    "event_acceptance_correctness",
+    "duplicate_suppression",
+    "conflicting_duplicate_detection",
+    "journal_durability",
+    "checkpoint_consistency",
+    "recovery_idempotency",
+    "kill_switch_trip_latency",
+    "alert_completeness",
+    "state_reconstruction",
+    "bounded_processing_memory",
+    "zero_risky_exposure"
+  ],
+  "criterion_descriptions": {
+    "alert_completeness": "every runner alert is journaled",
+    "bounded_processing_memory": "processing and memory stay within deterministic bounds",
+    "checkpoint_consistency": "checkpoints are consistent with the journal",
+    "conflicting_duplicate_detection": "same-time different-bar events are rejected and alerted one-for-one",
+    "duplicate_suppression": "exact duplicates are suppressed on every instrument",
+    "event_acceptance_correctness": "each accepted stream is strictly monotonic and unique; every rejection maps to its injected fault; every fault flag fires; the accepted floor is met",
+    "journal_durability": "the append-only journal is durable and hash-chained",
+    "kill_switch_trip_latency": "the kill switch trips within its drilled latency bound",
+    "qualification_coverage": "the run has at least one instrument and every instrument is covered by a resource report and a recovery report (no vacuous pass)",
+    "recovery_idempotency": "restart/recovery is deterministic and idempotent",
+    "state_reconstruction": "journal and checkpoint reconstruct the state exactly",
+    "zero_risky_exposure": "every fill and intent is exactly zero exposure/notional/turnover; the book stays 100% cash; no exposure-driven kill trip"
+  },
+  "min_accepted_events": 3500,
+  "min_event_slots": 3650,
+  "pass_rule": "a criterion passes only if it holds for every instrument; the verdict passes only if every criterion passes",
+  "schema_version": 1,
+  "slo_contract_digest": "659b4a37bdbe8308e837183c3833964984a080362e8028d1fb9e71944afce7cb"
+}

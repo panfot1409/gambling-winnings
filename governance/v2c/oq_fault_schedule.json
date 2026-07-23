@@ -1,0 +1,72 @@
+{
+  "artifact_id": "v2c_oq_fault_schedule",
+  "default_fault": "normal",
+  "fault_classes": [
+    "conflicting_duplicate",
+    "delayed_receive",
+    "duplicate",
+    "gap",
+    "high_volatility",
+    "normal",
+    "out_of_order",
+    "stale",
+    "zero_volume"
+  ],
+  "fault_schedule_digest": "3e5b810a772ac8bad189d28b8ac5f0627b158164f59774ae10d596227aca1927",
+  "fault_vector_sha256": "dea82deab432b191ff7a4c4c7660cef51a5202fec305abbb2058f47cb3a4308f",
+  "rules": [
+    {
+      "fault": "out_of_order",
+      "modulus": 500,
+      "remainder": 37
+    },
+    {
+      "fault": "conflicting_duplicate",
+      "modulus": 500,
+      "remainder": 53
+    },
+    {
+      "fault": "delayed_receive",
+      "modulus": 500,
+      "remainder": 71
+    },
+    {
+      "fault": "duplicate",
+      "modulus": 250,
+      "remainder": 17
+    },
+    {
+      "fault": "gap",
+      "modulus": 300,
+      "remainder": 29
+    },
+    {
+      "fault": "stale",
+      "modulus": 400,
+      "remainder": 41
+    },
+    {
+      "fault": "zero_volume",
+      "modulus": 200,
+      "remainder": 11
+    },
+    {
+      "fault": "high_volatility",
+      "modulus": 150,
+      "remainder": 7
+    }
+  ],
+  "scheduled_fault_counts": {
+    "conflicting_duplicate": 8,
+    "delayed_receive": 8,
+    "duplicate": 16,
+    "gap": 13,
+    "high_volatility": 26,
+    "normal": 3692,
+    "out_of_order": 8,
+    "stale": 10,
+    "zero_volume": 19
+  },
+  "schema_version": 1,
+  "slots": 3800
+}

@@ -1,0 +1,79 @@
+{
+  "activated": false,
+  "activation_preconditions": [
+    {
+      "description": "A human owner must explicitly authorize any activation; this blueprint grants none and is prepared for review only.",
+      "met": false,
+      "precondition_id": "explicit_human_authorization"
+    },
+    {
+      "description": "Out-of-sample or forward performance evidence would be required; none exists, and V2C evaluates no strategy to create any.",
+      "met": false,
+      "precondition_id": "forward_evidence_qualification"
+    },
+    {
+      "description": "Any connectivity would require a separate, out-of-scope broker/exchange integration and its own security review.",
+      "met": false,
+      "precondition_id": "broker_or_exchange_review"
+    },
+    {
+      "description": "A licensing and commercial decision is an external human gate; the programme's standing posture is not_sell_ready.",
+      "met": false,
+      "precondition_id": "license_and_commercial_decision"
+    },
+    {
+      "description": "A full security and legal review would be required before activation; it has not been performed.",
+      "met": false,
+      "precondition_id": "security_and_legal_review"
+    }
+  ],
+  "blueprint_id": "v2c_offline_operational_deployment",
+  "components": [
+    {
+      "component_id": "execution_firewall",
+      "non_routing": true,
+      "offline": true,
+      "role": "First-gate candidate-free firewall: rejects every strategy/candidate id and admits only the all-zero cash_control target."
+    },
+    {
+      "component_id": "shadow_platform",
+      "non_routing": true,
+      "offline": true,
+      "role": "Signal-only shadow operations: passive as-of clock, hash-chained journal, latching kill switch, paper accounting; imports no candidate or engine."
+    },
+    {
+      "component_id": "operational_qualification",
+      "non_routing": true,
+      "offline": true,
+      "role": "Virtual-time qualification harness over a synthetic event stream with a fault schedule; measures offline SLOs, never a strategy."
+    },
+    {
+      "component_id": "prospective_governance",
+      "non_routing": true,
+      "offline": true,
+      "role": "Offline prospective-proposal lifecycle (prepared, not activated); fetches no new candles and installs no standing write workflow."
+    },
+    {
+      "component_id": "buyer_boundary",
+      "non_routing": true,
+      "offline": true,
+      "role": "Process-isolated buyer evaluation that serves only redacted artifacts over a length-prefixed protocol; the vendor keeps the implementation."
+    }
+  ],
+  "honest_limitation": "This is a blueprint, not a deployment. It documents how the offline components are organized; it activates nothing, routes no orders, opens no network egress, and grants no capability. Every activation precondition is an unmet human gate.",
+  "network_egress_enabled": false,
+  "order_routing_enabled": false,
+  "prohibited_capabilities": [
+    "live_trading",
+    "paper_trading_connectivity",
+    "order_routing",
+    "broker_or_exchange_integration",
+    "credentials_or_wallets",
+    "leverage_borrow_margin_shorts_or_derivatives",
+    "new_real_market_data_acquisition",
+    "standing_write_capable_workflow",
+    "public_deployment_or_publication"
+  ],
+  "schema_version": 1,
+  "status": "inactive"
+}

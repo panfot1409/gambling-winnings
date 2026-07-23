@@ -28,7 +28,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import eth_research
 from eth_research.v2.registry import read_events as v2_read_events
 from eth_research.v2.strict import (
     V2ValidationError,
@@ -292,8 +291,8 @@ def _evaluate(root: Path, *, deep: bool) -> ProvenanceGraph:
         "package_version",
         "v2b_results",
         "stamps_version",
-        bool(results_fp) and pkg_version == eth_research.__version__ == ACCEPTED_PACKAGE_VERSION,
-        "results are stamped with the running package version",
+        bool(results_fp) and pkg_version == ACCEPTED_PACKAGE_VERSION,
+        "results are stamped with the accepted (frozen) V2B package version",
     )
 
     # ------------------------------------------------------------------ #

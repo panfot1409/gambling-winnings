@@ -783,3 +783,49 @@ def stage_m3e_proposal(
 def m3e_stage_proposal() -> Callable[..., AssembledProposal]:
     """Factory to stage a complete synthetic M3E proposal directory."""
     return stage_m3e_proposal
+
+
+# --------------------------------------------------------------------------- #
+# V2C OQ: the pristine (pre-run) repository tree                              #
+# --------------------------------------------------------------------------- #
+_OQ_ARCHIVE_DIR = "governance/v2c/qualifications/v2c_offline_operational_qualification_run_001"
+_OQ_REGISTRY_RELPATH = "governance/v2c/oq_registry.jsonl"
+_OQ_RUNTIME_CONTRACT_RELPATH = "research/m2b/runtime_contract.json"
+_OQ_SEALED_LEDGER_RELPATHS = (
+    "research/m2b/test_evaluations.jsonl",
+    "research/m3a/development_gate_access.jsonl",
+    "research/m3d/prospective_evaluations.jsonl",
+)
+
+
+@pytest.fixture(scope="session")
+def pristine_oq_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A byte-faithful copy of the committed tree rewound to the PRE-run pristine OQ state.
+
+    The canonical tree now carries a completed, qualified offline-operational-qualification run (a
+    ``completed`` registry plus the immutable published archive). Tests that drive the pristine OQ
+    lifecycle -- register/start on a byte-empty registry, the pristine status/replay/verify CLIs,
+    the orchestrator's happy path -- need the pre-run tree. This reconstructs it in an isolated
+    temp dir: the full frozen source (``src``), the frozen non-source evidence under ``docs`` (the
+    freeze binds ``docs/V2C_PLAN.md``), and every governance artifact the orchestrator binds and
+    re-derives (``governance``) are copied byte-for-byte; the runtime contract is copied; the
+    registry is emptied; the three sealed ledgers are (re)written byte-empty; and the published run
+    archive is removed. The tree is only ever READ, so one session-scoped copy is shared.
+    """
+    repo = Path(__file__).resolve().parents[1]
+    root = tmp_path_factory.mktemp("pristine_oq_repo")
+    ignore = shutil.ignore_patterns("__pycache__")
+    shutil.copytree(repo / "src", root / "src", ignore=ignore)
+    shutil.copytree(repo / "governance", root / "governance", ignore=ignore)
+    shutil.copytree(repo / "docs", root / "docs", ignore=ignore)
+    contract = root / _OQ_RUNTIME_CONTRACT_RELPATH
+    contract.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(repo / _OQ_RUNTIME_CONTRACT_RELPATH, contract)
+    # Rewind to the pristine pre-run state: empty registry, byte-empty sealed ledgers, no archive.
+    (root / _OQ_REGISTRY_RELPATH).write_bytes(b"")
+    for rel in _OQ_SEALED_LEDGER_RELPATHS:
+        led = root / rel
+        led.parent.mkdir(parents=True, exist_ok=True)
+        led.write_bytes(b"")
+    shutil.rmtree(root / _OQ_ARCHIVE_DIR, ignore_errors=True)
+    return root
