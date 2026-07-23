@@ -58,19 +58,62 @@ _AUDIT_NOOP_RECORD: dict[str, Any] = {
 }
 
 
-def _records() -> list[dict[str, Any]]:
+def _proposal_records(repo_root: str | Path) -> list[dict[str, Any]]:
+    """One ``proposal`` record per committed proposal directory, in window order.
+
+    Every committed proposal under ``research/m3e/proposals/`` (enumerated by the
+    closed-set walker, manifest self-hash re-checked) yields exactly one record,
+    ordered by its new window's first open — the same strictly-increasing order the
+    append-only cohort growth enforces, so the registry rebuild is deterministic.
+    """
+    from eth_research.m3e.proposal import PROPOSAL_MANIFEST_NAME, load_proposal_manifest
+    from eth_research.m3e.verify_m3e_program import verify_proposals_root
+
+    dated: list[tuple[str, dict[str, Any]]] = []
+    for directory in verify_proposals_root(repo_root):
+        manifest = load_proposal_manifest(directory / PROPOSAL_MANIFEST_NAME)
+        window = require_mapping("new_window", manifest["new_window"])
+        dated.append(
+            (
+                require_str("first_open", window.get("first_open")),
+                {
+                    "schema_version": REGISTRY_SCHEMA_VERSION,
+                    "entry_kind": "proposal",
+                    "proposal_id": directory.name,
+                    "idempotency_key": require_str("idempotency_key", manifest["idempotency_key"]),
+                    "proposal_branch": require_str("proposal_branch", manifest["proposal_branch"]),
+                    "manifest_sha256": require_str("manifest_sha256", manifest["manifest_sha256"]),
+                    "package_version": M3E_PACKAGE_VERSION,
+                },
+            )
+        )
+    dated.sort(key=lambda item: item[0])
+    return [record for _open, record in dated]
+
+
+def _records(repo_root: str | Path | None = None) -> list[dict[str, Any]]:
     genesis = {
         "schema_version": REGISTRY_SCHEMA_VERSION,
         "kind": REGISTRY_KIND,
         "entry_kind": "genesis",
         "package_version": M3E_PACKAGE_VERSION,
     }
-    return [genesis, dict(_AUDIT_NOOP_RECORD)]
+    records = [genesis, dict(_AUDIT_NOOP_RECORD)]
+    if repo_root is not None:
+        records.extend(_proposal_records(repo_root))
+    return records
 
 
-def build_registry_bytes() -> bytes:
-    """Deterministically render the proposal registry chain file bytes."""
-    return render_ledger_bytes(chained_line_bytes(_records()))
+def build_registry_bytes(repo_root: str | Path | None = None) -> bytes:
+    """Deterministically render the proposal registry chain file bytes.
+
+    With a ``repo_root``, the rebuild covers the committed production proposals
+    (one ``proposal`` record per committed proposal directory, window-ordered)
+    after the frozen genesis + audit-noop prefix; without one, it renders exactly
+    that historical prefix. A tree with zero committed proposals therefore rebuilds
+    byte-for-byte to the accepted pre-activation registry either way.
+    """
+    return render_ledger_bytes(chained_line_bytes(_records(repo_root)))
 
 
 def _scan_forbidden(record: dict[str, Any]) -> None:
@@ -97,11 +140,11 @@ def verify_registry(repo_root: str | Path) -> list[dict[str, Any]]:
             if require_bool("proposal_created", mapping.get("proposal_created")):
                 raise M3EValidationError("an audit_noop record must not claim a proposal")
         elif kind == "proposal":
-            for field in ("idempotency_key", "proposal_branch", "manifest_sha256"):
+            for field in ("proposal_id", "idempotency_key", "proposal_branch", "manifest_sha256"):
                 require_str(field, mapping.get(field))
         else:
             raise M3EValidationError(f"unknown registry entry_kind {kind!r}")
         _scan_forbidden(mapping)
-    if raw != build_registry_bytes():
+    if raw != build_registry_bytes(repo_root):
         raise M3EValidationError("committed proposal registry does not match the rebuild")
     return records

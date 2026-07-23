@@ -49,7 +49,7 @@ def replay(repo_root: str | Path, *, deep: bool = False) -> dict[str, Any]:
     if deep:
         rebuilds = (
             (ACCEPTED_BASE_PATH, build_accepted_base_bytes(root)),
-            (REGISTRY_PATH, build_registry_bytes()),
+            (REGISTRY_PATH, build_registry_bytes(root)),
         )
         for relpath, data in rebuilds:
             if (root / relpath).read_bytes() != data:

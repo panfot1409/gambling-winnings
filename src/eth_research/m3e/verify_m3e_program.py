@@ -34,6 +34,13 @@ from pathlib import Path
 from typing import Any
 
 from eth_research.m3d import _upstream as up
+from eth_research.m3d.chain import load_and_verify_chain
+from eth_research.m3d.raw_bundle import cohort_canonical_fingerprint, combined_canonical_rows
+from eth_research.m3d.segment import SEGMENTS_PATH
+from eth_research.m3d.update_attempts import (
+    build_accepted_raw_bundles,
+    load_update_attempt_entries,
+)
 from eth_research.m3d.verify_m3d_program import (
     _scan_forbidden_fields,
     verify_m3d_program,
@@ -62,7 +69,12 @@ from eth_research.m3e.validation import (
     require_str,
 )
 
-EXPECTED_BASE_FINGERPRINT = "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507"
+# The immutable canonical fingerprint of the GENESIS segment (the cohort's first 3
+# rows). The accepted base's own fingerprint legitimately advances as landed updates
+# append rows, so the anti-swap anchor is the genesis segment in the committed chain —
+# growth can only append after it; it can never replace or reorder it.
+EXPECTED_GENESIS_FINGERPRINT = "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507"
+EXPECTED_PROPOSAL_CHECK_COUNT = 35
 
 # The isolated m3e package may import only these strategy-free eth_research modules
 # (plus eth_research.m3e.* internals and any stdlib/third-party). Mirrors
@@ -354,6 +366,17 @@ def verify_proposals_root(repo_root: str | Path) -> list[Path]:
     return proposals
 
 
+def _genesis_segment_fingerprint(repo_root: str | Path) -> str:
+    """The committed chain's genesis-segment canonical fingerprint (fail-closed)."""
+    _raw, records = load_and_verify_chain(repo_root, SEGMENTS_PATH)
+    if len(records) < 2:
+        raise M3EValidationError("segment chain has no genesis segment")
+    segment = require_mapping("genesis segment", records[1])
+    return require_str(
+        "canonical_content_fingerprint", segment.get("canonical_content_fingerprint")
+    )
+
+
 def _require_committed_matches(directory: Path, name: str, rebuilt: bytes) -> None:
     from eth_research.m3e.validation import load_canonical_json_bytes
 
@@ -376,9 +399,13 @@ def verify_update_proposal(
     # 1-8. Accepted base + whole accepted program integrity.
     base = verify_accepted_base(root)
     record("01_accepted_base_rebuilds")
-    if base.canonical_content_fingerprint != EXPECTED_BASE_FINGERPRINT:
-        raise M3EValidationError("accepted base fingerprint is not the expected cohort")
-    record("02_base_fingerprint", base.canonical_content_fingerprint[:16])
+    # The anti-swap anchor is the immutable GENESIS segment, not the (legitimately
+    # advancing) current base fingerprint: growth may only append after the pinned
+    # genesis; a replaced or reordered cohort fails here regardless of its own hash.
+    genesis_fp = _genesis_segment_fingerprint(root)
+    if genesis_fp != EXPECTED_GENESIS_FINGERPRINT:
+        raise M3EValidationError("genesis segment fingerprint is not the expected cohort genesis")
+    record("02_genesis_fingerprint_anchored", genesis_fp[:16])
     for logical, path, label in (
         ("development_gate", _LEDGERS["development_gate"], "03_development_gate_ledger_empty"),
         ("final_holdout", _LEDGERS["final_holdout"], "04_final_holdout_ledger_empty"),
@@ -534,3 +561,139 @@ def _exclusive_end(transition: Any) -> str:
     return (pd.Timestamp(transition.proposed_last_open) + pd.Timedelta(days=1)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
+
+
+def verify_landed_update(repo_root: str | Path, proposal_dir: str | Path) -> list[tuple[str, str]]:
+    """Verify a GROWN tree against the proposal that staged it (the PR-time check).
+
+    ``verify_update_proposal`` runs *before* staging, against the pre-update base its
+    manifest binds. On the bot branch — and after the human merge — the tree already
+    carries the staged cohort extension, so the base has lawfully advanced and the
+    35-check graph no longer applies verbatim. This verifier proves the grown state
+    is **exactly** the staged consequence of the proposal's attested evidence:
+
+    * the grown base re-verifies end-to-end and the genesis segment still carries
+      the pinned genesis fingerprint (append-only growth);
+    * both runner artifacts re-verify, are isolated, and agree byte-identically;
+    * the ledger's last entry, the committed attempt directory (plan/receipt/raw,
+      byte-for-byte from runner A), the registry's last record, and the grown
+      row set (old prefix + attested appended rows, exactly) all bind this proposal;
+    * evaluation stays unauthorized and every sealed ledger stays byte-empty.
+    """
+    root = Path(repo_root)
+    directory = Path(proposal_dir)
+    checks: list[tuple[str, str]] = []
+
+    def record(name: str, detail: str = "ok") -> None:
+        checks.append((name, detail))
+
+    # L01-L03. Grown tree self-verifies; genesis anchored; program intact.
+    base = verify_accepted_base(root)
+    record("L01_grown_base_rebuilds", f"rows={base.row_count}")
+    if _genesis_segment_fingerprint(root) != EXPECTED_GENESIS_FINGERPRINT:
+        raise M3EValidationError("genesis segment fingerprint drifted (HARD STOP)")
+    record("L02_genesis_fingerprint_anchored")
+    verify_m3d_program(root)
+    record("L03_grown_m3d_program_intact")
+
+    # L04-L06. Proposal manifest + two-runner attestation re-verify.
+    manifest = load_proposal_manifest(directory / PROPOSAL_MANIFEST_NAME)
+    record("L04_proposal_manifest_self_hash")
+    runner_a = load_and_verify_runner(directory / RUNNER_A_DIR, runner_label="a")
+    runner_b = load_and_verify_runner(
+        directory / RUNNER_B_DIR, runner_label="b", expected_plan_sha256=runner_a.plan_sha256
+    )
+    comparison = compare_runners(runner_a, runner_b)
+    record("L05_runners_reverify_and_agree")
+    if comparison.idempotency_key != manifest["idempotency_key"]:
+        raise M3EValidationError("proposal idempotency key drifted from its runners")
+    record("L06_idempotency_consistent")
+
+    # L07. The ledger's newest entry binds exactly this proposal + runner plan.
+    entries = load_update_attempt_entries(root)
+    if not entries:
+        raise M3EValidationError("grown tree has no update-attempt ledger entry")
+    landed = entries[-1]
+    if str(landed["proposal_id"]) != directory.name:
+        raise M3EValidationError("newest ledger entry does not name this proposal")
+    if str(landed["plan_sha256"]) != runner_a.plan_sha256:
+        raise M3EValidationError("newest ledger entry does not bind the attested plan")
+    if (
+        str(landed["first_open"]) != runner_a.first_open
+        or str(landed["last_open"]) != runner_a.last_open
+        or int(landed["row_count"]) != runner_a.row_count
+    ):
+        raise M3EValidationError("newest ledger entry window facts drifted from the runners")
+    record("L07_ledger_entry_binds_proposal", str(landed["attempt_id"]))
+
+    # L08. The committed attempt evidence is byte-for-byte runner A's artifact.
+    attempt_dir = root / f"research/m3d/raw/coinbase/{landed['attempt_id']}"
+    pairs = [
+        (attempt_dir / "acquisition_plan.json", directory / RUNNER_A_DIR / "update_plan.json"),
+        (
+            attempt_dir / "acquisition_receipt.json",
+            directory / RUNNER_A_DIR / "acquisition_receipt.json",
+        ),
+        *(
+            (
+                attempt_dir / str(w["raw_filename"]),
+                directory / RUNNER_A_DIR / str(w["raw_filename"]),
+            )
+            for b in runner_a.bundles
+            for w in [{"raw_filename": b.raw_filename}]
+        ),
+    ]
+    for committed_path, runner_path in pairs:
+        if committed_path.read_bytes() != runner_path.read_bytes():
+            raise M3EValidationError(
+                f"committed attempt evidence {committed_path.name} is not byte-identical "
+                "to the attested runner artifact"
+            )
+    record("L08_attempt_evidence_verbatim_from_runner_a")
+
+    # L09. Grown rows are exactly the old prefix + the attested appended rows.
+    bundles, _entries = build_accepted_raw_bundles(root)
+    grown_rows = combined_canonical_rows(bundles)
+    appended = runner_a.canonical_rows
+    if grown_rows[-len(appended) :] != appended:
+        raise M3EValidationError("grown cohort tail is not the attested appended rows")
+    old_count = len(grown_rows) - len(appended)
+    if base.row_count != len(grown_rows) or old_count < 3:
+        raise M3EValidationError("grown row accounting is inconsistent")
+    prior = bundles[: len(bundles) - len(runner_a.bundles)]
+    old_fp = cohort_canonical_fingerprint(prior)
+    if old_fp != manifest["accepted_base_fingerprint"]:
+        raise M3EValidationError(
+            "the proposal was not built against the immediately-prior accepted base"
+        )
+    if base.row_count != int(manifest["transition"]["proposed_row_count"]):
+        raise M3EValidationError("grown row count does not equal the proposed row count")
+    if base.last_open != str(manifest["new_window"]["last_open"]):
+        raise M3EValidationError("grown last open does not equal the proposed last open")
+    record("L09_grown_rows_are_old_plus_attested_append")
+
+    # L10. The registry's newest record binds this proposal.
+    from eth_research.m3e.registry import verify_registry
+
+    registry_records = verify_registry(root)
+    newest = require_mapping("registry record", registry_records[-1])
+    if (
+        newest.get("entry_kind") != "proposal"
+        or newest.get("proposal_id") != directory.name
+        or newest.get("manifest_sha256") != manifest["manifest_sha256"]
+        or newest.get("idempotency_key") != manifest["idempotency_key"]
+        or newest.get("proposal_branch") != manifest["proposal_branch"]
+    ):
+        raise M3EValidationError("registry newest record does not bind this proposal")
+    record("L10_registry_binds_proposal")
+
+    # L11. Data-only invariants on the grown tree.
+    for logical, path in _LEDGERS.items():
+        facts = up.ledger_facts(root, path)
+        if facts["byte_count"] != 0:
+            raise M3EValidationError(f"ledger {logical} is non-empty (HARD STOP)")
+    if base.document["evaluation_authorized"] or base.document["maturity_state"] != "immature":
+        raise M3EValidationError("grown base must stay immature and unauthorized")
+    record("L11_data_only_invariants_hold")
+
+    return checks

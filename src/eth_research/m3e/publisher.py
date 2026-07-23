@@ -22,8 +22,12 @@ from eth_research.m3e.lease import assert_publishable_proposal_branch
 from eth_research.m3e.proposal import AssembledProposal
 from eth_research.m3e.validation import M3EValidationError, require_bool, require_str
 
-# The accepted cohort branch a data-update proposal targets for human review.
-ACCEPTED_COHORT_BRANCH = "claude/m3d-prospective-evidence-governance"
+# The accepted cohort branch a data-update proposal targets for human review. The
+# M2B-M3E stack (and every later accepted layer) is true-merged, so the accepted
+# cohort now lives on the default branch: proposals are drafts based on main and
+# land only through a human merge there. The stale pre-merge milestone branch
+# remains protected in the lease (never a publish target).
+ACCEPTED_COHORT_BRANCH = "main"
 DRAFT_PR_TITLE = "M3E prospective-cohort update proposal (DRAFT — human review required)"
 
 

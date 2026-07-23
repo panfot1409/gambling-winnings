@@ -33,6 +33,7 @@ from eth_research.m3e.assembly import assemble_update_proposal
 from eth_research.m3e.cutoff import plan_update_window
 from eth_research.m3e.lease import acquire_proposal_lease
 from eth_research.m3e.publisher import assert_draft_only, build_draft_pr_descriptor
+from eth_research.m3e.staging import stage_cohort_extension
 from eth_research.m3e.update_plan import build_update_plan
 from eth_research.m3e.validation import M3EValidationError
 
@@ -75,6 +76,8 @@ class PreparedProposal:
     proposal_branch: str | None = None
     commit_sha: str | None = None
     descriptor: dict[str, Any] | None = None
+    staged_attempt_id: str | None = None
+    staged_relpaths: tuple[str, ...] = ()
 
 
 def prepare_update_proposal(
@@ -132,21 +135,29 @@ def prepare_update_proposal(
     if assembled.proposal_branch != lease.branch_name:
         raise M3EValidationError("assembled proposal branch does not match the idempotency lease")
 
-    # 4. The draft-PR descriptor (draft-only, base pinned to the accepted cohort branch).
+    # 4. Stage the cohort extension the proposal implies (V2D): the attempt
+    #    evidence, the ledger entry, and the rebuilt derived artifacts — written
+    #    transactionally and self-verified as a landed update, rolled back whole
+    #    on any failure. The bot commit will carry evidence + growth atomically.
+    staged = stage_cohort_extension(root, assembled)
+
+    # 5. The draft-PR descriptor (draft-only, base pinned to the accepted cohort branch).
     descriptor = build_draft_pr_descriptor(assembled, proposal_relpath=proposal_relpath)
     assert_draft_only(descriptor)
     head = str(descriptor["head_branch"])
 
-    # 5. The single privileged effect: a new bot branch + a commit of only the proposal.
-    #    The committed pathspec must resolve to exactly the proposal directory — never
-    #    an arbitrary caller string (e.g. ``.``) that could stage unrelated files onto
-    #    the bot branch while the outcome still claims "committed only the proposal".
+    # 6. The single privileged effect: a new bot branch + a commit of exactly the
+    #    proposal directory and the staged cohort extension. The committed pathspecs
+    #    are a closed allowlist — never an arbitrary caller string (e.g. ``.``) that
+    #    could stage unrelated files onto the bot branch.
     if (root / proposal_relpath).resolve() != Path(proposal_dir).resolve():
         raise M3EValidationError(
             "proposal_relpath must name the proposal directory being committed"
         )
     git.create_and_checkout_branch(head)
     git.add(proposal_relpath)
+    for relpath in staged.all_relpaths:
+        git.add(relpath)
     commit_sha = git.commit(commit_message)
     dirty = git.status_porcelain()
     if dirty:
@@ -156,9 +167,12 @@ def prepare_update_proposal(
 
     return PreparedProposal(
         OUTCOME_PREPARED,
-        "draft proposal prepared on a new bot branch; a separate human-reviewed step "
-        "opens the draft pull request — nothing is auto-merged or pushed to an accepted branch",
+        "draft proposal + staged cohort extension prepared on a new bot branch; a "
+        "separate human-reviewed step opens the draft pull request — nothing is "
+        "auto-merged or pushed to an accepted branch",
         proposal_branch=head,
         commit_sha=commit_sha,
         descriptor=descriptor,
+        staged_attempt_id=staged.attempt_id,
+        staged_relpaths=staged.all_relpaths,
     )

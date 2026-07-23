@@ -165,12 +165,20 @@ def test_seam_refuses_to_reuse_a_preexisting_branch(
     clone = m3a_checkout
     proposal_dir = _stage(clone, m3e_write_runner)
     git = _SubprocessGitPort(clone)
+    origin_branch = git.current_branch()
     # First pass prepares the branch; a repeat must skip (never force-reuse an orphan).
     first = prepare_update_proposal(
         clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=_PROPOSAL_REL
     )
     assert first.outcome == OUTCOME_PREPARED
     assert first.proposal_branch is not None
+    # Production repeat runs start from a fresh checkout of the (ungrown) accepted
+    # branch — the staged growth lives only on the bot branch until a human merges
+    # it. Model that: return to the pre-update branch, re-stage the runner bundles,
+    # and the repeat must skip on the pre-existing bot branch, never force-reuse it.
+    git._run("checkout", "--quiet", origin_branch)
+    assert git.status_porcelain() == ""
+    proposal_dir = _stage(clone, m3e_write_runner)
     second = prepare_update_proposal(
         clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=_PROPOSAL_REL
     )
