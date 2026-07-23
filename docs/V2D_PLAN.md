@@ -192,8 +192,20 @@ Every exemption ships with a negative test proving it does not generalize (a sec
 the same grant must still fail).
 
 ### D8 — Versioning and provenance
-`M3E_PACKAGE_VERSION` bumps (mechanism change); project version bumps to `2.0.0.dev3`
-(pyproject + `__init__` + `uv.lock`, per drift tests). Every proposal manifest continues to bind
+V2D introduces **no version change at any level** (corrected twice from this plan's first
+draft, which said `M3E_PACKAGE_VERSION` and the project version bump). The milestone constants
+`M3D_PACKAGE_VERSION` (`0.7.0`) and `M3E_PACKAGE_VERSION` (`0.8.0`) are **frozen and must not
+bump**: committed accepted evidence — the m3d registry/segment chain/cohort/publication
+manifests and the m3e accepted base/proposal registry — is verified by byte-identical
+deterministic rebuild, and those rebuilds embed the milestone constants. Growth appends new
+records stamped with the same frozen constants; a constant bump would falsify every committed
+byte-rebuild. The **project version stays `2.0.0.dev2`** for the same law one level up: the
+accepted V2C operational-qualification layer stamps the *live* `eth_research.__version__` into
+its byte-frozen freeze manifest and re-verifies it continuously (`verify_oq_source_freeze`,
+re-run by the standing v2c-replay CI on every push), so any project-version bump falsifies the
+accepted OQ freeze reproduction; a bump is reserved for a future milestone that legitimately
+supersedes the qualification. The Fable 5 audit milestone set the same no-bump precedent.
+Every proposal manifest continues to bind
 the package version, plan hash, idempotency key, runner identities, and accepted-base fingerprint.
 Commits remain append-only (no rebase/amend/force-push); the standard commit trailer is used;
 model identifiers never appear in commits or PRs.
@@ -276,3 +288,53 @@ a human merges them).
 
 > prospective collection active, cohort evidence accumulating, zero strategy evaluation, zero
 > paper trading, all sealed partitions untouched, and V2 still not sell-ready.
+
+## 9. As-built realization notes (build-phase corrections to this plan)
+
+Recorded during phase B so the plan of record matches what was actually built; none of these
+weakens a decision above.
+
+- **D4 (the apply step).** Realized as `eth_research.m3e.staging.stage_cohort_extension`: the
+  orchestrator's transactional assembly stages the append-only cohort extension — ledger append
+  (`research/m3d/update_attempts.jsonl`), segment-chain + quality rebuild, cohort publication,
+  accepted base, proposal registry — with full rollback on any failure, then proves the staged
+  tree with `verify_m3e_program.verify_landed_update` (checks L01–L11): the grown tree must be
+  exactly the deterministic consequence of (accepted base at the PR base) + (the two-runner
+  attested rows). The 35-check proposal graph still runs in full, but pre-staging inside the
+  orchestrator (its manifest binds the pre-update base by design), so
+  `m3e-update-pr-check.yml` verifies the LANDED graph (11 checks) on the bot branch rather than
+  replaying the pre-staging graph against the grown tree.
+- **D4 (growth provenance).** Per-attempt raw evidence lands under
+  `research/m3d/raw/update-<attempt-id>/` and each accepted attempt appends one hash-chained
+  entry to `research/m3d/update_attempts.jsonl`. With zero attempts every rebuilt artifact is
+  byte-identical to its committed bytes — this activation PR changes nothing under `research/`.
+- **D6 (supersession without regeneration).** `research/m3f/freeze_catalog.json`,
+  `research/m3f/honest_state.json`, and `docs/M3C_M3E_STACK_FREEZE_TABLE.json` are **not**
+  regenerated (the change-set list in §5 originally said "regenerated v2"): they remain
+  byte-identical immutable at-acceptance records. The supersession is interpretive and
+  anchor-gated (`eth_research.m3f.growable` + the v2 verification paths): with zero growth every
+  cataloged artifact must still match byte-for-byte; with growth and a strictly-valid committed
+  V2D anchor, chained artifacts must carry the committed bytes as an exact prefix, current-state
+  snapshots re-verify through the milestone verifiers, and the recorded counters/floors may only
+  move forward; growth without the anchor stays a hard stop, in both the m3f-native and the
+  stdlib-independent verifier.
+- **D7 (a sixth guard layer).** The V2AB stack-acceptance audit
+  (`eth_research.v2ab.acquisition_audit._scan_workflows`) also flags any workflow granting
+  `contents: write` — a layer the build-phase guard battery missed because its tests match none
+  of the battery's keyword filters; the first post-activation full suite caught it. Re-scoped
+  identically to the other five layers: the flag is suppressed only for the exact basename
+  `m3e-prospective-update.yml` *and* only while the committed V2D activation anchor exists
+  (fails closed otherwise); the audit's actual BTC-retirement facts — Coinbase endpoint
+  literal, write-all/id-token/packages grants, acquire-named workflows, the consumed sentinel —
+  stay unconditional for every workflow including this one, with an impostor + anchor-removal
+  negative test.
+- **D8 (versions).** Corrected in place above: `M3E_PACKAGE_VERSION` does **not** bump (frozen
+  `0.8.0`, alongside `M3D_PACKAGE_VERSION` frozen `0.7.0`), and the project version does not
+  move either. The build phase first applied the planned bump to `2.0.0.dev3` and the full
+  suite immediately proved it impossible: every `tests/test_v2c_oq_*` rehearsal and archive
+  verification failed because `verify_oq_source_freeze` rebuilds the committed
+  `governance/v2c/oq_source_freeze.json` with the live package version stamped in — under any
+  bumped version the accepted OQ freeze (and the standing v2c-replay CI, which re-runs that
+  gate plus the OQ replay on every push) can never verify again without regenerating accepted
+  V2C artifacts or editing frozen V2C qualification source, both of which §4 forbids. The bump
+  was reverted; V2D runs at the unchanged `2.0.0.dev2`, per the Fable 5 no-bump precedent.

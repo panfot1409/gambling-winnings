@@ -628,7 +628,8 @@ independently verified**, but:
   purely from committed bytes, with no forcing literal. It can only change through a new,
   separately-authorized research milestone that legitimately nominates a candidate, followed by
   pre-registered forward evidence and external human/legal approvals.
-- Prospective collection is inactive; all three sealed partitions are byte-empty and untouched.
+- Prospective collection is governed by the separately authorized **V2D data-only activation**
+  (next section); all three sealed partitions are byte-empty and untouched.
   **V2 is not sell-ready.**
 
 See [docs/V2_FABLE5_AUDIT_PLAN.md](docs/V2_FABLE5_AUDIT_PLAN.md),
@@ -638,6 +639,24 @@ See [docs/V2_FABLE5_AUDIT_PLAN.md](docs/V2_FABLE5_AUDIT_PLAN.md),
 [docs/V2_PAPER_READINESS_GAP.md](docs/V2_PAPER_READINESS_GAP.md), and
 [docs/V2_FABLE5_TERMINAL_AUDIT.md](docs/V2_FABLE5_TERMINAL_AUDIT.md). The `V2 Fable 5 Replay` CI
 re-derives every audit invariant on CPython 3.12 + 3.13.
+
+### V2D: data-only prospective-collection activation
+
+The **V2D** milestone activates the reviewed M3E update mechanism — and nothing else. A weekly
+workflow (`m3e-prospective-update.yml`, Mondays 02:17 UTC plus manual dispatch) fetches the due
+ETH-USD daily window on two isolated runners over a hardened `curl` boundary, verifies
+byte-identical canonical agreement offline, assembles the 35-check update proposal, stages the
+append-only cohort extension, and opens exactly one **draft** PR for human review — merging a
+proposal PR is the only way the accepted cohort grows, and `verify_landed_update` proves the
+grown tree is the byte-exact staged consequence of the two-runner attested evidence. Activation
+is gated by the committed, self-hashed governance anchor
+`governance/v2d/prospective_activation.json` (`python -m eth_research.v2d verify`); without a
+strictly-valid anchor every growth path fails closed, in the M3F verification layer and the
+independent stdlib verifier alike. V2D adds zero strategy, candidate, metric, or evaluation
+code: `evaluation_authorized` remains false everywhere, the cohort stays `immature` until the
+pre-registered 365-row floor (and maturity is not evaluation authorization), the three sealed
+partitions stay byte-empty, and the paper-readiness gate still derives every flag false. See
+[docs/V2D_PLAN.md](docs/V2D_PLAN.md).
 
 ## Roadmap
 

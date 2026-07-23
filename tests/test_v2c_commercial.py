@@ -99,7 +99,11 @@ def test_private_sbom_is_private_and_covers_runtime_deps() -> None:
 
 
 def test_sbom_version_is_the_frozen_v2c_dev_version() -> None:
-    assert eth_research.__version__ == V2C_DEV_VERSION
+    # The SBOM constant pins the literal version its committed artifact
+    # (governance/v2c/commercial/sbom.cdx.json) stamps, independent of the running
+    # package, so the accepted SBOM keeps rebuilding byte-for-byte under any later
+    # running version.
+    assert V2C_DEV_VERSION == "2.0.0.dev2"
 
 
 # --------------------------------------------------------------------------- #

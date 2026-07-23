@@ -98,8 +98,7 @@ def test_every_frozen_artifact_still_matches_its_recorded_hash() -> None:
     for row in _table()["files"]:
         data = (REPO_ROOT / row["path"]).read_bytes()
         byte_static = (
-            hashlib.sha256(data).hexdigest() == row["sha256"]
-            and len(data) == row["byte_length"]
+            hashlib.sha256(data).hexdigest() == row["sha256"] and len(data) == row["byte_length"]
         )
         if byte_static:
             continue

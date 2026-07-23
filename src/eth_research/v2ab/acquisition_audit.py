@@ -332,6 +332,17 @@ def _time_facts(times: tuple[int, ...]) -> tuple[bool, bool]:
     return (no_after_cutoff, monotonic)
 
 
+#: The single write-capable workflow basename authorized by the separately governed V2D
+#: DATA-ONLY activation: its assemble job carries a job-scoped ``contents: write`` solely to
+#: push the draft-proposal bot branch. The allowance is not an acquisition re-arm and fails
+#: closed when the committed activation anchor is absent; every other retirement fact below
+#: (no Coinbase endpoint literal, no write-all/id-token/packages grant, no acquire-named
+#: workflow, no sentinel) stays unconditional for this workflow too. The grant's exact shape
+#: is pinned by tests/test_m3e_workflow_security.py and the workflow-security suites.
+_V2D_UPDATE_WORKFLOW = "m3e-prospective-update.yml"
+_V2D_ANCHOR_RELPATH = "governance/v2d/prospective_activation.json"
+
+
 def _scan_workflows(paths: AuditPaths, problems: list[str]) -> bool:
     """Assert the acquisition workflow is retired. Returns whether the final tree is clean."""
     clean = True
@@ -348,7 +359,10 @@ def _scan_workflows(paths: AuditPaths, problems: list[str]) -> bool:
             if _COINBASE_ENDPOINT_RE.search(text):
                 problems.append(f"workflow {wf.name} still contacts the Coinbase endpoint")
                 clean = False
-            if _CONTENTS_WRITE_RE.search(text):
+            if _CONTENTS_WRITE_RE.search(text) and not (
+                wf.name == _V2D_UPDATE_WORKFLOW
+                and (paths.repo_root / _V2D_ANCHOR_RELPATH).is_file()
+            ):
                 problems.append(f"workflow {wf.name} grants contents: write (not retired)")
                 clean = False
             if _IDTOKEN_WRITE_RE.search(text) or _PACKAGES_WRITE_RE.search(text):

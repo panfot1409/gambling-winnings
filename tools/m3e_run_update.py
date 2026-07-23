@@ -87,7 +87,8 @@ def main(argv: list[str] | None = None) -> int:
     proposal_dir = root / proposal_rel
     if proposal_dir.exists():
         print(f"proposal directory already committed: {proposal_rel}; idempotent skip")
-        Path(args.output).open("a", encoding="utf-8").write("branch=\ntitle=\n")
+        with Path(args.output).open("a", encoding="utf-8") as out:
+            out.write("branch=\ntitle=\n")
         return 0
     (proposal_dir / "runner_a").parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(args.runner_a, proposal_dir / "runner_a")
@@ -104,7 +105,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"outcome: {result.outcome} — {result.reason}")
     if result.outcome != OUTCOME_PREPARED:
         shutil.rmtree(proposal_dir, ignore_errors=True)
-        Path(args.output).open("a", encoding="utf-8").write("branch=\ntitle=\n")
+        with Path(args.output).open("a", encoding="utf-8") as out:
+            out.write("branch=\ntitle=\n")
         return 0
 
     descriptor = result.descriptor or {}

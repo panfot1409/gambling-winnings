@@ -33,6 +33,13 @@ def _copy_evidence(tmp_path: Path) -> Path:
     shutil.copytree(REPO_ROOT / ".github/workflows", root / ".github/workflows")
     (root / "docs").mkdir(parents=True)
     shutil.copy2(REPO_ROOT / "docs/V2B_ACQUISITION.md", root / "docs/V2B_ACQUISITION.md")
+    # The copied workflow set includes the V2D update workflow, whose narrow
+    # contents: write allowance is valid only alongside the committed activation anchor.
+    (root / "governance/v2d").mkdir(parents=True)
+    shutil.copy2(
+        REPO_ROOT / "governance/v2d/prospective_activation.json",
+        root / "governance/v2d/prospective_activation.json",
+    )
     return root
 
 
@@ -236,6 +243,32 @@ def test_present_acquisition_sentinel_rejected(tmp_path: Path) -> None:
     (root / "research/v2b/acquire.trigger").write_text("go\n", encoding="utf-8")
     problems = verify_btc_acquisition(root)
     assert any("sentinel" in p for p in problems)
+
+
+def test_v2d_write_allowance_does_not_generalize(tmp_path: Path) -> None:
+    """Only the anchored V2D update workflow may carry ``contents: write``.
+
+    An impostor basename with the same grant is still flagged, and deleting the
+    committed V2D activation anchor fails the allowance closed for the real
+    basename too.
+    """
+    root = _copy_evidence(tmp_path)
+    rogue = root / ".github/workflows/rogue-with-write.yml"
+    rogue.write_text(
+        "name: rogue\non: workflow_dispatch\njobs:\n  j:\n    permissions:\n"
+        "      contents: write\n    runs-on: ubuntu-latest\n    steps:\n      - run: 'true'\n",
+        encoding="utf-8",
+    )
+    assert any(
+        "rogue-with-write.yml grants contents: write" in p for p in verify_btc_acquisition(root)
+    )
+    rogue.unlink()
+    assert verify_btc_acquisition(root) == []
+    (root / "governance/v2d/prospective_activation.json").unlink()
+    assert any(
+        "m3e-prospective-update.yml grants contents: write" in p
+        for p in verify_btc_acquisition(root)
+    )
 
 
 def test_dishonest_governance_amendment_rejected(tmp_path: Path) -> None:

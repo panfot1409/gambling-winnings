@@ -77,3 +77,32 @@ close the draft. **Do not** force-push or reset any shared branch.
 ## The audit does not activate
 
 No activation step above has been performed. M3E remains ready and inactive.
+
+## V2D addendum (2026-07-23): the anticipated activation PR exists
+
+The separately governed, separately authorized **V2D** milestone (`docs/V2D_PLAN.md`)
+implements exactly the activation PR this contract anticipated:
+
+1. the standing update workflow (`.github/workflows/m3e-prospective-update.yml`) gains the
+   trusted scheduled/dispatch fetch — two isolated runners over the hardened `curl`
+   boundary — plus the orchestrator wiring with a real GitPort and a draft-PR step;
+2. permissions stay least-privilege and **job-scoped**: `pull-requests: write` only on the
+   draft-PR job, and — one deliberate, documented deviation from item 3 above —
+   `contents: write` only on the assemble job, because pushing the new
+   `bot/m3e-prospective-update/*` branch (the reviewable draft proposal itself) requires it.
+   The workflow still cannot push to `main` or any accepted branch (branch-shape guard in the
+   push step, no force-push, and the workflow-security suites pin both grants to this single
+   basename and prove they do not generalize);
+3. activation is gated by the committed, self-hashed governance anchor
+   `governance/v2d/prospective_activation.json` (`python -m eth_research.v2d verify`): every
+   growth path — staging, landed verification, the M3F supersession lattice, the independent
+   stdlib verifier — fails closed without a strictly-valid anchor.
+
+The activation acceptance tests above are discharged by the V2D test program
+(`tests/test_v2d_activation.py`, `tests/test_m3e_staging.py`,
+`tests/test_m3d_update_attempts.py`, the workflow-security suites, and
+`verify_landed_update`, which proves a landed proposal is the byte-exact staged consequence
+of its two-runner attested evidence). Nothing in V2D evaluates prospective values: the
+mechanism is DATA-ONLY, `evaluation_authorized` stays false everywhere, the three sealed
+ledgers stay byte-empty, and V2 remains not sell-ready. This document above the addendum is
+the unchanged historical readiness record.

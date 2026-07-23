@@ -259,9 +259,7 @@ class TestClosedWorkflowSet:
 
         inv = build_inventory(REPO_ROOT)
         update = next(
-            e
-            for e in inv["workflows"]
-            if Path(e["path"]).name == "m3e-prospective-update.yml"
+            e for e in inv["workflows"] if Path(e["path"]).name == "m3e-prospective-update.yml"
         )
         assert check_inventory({"workflows": [update]}) == []
         impostor = {**update, "path": ".github/workflows/impostor-update.yml"}

@@ -303,8 +303,7 @@ def _no_unsafe_workflow(repo_root: str | Path) -> None:
         if "write-all" in text:
             raise M3EValidationError(f"{path.name} grants write-all permissions at HEAD")
         write_lines = [
-            match.strip().split("#", 1)[0].strip()
-            for match in _WRITE_PERM_RE.findall(text)
+            match.strip().split("#", 1)[0].strip() for match in _WRITE_PERM_RE.findall(text)
         ]
         if path.name == _V2D_UPDATE_BASENAME:
             unexpected = [line for line in write_lines if line not in _V2D_ALLOWED_WRITE_LINES]

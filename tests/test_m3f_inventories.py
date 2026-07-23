@@ -34,9 +34,7 @@ def test_workflow_inventory_all_real_workflows_pass_the_supply_chain_check() -> 
     # and that the grant does not generalize to any other basename.
     from pathlib import Path as _P
 
-    writers = {
-        _P(e["path"]).name for e in inv["workflows"] if e["can_write_contents"] is True
-    }
+    writers = {_P(e["path"]).name for e in inv["workflows"] if e["can_write_contents"] is True}
     assert writers <= {"m3e-prospective-update.yml"}
     assert all(e["uses_all_sha_pinned"] for e in inv["workflows"])
 
