@@ -611,6 +611,34 @@ the build backend is pinned via `[tool.uv] build-constraint-dependencies`.
 CI installs with `uv sync --locked` and fails if the lock and
 `pyproject.toml` disagree.
 
+## V2 status (Fable 5 full-system audit)
+
+The merged V2 platform has passed the **Fable 5 full-system adversarial audit** (five independent
+auditors plus a cross-auditor challenge round): zero Class-A (scientific), Class-B
+(governance/security), or Class-D (sealed-state / immutable-drift / uncontrolled-exposure) defects;
+the reproduced Class-C items were fixed forward or documented. The platform is **hardened and
+independently verified**, but:
+
+- V2A and V2B produced governed **null results** — **zero nominated strategy candidates** — and V2C
+  qualified the *offline operational platform*, not a strategy. There is **no eligible
+  paper-trading candidate**.
+- **Paper trading is blocked.** The machine-readable paper-readiness gate
+  (`python -m eth_research.v2.fable5 verify-paper`) derives
+  `paper_activation_authorized = false`, `paper_trading_active = false`, and `sell_ready = false`
+  purely from committed bytes, with no forcing literal. It can only change through a new,
+  separately-authorized research milestone that legitimately nominates a candidate, followed by
+  pre-registered forward evidence and external human/legal approvals.
+- Prospective collection is inactive; all three sealed partitions are byte-empty and untouched.
+  **V2 is not sell-ready.**
+
+See [docs/V2_FABLE5_AUDIT_PLAN.md](docs/V2_FABLE5_AUDIT_PLAN.md),
+[docs/V2_FABLE5_AUDITOR_REPORTS.md](docs/V2_FABLE5_AUDITOR_REPORTS.md),
+[docs/V2_FABLE5_FINDINGS.md](docs/V2_FABLE5_FINDINGS.md),
+[docs/V2_FABLE5_THREAT_MODEL.md](docs/V2_FABLE5_THREAT_MODEL.md),
+[docs/V2_PAPER_READINESS_GAP.md](docs/V2_PAPER_READINESS_GAP.md), and
+[docs/V2_FABLE5_TERMINAL_AUDIT.md](docs/V2_FABLE5_TERMINAL_AUDIT.md). The `V2 Fable 5 Replay` CI
+re-derives every audit invariant on CPython 3.12 + 3.13.
+
 ## Roadmap
 
 See [docs/PLAN.md](docs/PLAN.md) for the milestone plan,
