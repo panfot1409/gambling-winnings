@@ -16,9 +16,9 @@
   },
   "forbidden_capabilities_absent": true,
   "frozen_governance_sha256": {
-    "governance/v2/fable5_audit_manifest.json": "f2df23b2a080a09045280a568d75f66e5e129748c35f79d40e8063b5defbb371",
-    "governance/v2/fable5_findings.json": "b43ca17929bf7c8ad5dc66890efb1fb5216140d461cd77c62cf41593a47c72a1",
-    "governance/v2/fable5_remediation_state.json": "0871ca0c91fa98c096fcc400d76ed540aa35752eee7e41d5d3eb368162b39847",
+    "governance/v2/fable5_audit_manifest.json": "ab655c8a1e65eb11d6dedb91dee5e3206974c35e0d946226222ade8c4afaa7f1",
+    "governance/v2/fable5_findings.json": "66cb5f3532bebd8c1ef70ae2fac9536e08fdf6fbd5e882da96bc94b3b5bdfbc4",
+    "governance/v2/fable5_remediation_state.json": "b52fceae56270265971d6d5580c184d172539757a838aa39e316866b85be4001",
     "governance/v2/fable5_system_inventory.json": "681c214adcb72daa00d396900b4c7344a51b7583888cdc64db9f9381e17fccc3",
     "governance/v2/paper_readiness_state.json": "972278500259782b8a8ddaa2540dd308f1f6b8d6fee26a1a12ab0858e94e1971"
   },
@@ -29,7 +29,7 @@
     "src/eth_research/v2/fable5/freeze.py": "0cdd0553915ddb277aec4c23dd01931354736aa5f33db460a60acc1506ba338c",
     "src/eth_research/v2/fable5/inventory.py": "a84b807b82169420a2bfc58e695c3e1fbe59ce97f71f84fb9e451b0ee51587db",
     "src/eth_research/v2/fable5/paper_readiness.py": "5755f5aba6dfde514270b5479b67ed45b98bcf3ff1d548286f684e2e7d543e41",
-    "src/eth_research/v2ab/commercial_truth.py": "9ff0f1f7f827cba0cf7ba37baf11f678c214edf6554ce6983a9ec4c2f638bc70"
+    "src/eth_research/v2ab/commercial_truth.py": "a3241244307395f930e032328b6bec0a270f59967d736ef37d7619e963bbce31"
   },
   "schema_version": 1
 }

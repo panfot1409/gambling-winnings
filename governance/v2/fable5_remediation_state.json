@@ -3,12 +3,13 @@
   "all_findings_resolved": true,
   "audit_branch": "claude/v2-fable5-full-system-audit",
   "baseline_merge_commit": "09fc9c0204a3cd71e0c7c84ba9dd605b9a5f811b",
-  "class_c_fixed_or_accepted": 5,
-  "findings_total": 5,
+  "class_c_fixed_or_accepted": 6,
+  "findings_total": 6,
   "resolution_summary": {
     "F5-C1": "fixed_forward",
     "F5-C1-note": "accepted_by_design",
     "F5-C2": "fixed_forward",
+    "F5-C3": "fixed_forward",
     "F5-N1": "documented_readiness_gap",
     "F5-N2": "covered_by_v2c_c001"
   },

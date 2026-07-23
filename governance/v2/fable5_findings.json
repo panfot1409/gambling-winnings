@@ -4,7 +4,7 @@
   "class_counts": {
     "A": 0,
     "B": 0,
-    "C": 5,
+    "C": 6,
     "D": 0
   },
   "findings": [
@@ -68,6 +68,20 @@
       "severity": "low",
       "status": "covered_by_v2c_c001",
       "title": "Offline verifier does not self-re-bind frozen-input digests (covered by V2C C-001)"
+    },
+    {
+      "accepted_artifact_impact": "none",
+      "class": "C",
+      "discovered": "pre-merge independent acceptance spot audit (scope 5)",
+      "id": "F5-C3",
+      "regression_tests": [
+        "tests/test_v2_fable5_remediation.py::test_scanner_flags_affirming_negators_and_plural_inflections",
+        "tests/test_v2_fable5_remediation.py::test_scanner_still_exempts_genuine_negations_of_inflected_forms"
+      ],
+      "sealed_impact": "none",
+      "severity": "low",
+      "status": "fixed_forward",
+      "title": "Sales-honesty scanner failed open on an affirming negator-lookalike ('not merely a proven alpha') and on plural inflections ('proven alphas')"
     }
   ],
   "no_unresolved_class_abd": true,

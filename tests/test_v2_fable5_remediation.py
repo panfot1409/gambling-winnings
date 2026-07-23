@@ -84,6 +84,43 @@ def test_committed_sales_surface_stays_clean() -> None:
 
 
 # --------------------------------------------------------------------------------------------------
+# F5-C3 — affirming negator-lookalikes and plural inflections must not slip past the scanner
+# --------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # An affirming adverb between the negator and the phrase AFFIRMS the claim; the negator
+        # must not exempt it ("not merely X" asserts X even more strongly).
+        "This is not merely a proven alpha.",
+        "It is not just a validated alpha.",
+        "This is not simply a proven alpha.",
+        # Plural / -s inflected forms of a forbidden phrase are the same overclaim.
+        "We have proven alphas.",
+        "Our platform ships profitable systems.",
+    ],
+)
+def test_scanner_flags_affirming_negators_and_plural_inflections(text: str) -> None:
+    assert scan_sales_material(text, source="x"), (
+        "the honesty scanner must flag an unsupported superlative that is 'protected' only by an "
+        "affirming negator-lookalike or hidden behind a plural inflection (fail-open, F5-C3)"
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Genuine negations of the inflected/adverb forms must stay exempt.
+        "These are not proven alphas.",
+        "We make no guarantee of profitable systems.",
+    ],
+)
+def test_scanner_still_exempts_genuine_negations_of_inflected_forms(text: str) -> None:
+    assert scan_sales_material(text, source="x") == []
+
+
+# --------------------------------------------------------------------------------------------------
 # F5-C2 — terminal hypothetical liquidation must never crash on collapsed trailing liquidity
 # --------------------------------------------------------------------------------------------------
 

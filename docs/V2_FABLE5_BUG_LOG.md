@@ -116,6 +116,33 @@ covered by `::test_paragraph_marker_exemption_is_intentional_author_controlled`.
   authoritative CPython 3.12 leg). A forged frozen-input digest cannot pass that from-source
   re-derivation. No further code change required; recorded here for completeness.
 
+## F5-C3 — Scanner failed open on affirming negator-lookalikes and plural inflections (fixed)
+
+- **Class / severity:** C (claim-integrity / test-strength). Low. Fail-open but latent (the
+  committed sales surface is clean).
+- **Discoverer:** the pre-merge independent acceptance **spot audit** (scope 5, paper-readiness and
+  commercial honesty), run before true-merging PR #19 — not the original five-auditor round.
+- **Invariant:** a negator exempts a forbidden phrase only when it actually negates it, and an
+  inflected form of a forbidden phrase is the same overclaim.
+- **Pre-fix behavior / reproducers** (`.venv/bin/python`):
+  `scan_sales_material("This is not merely a proven alpha.", source="x") == []` — the affirming
+  adverb between the negator and the phrase means the sentence *asserts* the claim, yet the 4-word
+  negation window exempted it; and `scan_sales_material("We have proven alphas.", source="x") == []`
+  — the exact word-boundary phrase patterns did not match a simple plural.
+- **Fix:** `_is_negated` now refuses to exempt when an affirming adverb (`merely`, `just`, `only`,
+  `simply`, `purely`) sits between the negator and the phrase, and `_PHRASE_PATTERNS` matches a
+  simple plural/`-es` inflection of each phrase's final word. The `_is_negated` docstring no longer
+  overclaims ("only a real negation … exempts") and states the heuristic's honest scope. Committed
+  materials stay clean; genuine negations of inflected forms ("These are not proven alphas.") stay
+  exempt.
+- **Accepted-artifact / sealed-state impact:** none. **Paper-readiness impact:** none (the derived
+  state is byte-identical; only the honesty gate strengthens).
+- **Regression tests:** `tests/test_v2_fable5_remediation.py::
+  test_scanner_flags_affirming_negators_and_plural_inflections` (5 vectors) and
+  `::test_scanner_still_exempts_genuine_negations_of_inflected_forms`.
+- **Status:** fixed forward on the feature branch before the true merge, per the merge directive's
+  new-Class-C rule.
+
 ## Summary
 
 | id | class | severity | fixed | accepted-artifact impact | sealed impact |
@@ -125,6 +152,7 @@ covered by `::test_paragraph_marker_exemption_is_intentional_author_controlled`.
 | F5-C2 | C | Low | yes | none | none |
 | F5-N1 | C | Low | documented readiness gap | none | none |
 | F5-N2 | C | Low | covered by V2C C-001 | none | none |
+| F5-C3 | C | Low | yes (affirming adverbs + plurals) | none | none |
 
 Zero Class-A / Class-B / Class-D defects. The five primary auditors independently confirmed causality,
 accounting, numerical, governance, provenance, immutability, security, isolation, supply-chain, IP,

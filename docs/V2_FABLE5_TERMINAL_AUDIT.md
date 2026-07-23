@@ -340,3 +340,18 @@ F5-N2). The platform is hardened and independently verified. Paper trading is bl
 derives false from the committed V2A/V2B null decisions, so `paper_activation_authorized`,
 `paper_trading_active`, and `sell_ready` all derive false with no forcing literal. Prospective
 collection is inactive; all sealed partitions are untouched. **V2 is not sell-ready.**
+
+## Merge-acceptance addendum (F5-C3)
+
+Before true-merging this branch into `main`, an independent five-auditor **acceptance spot audit**
+re-derived the claims above (all five verdicts: accept merge; zero Class A/B/D) and surfaced one new
+**Class C** item, **F5-C3**: the sales-honesty scanner still failed open on an affirming
+negator-lookalike ("This is not *merely* a proven alpha." was exempted although it asserts the
+claim) and on plural inflections ("We have proven alpha**s**." was unmatched). Per the merge
+directive's new-Class-C rule it was reproduced and **fixed forward on this branch** —
+`_is_negated` refuses to exempt when an affirming adverb sits between the negator and the phrase,
+and the phrase patterns now match a simple plural/`-es` inflection — with failing-test-first
+regressions, the governance records updated (findings/remediation/manifest now record 6 Class C;
+`paper_readiness_state.json` byte-identical), the source freeze rebuilt, and fresh CI. The committed
+sales surface stays clean and no accepted artifact or sealed value changed. See
+`docs/V2_FABLE5_BUG_LOG.md` (F5-C3).
