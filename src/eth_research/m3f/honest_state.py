@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from eth_research.m3f.growable import v2d_activation_anchor_active
 from eth_research.m3f.validation import (
     M3FValidationError,
     canonical_json_bytes,
@@ -85,13 +86,18 @@ def derive_honest_state(repo_root: str | Path) -> dict[str, Any]:
         "hash_binding_is": "operational_tamper_evidence_not_cryptographic_signature",
     }
 
-    # The three forever-invariants — fail closed at derivation.
+    # The forever-invariants — fail closed at derivation. Evaluation authorization
+    # and sealed-ledger emptiness are unconditional. Production proposals and the
+    # single job-scoped workflow write grant are lawful ONLY under the committed
+    # V2D activation anchor (data-only growth); without it they hard-stop as before.
     if authorized:
         raise M3FValidationError("HARD STOP: m3d evaluation_authorized is true")
-    if proposals != 0:
-        raise M3FValidationError("HARD STOP: a production proposal exists")
+    if proposals != 0 and not v2d_activation_anchor_active(root):
+        raise M3FValidationError(
+            "HARD STOP: a production proposal exists without the V2D activation anchor"
+        )
     if workflows_write:
-        raise M3FValidationError("HARD STOP: a workflow can write repository contents")
+        raise M3FValidationError("HARD STOP: an unauthorized workflow can write contents")
     for rel, facts in ledgers.items():
         if facts["byte_count"] != 0 or facts["sha256"] != EMPTY_SHA256:
             raise M3FValidationError(f"HARD STOP: sealed ledger {rel} is non-empty")
@@ -99,18 +105,25 @@ def derive_honest_state(repo_root: str | Path) -> dict[str, Any]:
 
 
 def _any_workflow_writes(root: Path) -> bool:
-    """True if any committed workflow grants write contents (any YAML form).
+    """True if any UNAUTHORIZED committed workflow grants write contents.
 
     Delegates to the hardened, whitespace/comment/anchor-tolerant detector shared with
     the workflow inventory, so the forever-invariant cannot fail open on a
-    ``contents:   write  # comment`` / tab / anchored grant.
+    ``contents:   write  # comment`` / tab / anchored grant. Under the committed V2D
+    activation anchor, exactly ``m3e-prospective-update.yml`` may hold its reviewed
+    job-scoped grant; every other workflow (and, absent the anchor, every workflow)
+    still trips this detector.
     """
     wf = root / ".github/workflows"
     if not wf.is_dir():
         return False
+    allowed: set[str] = set()
+    if v2d_activation_anchor_active(root):
+        allowed = {"m3e-prospective-update.yml"}
     return any(
         workflow_grants_write(path.read_text(encoding="utf-8"))
         for path in sorted([*wf.glob("*.yml"), *wf.glob("*.yaml")])
+        if path.name not in allowed
     )
 
 
@@ -167,15 +180,57 @@ def render_honest_state_bytes(state: dict[str, Any]) -> bytes:
 
 
 def verify_honest_state(repo_root: str | Path) -> None:
-    """The committed honest-state JSON + Markdown reproduce byte-for-byte from bytes."""
+    """The committed honest state holds: byte-reproduced, or floors under V2D growth.
+
+    With zero production proposals the committed JSON + Markdown must reproduce
+    byte-for-byte from live bytes, exactly as accepted. Once reviewed proposals
+    have landed (lawful only under the committed V2D activation anchor — the
+    derive step enforces that), the committed file remains the immutable
+    AT-M3F-ACCEPTANCE record: its immutable facts must still hold live and its
+    growable facts become monotone floors — the live cohort may only be LARGER,
+    never smaller, relabelled, or evaluation-authorized.
+    """
     root = Path(repo_root)
-    state = derive_honest_state(root)
-    committed = (root / HONEST_STATE_RELPATH).read_bytes()
-    if committed != render_honest_state_bytes(state):
-        raise M3FValidationError("committed honest_state.json does not reproduce from bytes")
+    live = derive_honest_state(root)
+    committed_raw = (root / HONEST_STATE_RELPATH).read_bytes()
     committed_md = (root / HONEST_STATE_MD_RELPATH).read_bytes()
-    if committed_md != render_honest_state_md(state):
+    proposals = require_int(live["m3e_production_proposal_count"], "m3e_production_proposal_count")
+    if proposals == 0:
+        if committed_raw != render_honest_state_bytes(live):
+            raise M3FValidationError("committed honest_state.json does not reproduce from bytes")
+        if committed_md != render_honest_state_md(live):
+            raise M3FValidationError("committed HONEST_STATE.md does not reproduce from the JSON")
+        return
+    committed = load_canonical_json(committed_raw, "honest_state")
+    if not isinstance(committed, dict):
+        raise M3FValidationError("committed honest_state.json is not an object")
+    if committed_md != render_honest_state_md(committed):
         raise M3FValidationError("committed HONEST_STATE.md does not reproduce from the JSON")
+    immutable = (
+        "schema_version",
+        "accepted_stack",
+        "m2b_dataset_identity",
+        "m3a_state",
+        "m3b_state",
+        "m3c_candidate_verdict",
+        "m3d_maturity_threshold",
+        "m3d_evaluation_authorized",
+        "any_gate_or_holdout_evaluated",
+        "new_strategy_evaluation_authorized",
+        "network_capable_publisher_deployed",
+        "ledgers",
+    )
+    for key in immutable:
+        if live.get(key) != committed.get(key):
+            raise M3FValidationError(
+                f"honest-state immutable fact {key!r} drifted from the accepted record"
+            )
+    committed_rows = require_int(committed.get("m3d_cohort_row_count"), "committed_rows")
+    live_rows = require_int(live["m3d_cohort_row_count"], "live_rows")
+    if live_rows < committed_rows:
+        raise M3FValidationError("live cohort shrank below the accepted row count")
+    if live["m3d_maturity_state"] != "immature" and live_rows < MATURITY_THRESHOLD:
+        raise M3FValidationError("unlawful maturity state below the 365 floor")
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI wrapper

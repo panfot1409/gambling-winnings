@@ -68,6 +68,24 @@ M3E_ACCEPTED_BASE = "research/m3e/accepted_base.json"
 M3E_REGISTRY = "research/m3e/proposal_registry.jsonl"
 CATALOG_RELPATH = "research/m3f/freeze_catalog.json"
 HONEST_STATE_RELPATH = "research/m3f/honest_state.json"
+# --- V2D growable cohort surface (see eth_research.m3f.growable) -------------
+# Growth of the prospective cohort is lawful ONLY under the committed V2D
+# activation anchor; this stdlib tool re-validates the anchor through its own
+# primitives and then verifies the growable surface APPEND-ONLY: the catalogued
+# baseline must survive as an exact hash-verified prefix of the live chain.
+V2D_ANCHOR_RELPATH = "governance/v2d/prospective_activation.json"
+_V2D_ANCHOR_PREFIX = b"m3d/v2d_prospective_activation_anchor\n"
+_V2D_WORKFLOW = "m3e-prospective-update.yml"
+GROWABLE_APPEND_CHAINS = (
+    "research/m3d/prospective_segments.jsonl",
+    "research/m3e/proposal_registry.jsonl",
+)
+GROWABLE_CURRENT_STATE = (
+    "research/m3d/prospective_manifest.json",
+    "research/m3d/prospective_quality.json",
+    "research/m3d/publication_manifest.json",
+    "research/m3e/accepted_base.json",
+)
 REJECTED_VERDICT = "rejected_for_development_gate_promotion"
 WORKFLOW_DIR = ".github/workflows"
 # Any of these existing means the repository is registered, so the catalog + honest
@@ -237,6 +255,35 @@ class Report:
             self.fail(name, str(exc))
 
 
+def _canonical_bytes(payload: Any) -> bytes:
+    text = json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False)
+    return (text + "\n").encode("utf-8")
+
+
+def _v2d_anchor_active(root: Path) -> bool:
+    """Strictly validate the committed V2D activation anchor; absent → inactive."""
+    path = root / V2D_ANCHOR_RELPATH
+    if not path.exists():
+        return False
+    _require(not path.is_symlink() and path.is_file(), "v2d anchor is not a regular file")
+    doc = _loads(path.read_text(encoding="utf-8"))
+    _require(isinstance(doc, dict), "v2d anchor is not a JSON object")
+    _require(
+        doc.get("kind") == "v2d_prospective_activation" and doc.get("schema_version") == 1,
+        "v2d anchor kind/schema is unexpected",
+    )
+    body = {k: v for k, v in doc.items() if k != "anchor_sha256"}
+    digest = hashlib.sha256(_V2D_ANCHOR_PREFIX + _canonical_bytes(body)).hexdigest()
+    _require(doc.get("anchor_sha256") == digest, "v2d anchor self-hash mismatch")
+    mechanism = doc.get("mechanism")
+    _require(isinstance(mechanism, dict), "v2d anchor mechanism missing")
+    _require(
+        mechanism.get("workflow_basename") == _V2D_WORKFLOW,
+        "v2d anchor authorizes an unexpected workflow",
+    )
+    return True
+
+
 def verify(repo_root: str | Path) -> dict[str, Any]:
     root = Path(repo_root)
     report = Report()
@@ -270,16 +317,18 @@ def verify(repo_root: str | Path) -> dict[str, Any]:
         )
 
     def check_m3e() -> None:
+        count = facts["m3e_production_proposal_count"]
         _require(
-            facts["m3e_production_proposal_count"] == 0,
-            f"m3e production proposal count is {facts['m3e_production_proposal_count']}, not 0",
+            count == 0 or _v2d_anchor_active(root),
+            f"m3e production proposal count is {count} without the V2D activation anchor",
         )
 
     def check_workflows() -> None:
+        allowed = {_V2D_WORKFLOW} if _v2d_anchor_active(root) else set()
         offenders = [
             p.relative_to(root).as_posix()
             for p in _workflow_paths(root)
-            if _workflow_grants_write(p.read_text(encoding="utf-8"))
+            if p.name not in allowed and _workflow_grants_write(p.read_text(encoding="utf-8"))
         ]
         _require(not offenders, "workflows grant write contents: " + ", ".join(offenders))
 
@@ -327,14 +376,25 @@ def _check_catalog(root: Path, facts: dict[str, Any]) -> None:
         _require(isinstance(rel, str) and rel != "", "catalog artifact path is not a string")
         _require(rel != CATALOG_RELPATH, "catalog must not catalog itself")
         raw = _read_bytes(root, rel)
-        _require(
-            _sha256(raw) == record.get("sha256"),
-            f"{rel}: working-tree bytes do not match the catalogued SHA-256",
-        )
-        _require(
-            len(raw) == record.get("byte_length"),
-            f"{rel}: working-tree length does not match the catalogued byte_length",
-        )
+        want_sha = record.get("sha256")
+        want_len = record.get("byte_length")
+        if _sha256(raw) == want_sha and len(raw) == want_len:
+            continue
+        grown = _v2d_anchor_active(root)
+        if grown and rel in GROWABLE_APPEND_CHAINS and isinstance(want_len, int):
+            # Git-free append-only proof: the catalogued baseline must survive
+            # as an exact prefix — hash the live file's first byte_length bytes.
+            _require(
+                len(raw) >= want_len and _sha256(raw[:want_len]) == want_sha,
+                f"{rel}: catalogued baseline is not an exact prefix (append-only violated)",
+            )
+        elif grown and rel in GROWABLE_CURRENT_STATE:
+            _require(
+                isinstance(_loads(raw.decode("utf-8")), dict),
+                f"{rel}: grown snapshot is not a JSON object",
+            )
+        else:
+            _require(False, f"{rel}: working-tree bytes do not match the catalogued SHA-256")
     # Sealed-ledger classification inside the catalog must itself be honest.
     ledgers = catalog.get("ledgers", {})
     _require(isinstance(ledgers, dict), "catalog ledgers block is not an object")
@@ -349,8 +409,16 @@ def _check_catalog(root: Path, facts: dict[str, Any]) -> None:
         expected.get("m3c_outcome") == facts["m3c_verdict"],
         "catalog m3c_outcome disagrees with the independent derivation",
     )
+    live_count = facts["m3e_production_proposal_count"]
+    at_acceptance = expected.get("m3e_production_proposal_count")
     _require(
-        expected.get("m3e_production_proposal_count") == facts["m3e_production_proposal_count"],
+        at_acceptance == live_count
+        or (
+            _v2d_anchor_active(root)
+            and isinstance(at_acceptance, int)
+            and isinstance(live_count, int)
+            and live_count > at_acceptance
+        ),
         "catalog proposal count disagrees with the independent derivation",
     )
     _require(
@@ -362,17 +430,36 @@ def _check_catalog(root: Path, facts: dict[str, Any]) -> None:
 def _check_honest_state(root: Path, facts: dict[str, Any]) -> None:
     state = _load_json(root, HONEST_STATE_RELPATH)
     _require(isinstance(state, dict), "honest_state.json is not a JSON object")
-    pairs = {
+    grown = facts["m3e_production_proposal_count"] != 0 and _v2d_anchor_active(root)
+    exact_pairs = {
         "m3c_candidate_verdict": "m3c_verdict",
-        "m3d_cohort_row_count": "m3d_row_count",
-        "m3d_maturity_state": "m3d_maturity_state",
         "m3d_evaluation_authorized": "m3d_evaluation_authorized",
-        "m3e_production_proposal_count": "m3e_production_proposal_count",
     }
-    for state_key, fact_key in pairs.items():
+    if not grown:
+        exact_pairs.update(
+            {
+                "m3d_cohort_row_count": "m3d_row_count",
+                "m3d_maturity_state": "m3d_maturity_state",
+                "m3e_production_proposal_count": "m3e_production_proposal_count",
+            }
+        )
+    for state_key, fact_key in exact_pairs.items():
         _require(
             state.get(state_key) == facts[fact_key],
             f"honest_state.{state_key} disagrees with the independent derivation",
+        )
+    if grown:
+        # The committed honest state is the immutable AT-M3F-ACCEPTANCE record;
+        # the live cohort may only be LARGER and must stay immature below 365.
+        committed_rows = state.get("m3d_cohort_row_count")
+        live_rows = facts["m3d_row_count"]
+        _require(
+            isinstance(committed_rows, int) and live_rows >= committed_rows,
+            "live cohort shrank below the accepted honest-state row count",
+        )
+        _require(
+            facts["m3d_maturity_state"] == "immature" or live_rows >= 365,
+            "unlawful live maturity state below the 365 floor",
         )
     _require(state.get("m3e_active") is False, "honest_state reports m3e_active true")
     _require(

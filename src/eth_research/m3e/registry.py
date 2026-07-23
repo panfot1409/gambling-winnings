@@ -79,6 +79,7 @@ def _proposal_records(repo_root: str | Path) -> list[dict[str, Any]]:
                 {
                     "schema_version": REGISTRY_SCHEMA_VERSION,
                     "entry_kind": "proposal",
+                    "proposal_created": True,
                     "proposal_id": directory.name,
                     "idempotency_key": require_str("idempotency_key", manifest["idempotency_key"]),
                     "proposal_branch": require_str("proposal_branch", manifest["proposal_branch"]),
@@ -140,6 +141,8 @@ def verify_registry(repo_root: str | Path) -> list[dict[str, Any]]:
             if require_bool("proposal_created", mapping.get("proposal_created")):
                 raise M3EValidationError("an audit_noop record must not claim a proposal")
         elif kind == "proposal":
+            if require_bool("proposal_created", mapping.get("proposal_created")) is not True:
+                raise M3EValidationError("a proposal record must state proposal_created true")
             for field in ("proposal_id", "idempotency_key", "proposal_branch", "manifest_sha256"):
                 require_str(field, mapping.get(field))
         else:
