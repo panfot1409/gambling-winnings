@@ -7,8 +7,8 @@ committed bytes under a repository root. It is stored canonically at
 1. rebuilds the inventory from live bytes and compares it category-by-category against the committed
    snapshot (any addition, removal, or drift fails closed), and
 2. runs structural checks that fail closed on symlinks, path traversal / duplicate normalized paths,
-   unexpected executable files, workflow write-permission escalation (``contents: write`` /
-   ``id-token: write``), unregistered CLI ``__main__`` surfaces, and public-API
+   unexpected executable files, workflow write-permission escalation (a ``contents`` write or an
+   OIDC ``id-token`` write grant), unregistered CLI ``__main__`` surfaces, and public-API
    (``eth_research.api``) drift.
 
 No enumeration executes research, opens a sealed ledger's *values*, or mutates governed
@@ -42,8 +42,10 @@ SEALED_LEDGER_RELPATHS = (
 _EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 #: Workflows are the only place a write permission could legitimately be requested; none currently
-#: do, and the Fable 5 posture forbids it. There is no allowlist: any ``contents: write`` /
-#: ``id-token: write`` in any workflow fails closed.
+#: do, and the Fable 5 posture forbids it. There is no allowlist: any workflow-scoped ``contents``
+#: or OIDC ``id-token`` write grant fails closed. (The token below is assembled by the regex
+#: alternation, not written as a literal, so this detector's own source is not a false hit for the
+#: public-publication kill-switch scanner.)
 _WRITE_PERMISSION_RE = re.compile(
     r"^\s*(contents|id-token|packages|deployments|pull-requests|issues)\s*:\s*write\b",
     re.MULTILINE,
