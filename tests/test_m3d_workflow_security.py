@@ -59,12 +59,16 @@ def test_no_workflow_uses_a_piped_installer() -> None:
                 raise AssertionError(f"{workflow.name}: a download is piped into a shell")
 
 
-def test_only_acquire_workflow_may_write_or_reach_coinbase() -> None:
+def test_only_authorized_workflows_may_write_or_reach_coinbase() -> None:
+    # The retired one-shot m3d acquire workflow (historical) and the V2D-anchored
+    # update workflow (whose single job-scoped contents: write pushes one new bot
+    # branch; shape pinned in tests/test_m3e_workflow_security.py) are the only
+    # write-capable basenames ever authorized; no workflow may carry the Coinbase
+    # host literal or force-push, ever.
     for workflow in _workflows():
-        if workflow.name == _ACQUIRE.name:
-            continue
         text = workflow.read_text()
-        assert "contents: write" not in text, f"{workflow.name} grants contents: write"
+        if workflow.name not in {_ACQUIRE.name, "m3e-prospective-update.yml"}:
+            assert "contents: write" not in text, f"{workflow.name} grants contents: write"
         assert _COINBASE_HOST not in text, f"{workflow.name} references Coinbase"
         assert "--force" not in text, f"{workflow.name} force-pushes"
 

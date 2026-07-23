@@ -30,7 +30,14 @@ CI = WORKFLOWS / "ci.yml"
 # workflow must upload nothing; the exception is enforced conditionally in
 # eth_research.m3f.workflow_inventory.check_inventory and exhaustively probed in
 # tests/test_private_workflow_security.py.
-ARTIFACT_UPLOAD_ALLOWLIST = {"private-release-build.yml"}
+ARTIFACT_UPLOAD_ALLOWLIST = {"private-release-build.yml", "m3e-prospective-update.yml"}
+# The single authorized market-data egress + review-only publication workflow.
+# Under the committed V2D activation anchor (governance/v2d/prospective_activation.json)
+# it holds exactly two JOB-SCOPED write grants — contents: write on the bot-branch
+# push job and pull-requests: write on the draft-PR-open job — and moves the two
+# runner bundles between its isolated jobs as private Actions artifacts. Every other
+# workflow keeps the full read-only posture, proven below and by the m3f inventory.
+V2D_UPDATE_WORKFLOW = "m3e-prospective-update.yml"
 
 # Only the uv installer host may appear, and only in read-only workflows.
 ALLOWED_HOSTS = {"astral.sh"}
@@ -73,12 +80,32 @@ class TestAcquisitionWorkflowsRetired:
         assert not (REPO_ROOT / "research/v2b/acquire.trigger").exists()
 
     def test_no_workflow_can_write_contents(self) -> None:
-        # At the final HEAD no workflow may write repository contents — the temporary V2B BTC
-        # acquisition workflow is retired (section 13).
+        # No workflow may write repository contents EXCEPT the V2D-anchored update
+        # workflow, whose single job-scoped grant pushes one new bot branch. Every
+        # other workflow stays read-only; the exemption's own shape is pinned in
+        # test_update_workflow_write_grants_are_exactly_the_authorized_two.
         for path in _all_workflow_files():
+            if path.name == V2D_UPDATE_WORKFLOW:
+                continue
             text = path.read_text(encoding="utf-8")
             assert "contents: write" not in text, f"{path.name} still grants contents: write"
             assert "contents:write" not in text
+
+    def test_update_workflow_write_grants_are_exactly_the_authorized_two(self) -> None:
+        # The V2D exemption is NARROW: exactly one job-scoped contents: write (the
+        # bot-branch push) and exactly one job-scoped pull-requests: write (the
+        # draft-PR open); the workflow default stays contents: read; no write-all,
+        # no other scope, and the anchor artifact itself is committed.
+        text = (WORKFLOWS / V2D_UPDATE_WORKFLOW).read_text(encoding="utf-8")
+        assert text.count("contents: write") == 1
+        assert text.count("pull-requests: write") == 1
+        assert "write-all" not in text
+        assert "permissions:\n  contents: read" in text  # top-level default
+        assert (REPO_ROOT / "governance/v2d/prospective_activation.json").is_file()
+        for verb in ("gh pr merge", "gh pr ready", "--auto", "pull_request_target"):
+            assert verb not in text, f"forbidden verb {verb!r} in the update workflow"
+        assert "secrets." not in text
+        assert "--force" not in text
 
     def test_no_workflow_contacts_coinbase(self) -> None:
         # The acquisition endpoint is never a literal in any workflow YAML (it is emitted at run

@@ -280,6 +280,17 @@ def _scan_m3e_imports(repo_root: str | Path) -> None:
 _PRIVATE_RELEASE_UPLOAD_BASENAME = "private-release-build.yml"
 
 
+# The single V2D-authorized update workflow (see governance/v2d/prospective_activation.json
+# and docs/V2D_PLAN.md). It alone may hold its two JOB-SCOPED grants — one
+# ``contents: write`` (bot-branch push) and one ``pull-requests: write`` (draft-PR
+# open) — and move its two isolated runner bundles as workflow artifacts. Every
+# other rule below (secrets, force-push, protected-ref push, pull_request_target,
+# merge/undraft/retarget/auto-merge, write-all, anchored writes) still applies to
+# it unconditionally, and every other workflow keeps the full read-only posture.
+_V2D_UPDATE_BASENAME = "m3e-prospective-update.yml"
+_V2D_ALLOWED_WRITE_LINES = frozenset({"contents: write", "pull-requests: write"})
+
+
 def _no_unsafe_workflow(repo_root: str | Path) -> None:
     workflows = Path(repo_root) / ".github/workflows"
     files = sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")])
@@ -291,7 +302,18 @@ def _no_unsafe_workflow(repo_root: str | Path) -> None:
             )
         if "write-all" in text:
             raise M3EValidationError(f"{path.name} grants write-all permissions at HEAD")
-        if _WRITE_PERM_RE.search(text) or _FLOW_WRITE_PERM_RE.search(text):
+        write_lines = [
+            match.strip().split("#", 1)[0].strip()
+            for match in _WRITE_PERM_RE.findall(text)
+        ]
+        if path.name == _V2D_UPDATE_BASENAME:
+            unexpected = [line for line in write_lines if line not in _V2D_ALLOWED_WRITE_LINES]
+            if unexpected or len(write_lines) > 2 or _FLOW_WRITE_PERM_RE.search(text):
+                raise M3EValidationError(
+                    f"{path.name} grants a write permission beyond the two authorized "
+                    f"job-scoped V2D grants: {unexpected or write_lines}"
+                )
+        elif write_lines or _FLOW_WRITE_PERM_RE.search(text):
             raise M3EValidationError(f"{path.name} grants a write permission at HEAD")
         if _ANCHOR_WRITE_RE.search(text):
             raise M3EValidationError(f"{path.name} anchors a write permission value at HEAD")
@@ -311,7 +333,8 @@ def _no_unsafe_workflow(repo_root: str | Path) -> None:
             )
         uploads_pages = "upload-pages-artifact" in text
         uploads_artifact = "upload-artifact" in text
-        if uploads_pages or (uploads_artifact and path.name != _PRIVATE_RELEASE_UPLOAD_BASENAME):
+        upload_allowed = path.name in {_PRIVATE_RELEASE_UPLOAD_BASENAME, _V2D_UPDATE_BASENAME}
+        if uploads_pages or (uploads_artifact and not upload_allowed):
             raise M3EValidationError(f"{path.name} uploads a workflow artifact")
 
 

@@ -140,7 +140,12 @@ def _no_write_or_coinbase_workflow(repo_root: str | Path) -> None:
     files = sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")])
     for path in files:
         text = path.read_text(encoding="utf-8")
-        if "contents: write" in text or "contents:write" in text:
+        # The V2D-anchored update workflow alone holds one job-scoped contents:
+        # write (bot-branch push); its shape is pinned by verify_m3e_program
+        # check 10 and the workflow-security suites. Everything else stays read-only.
+        if path.name != "m3e-prospective-update.yml" and (
+            "contents: write" in text or "contents:write" in text
+        ):
             raise M3DValidationError(f"{path.name} grants contents: write at the final HEAD")
         if _COINBASE_HOST_RE.search(text):
             raise M3DValidationError(f"{path.name} contacts a Coinbase host at the final HEAD")

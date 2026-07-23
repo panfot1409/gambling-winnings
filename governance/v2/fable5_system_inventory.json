@@ -279,6 +279,7 @@
     "src/eth_research/m3e/replay.py",
     "src/eth_research/m3e/review_policy.py",
     "src/eth_research/m3e/runner_boundary.py",
+    "src/eth_research/m3e/staging.py",
     "src/eth_research/m3e/status.py",
     "src/eth_research/m3e/transition.py",
     "src/eth_research/m3e/update_plan.py",
@@ -290,6 +291,7 @@
     "src/eth_research/m3f/catalog.py",
     "src/eth_research/m3f/cli.py",
     "src/eth_research/m3f/dependency_inventory.py",
+    "src/eth_research/m3f/growable.py",
     "src/eth_research/m3f/honest_state.py",
     "src/eth_research/m3f/oracle.py",
     "src/eth_research/m3f/recovery.py",
@@ -554,8 +556,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "8cb3d87b06e7dc2be8295993a9fd9219633a23844ddd86711a364c204447953f",
-  "tracked_file_count": 1020,
+  "surface_digest": "db10b173e47d8db3cdba2156688e7a13f277f79a2e46e17504121678f4f9f300",
+  "tracked_file_count": 1027,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
@@ -594,9 +596,9 @@
       "uses_secrets": false
     },
     "m3e-prospective-update.yml": {
-      "declares_write_permission": false,
+      "declares_write_permission": true,
       "has_unpinned_uses": false,
-      "sha256": "3d250a0c951bd6cca85096c822ec15c47525b1e2dad8e524cb77d5c536e63c3f",
+      "sha256": "6387000465fb727c656c3c43277de58163d6929d5b32259224baedbd9b2c9b57",
       "uses_secrets": false
     },
     "m3e-replay.yml": {
@@ -608,7 +610,7 @@
     "m3e-update-pr-check.yml": {
       "declares_write_permission": false,
       "has_unpinned_uses": false,
-      "sha256": "b8ed8a77fe2b1e71a8d1d56aed42cfc456063adb99bfff52b5b7d1c512b4009b",
+      "sha256": "dbb978a089f2edadf29366a54be1adcf1c4715f90e409d089023af33274cff5d",
       "uses_secrets": false
     },
     "m3f-replay.yml": {

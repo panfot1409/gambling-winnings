@@ -40,24 +40,31 @@ jobs:
           echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
       - name: Sync locked environment
         run: uv sync --locked --all-extras --python 3.12.3
-      - name: Replay the complete proposed cohort + run the 35-check verifier
+      - name: Verify the staged landed update against the newest proposal
         run: |
           set -euo pipefail
           uv run --no-sync python - <<'PY'
           from eth_research.m3e.verify_m3e_program import (
+              verify_landed_update,
               verify_proposals_root,
-              verify_update_proposal,
           )
 
-          # Every child of the proposals root must be a manifest-bearing proposal dir;
-          # a manifest-less sibling or a stray file (a smuggled artifact) fails here,
-          # so nothing under research/m3e/proposals/ escapes the 35-check verifier.
+          # Every child of the proposals root must be a manifest-bearing proposal
+          # dir (a manifest-less sibling or stray file fails enumeration). The bot
+          # branch carries the proposal evidence AND its staged cohort extension in
+          # one commit, so the check here is the LANDED-update graph: the grown
+          # tree must be exactly the staged consequence of the newest proposal's
+          # two-runner attested evidence (verify_landed_update L01-L11 — grown
+          # base + whole m3d program re-verify, genesis anchored, runner
+          # re-agreement, ledger/attempt-dir/registry/row binding, data-only
+          # invariants). The 35-check pre-staging graph already ran inside the
+          # orchestrator's transactional assembly; earlier landed proposals stay
+          # verified through the cumulative chain rebuild inside this same check.
           proposals = verify_proposals_root(".")
           assert proposals, "no proposal with a manifest found under research/m3e/proposals/"
-          for proposal in proposals:
-              checks = verify_update_proposal(".", proposal)
-              assert len(checks) == 35, f"{proposal}: {len(checks)} checks, expected 35"
-              print(f"{proposal}: 35/35 checks pass")
+          checks = verify_landed_update(".", proposals[-1])
+          assert len(checks) == 11, f"{len(checks)} landed checks, expected 11"
+          print(f"{proposals[-1].name}: landed-update verification 11/11")
           PY
       - name: The verifier mutated no tracked file
         run: |
