@@ -19,7 +19,11 @@ from pathlib import Path
 import pytest
 
 from eth_research.m3e.accepted_base import verify_accepted_base
-from eth_research.m3e.orchestrator import OUTCOME_PREPARED, prepare_update_proposal
+from eth_research.m3e.orchestrator import (
+    OUTCOME_PREPARED,
+    PreparedProposal,
+    prepare_update_proposal,
+)
 from eth_research.m3e.staging import StagingError, stage_cohort_extension
 from eth_research.m3e.validation import M3EValidationError
 from eth_research.m3e.verify_m3e_program import verify_landed_update
@@ -63,7 +67,9 @@ class _GitPort:
         return self._run("status", "--porcelain").strip()
 
 
-def _prepare(clone: Path, m3e_write_runner: Callable[..., object]) -> tuple[_GitPort, object]:
+def _prepare(
+    clone: Path, m3e_write_runner: Callable[..., object]
+) -> tuple[_GitPort, PreparedProposal]:
     from eth_research.m3e.cutoff import plan_update_window
     from eth_research.m3e.update_plan import build_update_plan
 
