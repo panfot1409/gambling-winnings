@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -61,6 +62,8 @@ def _identity() -> QualificationIdentity:
 @pytest.fixture(scope="module")
 def built() -> tuple[dict[str, Any], Path, Path]:
     """Publish + finalize one run; return (result dict, repo_root, registry_path)."""
+    if sys.version_info[:2] != (3, 12):
+        pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
     ident = _identity()
     tmp = Path(tempfile.mkdtemp())
     for rel in SEALED_LEDGER_RELPATHS:

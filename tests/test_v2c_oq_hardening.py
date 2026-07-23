@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import sys
 import tempfile
 from pathlib import Path
 
@@ -68,6 +69,8 @@ def _identity() -> QualificationIdentity:
 @pytest.fixture(scope="module")
 def published() -> tuple[Path, Path, OQCompletionIntent, QualificationIdentity]:
     """Register + start + execute + publish one run WITHOUT finalizing; keep the intent/archive."""
+    if sys.version_info[:2] != (3, 12):
+        pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
     ident = _identity()
     tmp = Path(tempfile.mkdtemp())
     for rel in SEALED_LEDGER_RELPATHS:

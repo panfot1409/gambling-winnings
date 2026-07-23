@@ -8,6 +8,7 @@ is byte-empty, sealed ledgers are byte-empty) and on a completed run materialize
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
 
@@ -95,6 +96,8 @@ def test_recover_pristine_has_no_intent(capsys: pytest.CaptureFixture[str]) -> N
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def completed_repo() -> tuple[Path, Path]:
+    if sys.version_info[:2] != (3, 12):
+        pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
     ident = _identity()
     tmp = Path(tempfile.mkdtemp())
     for rel in SEALED_LEDGER_RELPATHS:

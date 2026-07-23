@@ -10,6 +10,7 @@ only entry to computation -- can exist before the durable ``started`` event.
 
 from __future__ import annotations
 
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -26,6 +27,11 @@ from eth_research.v2c.oq.supersession import OQ_SUPERSESSION_PATH, SEALED_LEDGER
 REPO = Path(__file__).resolve().parents[1]
 _E4B3CC3 = "e4b3cc3d6ecfa0d58dd4c71c01f06b2e252ba6ee"
 _E2_COMMIT = "a" * 40  # a placeholder replacement-freeze commit that is NOT superseded
+
+_OQ_312_ONLY = pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12),
+    reason="the OQ orchestrator enforces CPython 3.12; the live lifecycle runs only there",
+)
 
 
 def _identity() -> QualificationIdentity:
@@ -82,6 +88,7 @@ def test_gate_order_is_nonempty_and_unique() -> None:
     assert O.GATE_ORDER[-1] == "ci_terminal_success_attested"
 
 
+@_OQ_312_ONLY
 def test_full_preflight_passes_on_the_real_tree(tmp_path: Path) -> None:
     ctx = _ctx(_pristine_registry(tmp_path))
     report = O.preflight_report(ctx, expect_state="pristine")
@@ -94,6 +101,7 @@ def test_full_preflight_passes_on_the_real_tree(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 # The lifecycle transitions + the calculation-before-start proof              #
 # --------------------------------------------------------------------------- #
+@_OQ_312_ONLY
 def test_register_then_start_yields_a_started_token(tmp_path: Path) -> None:
     reg = _pristine_registry(tmp_path)
     ctx = _ctx(reg)
@@ -110,12 +118,14 @@ def test_register_then_start_yields_a_started_token(tmp_path: Path) -> None:
     assert events[-1].entry_hash == token.started_entry_hash
 
 
+@_OQ_312_ONLY
 def test_start_refuses_a_pristine_registry(tmp_path: Path) -> None:
     ctx = _ctx(_pristine_registry(tmp_path))
     with pytest.raises(O.OQOrchestratorError, match=r"registry state|does not permit"):
         O.start_qualification(ctx, event_time_utc="2026-07-22T00:00:00Z", reason="OQ-P")
 
 
+@_OQ_312_ONLY
 def test_register_refuses_a_non_pristine_registry(tmp_path: Path) -> None:
     reg = _pristine_registry(tmp_path)
     ctx = _ctx(reg)

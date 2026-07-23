@@ -10,6 +10,7 @@ is exactly registered -> started, and refuses every incomplete or mismatched sta
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
 
@@ -69,6 +70,8 @@ def _ctx(reg: Path) -> O.QualificationContext:
 
 def _started(tmp_path: Path) -> tuple[Path, O.StartedToken]:
     """A fresh registry advanced to registered -> started (fast; no execution)."""
+    if sys.version_info[:2] != (3, 12):
+        pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
     reg = tmp_path / "governance/v2c/oq_registry.jsonl"
     reg.parent.mkdir(parents=True, exist_ok=True)
     reg.write_bytes(b"")

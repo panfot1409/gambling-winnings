@@ -9,6 +9,7 @@ performance can never be built.
 
 from __future__ import annotations
 
+import sys
 import tempfile
 from pathlib import Path
 
@@ -61,6 +62,8 @@ def _ctx(reg: Path) -> O.QualificationContext:
 @pytest.fixture(scope="module")
 def outcome() -> R.QualificationOutcome:
     """Run the full qualification once (expensive) and share it across the module's tests."""
+    if sys.version_info[:2] != (3, 12):
+        pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
     tmp = Path(tempfile.mkdtemp())
     reg = tmp / "reg.jsonl"
     reg.write_bytes(b"")

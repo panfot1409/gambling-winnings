@@ -8,6 +8,7 @@ completion intent, and a truncated (not-completed) registry.
 
 from __future__ import annotations
 
+import sys
 import tempfile
 from pathlib import Path
 
@@ -52,6 +53,8 @@ def _identity() -> QualificationIdentity:
 @pytest.fixture(scope="module")
 def completed_bytes() -> dict[str, bytes]:
     """Execute + publish + finalize one run; capture the completed-run tree as relpath -> bytes."""
+    if sys.version_info[:2] != (3, 12):
+        pytest.skip("the V2C OQ lifecycle requires CPython 3.12")
     ident = _identity()
     tmp = Path(tempfile.mkdtemp())
     for rel in SEALED_LEDGER_RELPATHS:
