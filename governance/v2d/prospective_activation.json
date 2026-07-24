@@ -1,0 +1,61 @@
+{
+  "anchor_sha256": "5c59db8cf81aa439ebc51fb371f9d3c50ce8ee8990b27a2a9547fefcb260636b",
+  "authorization_exclusions": [
+    "strategy or candidate creation",
+    "backtesting or optimization",
+    "reading any sealed partition",
+    "evaluating prospective values",
+    "paper, shadow, or live trading",
+    "broker or exchange authentication",
+    "order routing",
+    "wallet access",
+    "candidate nomination",
+    "changing any historical result",
+    "forcing paper_activation_authorized or sell_ready",
+    "public publication"
+  ],
+  "authorization_scope": "Activate DATA-ONLY prospective collection: the minimum reviewed acquisition/proposal mechanism required to grow the accepted prospective cohort through independently attested, append-only, draft-reviewed update proposals. Nothing else.",
+  "authorized_by": "repository owner — explicit V2D DATA-ONLY activation directive",
+  "authorized_on": "2026-07-23",
+  "cohort_identity": {
+    "cohort_start": "2026-07-12T00:00:00Z",
+    "genesis_content_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+    "genesis_row_count": 3,
+    "interval_seconds": 86400,
+    "minimum_maturity_rows": 365,
+    "product": "ETH-USD",
+    "venue": "coinbase-exchange"
+  },
+  "kind": "v2d_prospective_activation",
+  "mechanism": {
+    "artifact_transport_between_runner_jobs": true,
+    "endpoint_from_committed_plan_only": true,
+    "job_permission_grants": {
+      "assemble_and_publish_bot_branch": [
+        "contents: write"
+      ],
+      "open_draft_pull_request": [
+        "pull-requests: write"
+      ]
+    },
+    "repository": "panfot1409/gambling-winnings",
+    "two_runner_independence_required": true,
+    "workflow_basename": "m3e-prospective-update.yml"
+  },
+  "milestone": "v2d",
+  "review_policy": {
+    "auto_merge_forbidden": true,
+    "draft_required": true,
+    "human_review_required": true,
+    "modifies_accepted_branch": false,
+    "retarget_forbidden": true
+  },
+  "schema_version": 1,
+  "standing_requirements": {
+    "append_only_growth_only": true,
+    "evaluation_authorized_must_remain_false": true,
+    "sealed_ledgers_must_remain_byte_empty": true,
+    "strategy_evaluation_permanently_disabled": true,
+    "values_never_exposed_to_strategy_code": true
+  }
+}

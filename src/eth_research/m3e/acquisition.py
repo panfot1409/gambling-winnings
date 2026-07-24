@@ -156,6 +156,11 @@ def build_runner_bundles(
         raw_bytes = raw_path.read_bytes()
         if sha256_bytes(raw_bytes) != response["response_sha256"]:
             raise M3EValidationError(f"raw file {raw_name} SHA-256 does not match the receipt")
+        if len(raw_bytes) != int(response["response_byte_length"]):
+            raise M3EValidationError(
+                f"raw file {raw_name} byte length {len(raw_bytes)} does not match the "
+                f"receipt {int(response['response_byte_length'])}"
+            )
         bundles.append(
             _bundle_from_raw(
                 ordinal=ordinal,

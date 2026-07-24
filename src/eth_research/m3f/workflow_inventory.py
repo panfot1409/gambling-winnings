@@ -161,6 +161,20 @@ def _artifact_upload_is_authorized(entry: dict[str, Any]) -> bool:
     )
 
 
+def _v2d_update_is_authorized(entry: dict[str, Any]) -> bool:
+    """True only for the V2D-anchored update workflow while its other protections
+    hold (no secret, fully SHA-pinned, real permissions block, no merge verbs). Its
+    job-scoped contents-write (bot-branch push), git push, and inter-job artifact
+    transport are the reviewed activation grants; everything else still fails."""
+    return (
+        Path(entry["path"]).name == "m3e-prospective-update.yml"
+        and entry["references_secrets"] is False
+        and entry["uses_all_sha_pinned"] is True
+        and entry["has_real_permissions_block"] is True
+        and entry["can_merge_or_release_or_tag"] is False
+    )
+
+
 def check_inventory(inventory: dict[str, Any]) -> list[str]:
     """Return the list of fail-closed violations (empty == all clear)."""
     failures: list[str] = []
@@ -168,15 +182,17 @@ def check_inventory(inventory: dict[str, Any]) -> list[str]:
         p = e["path"]
         if not e["has_real_permissions_block"]:
             failures.append(f"{p}: no explicit permissions block")
-        if e["can_write_contents"]:
+        if e["can_write_contents"] and not _v2d_update_is_authorized(e):
             failures.append(f"{p}: grants write contents")
         if e["contacts_market_host"]:
             failures.append(f"{p}: contacts a market host")
-        if e["uploads_artifact"] and not _artifact_upload_is_authorized(e):
+        if e["uploads_artifact"] and not (
+            _artifact_upload_is_authorized(e) or _v2d_update_is_authorized(e)
+        ):
             failures.append(f"{p}: uploads an artifact")
         if e["piped_installer"]:
             failures.append(f"{p}: uses a piped installer")
-        if e["can_push"]:
+        if e["can_push"] and not _v2d_update_is_authorized(e):
             failures.append(f"{p}: contains git push")
         if e["can_merge_or_release_or_tag"]:
             failures.append(f"{p}: contains a merge/release/tag verb")

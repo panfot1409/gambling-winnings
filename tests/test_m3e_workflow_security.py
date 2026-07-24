@@ -1,11 +1,13 @@
-"""Workflow-security invariants for the M3E update automation (commit 15).
+"""Workflow-security invariants for the M3E update automation.
 
-The standing update workflow at HEAD is a strictly read-only "update-due probe": it
-verifies the accepted base and reports whether a new completed day is due, but never
-fetches, never uploads an artifact, never pushes, and never opens a PR — consistent
-with this repository's accepted no-artifact-upload / no-write security posture. The
-full acquisition + two-runner + assemble + draft-PR automation is the offline
-``eth_research.m3e`` machinery, proven by ``tests/test_m3e_publisher_e2e.py``.
+Under the committed V2D activation anchor the standing update workflow is ACTIVE:
+it gates fail-closed on the anchor, fetches the due window on two isolated
+runners over one hardened curl (endpoint from the offline-emitted plan — no host
+literal in YAML), pushes exactly one new bot branch (job-scoped contents: write),
+and opens exactly one DRAFT PR (job-scoped pull-requests: write). It never
+merges, undrafts, retargets, force-pushes, or references a repository secret,
+and every other workflow keeps the full read-only posture — all pinned below and
+by the shared fail-closed scanners.
 """
 
 from __future__ import annotations
@@ -34,27 +36,39 @@ def test_both_m3e_workflows_exist() -> None:
     assert PR_CHECK.is_file()
 
 
-def test_the_probe_is_read_only_and_scheduled() -> None:
+def test_the_update_workflow_defaults_read_only_and_keeps_its_schedule() -> None:
     text = PROBE.read_text()
-    assert "permissions:\n  contents: read" in text
-    assert "contents: write" not in text
+    assert "permissions:\n  contents: read" in text  # top-level default stays read
     assert 'cron: "17 2 * * 1"' in text  # Mondays 02:17 UTC
     assert "workflow_dispatch:" in text
     assert "github.repository == 'panfot1409/gambling-winnings'" in text
+    assert "concurrency:" in text  # overlapping runs stay serialized
 
 
-def test_the_probe_neither_fetches_uploads_pushes_nor_opens_a_pr() -> None:
+def test_the_active_update_workflow_has_exactly_the_authorized_shape() -> None:
+    # V2D supersedes the read-only probe: under the committed activation anchor
+    # the standing workflow now fetches on two isolated runners (endpoint from
+    # the offline-emitted plan — still no host literal in YAML), moves runner
+    # bundles as private artifacts, pushes ONE new bot branch (job-scoped
+    # contents: write), and opens ONE draft PR (job-scoped pull-requests:
+    # write). It still never merges/undrafts/retargets, never force-pushes,
+    # never references a repository secret, and gates on the anchor first.
     text = PROBE.read_text()
-    assert "curl" not in text  # the probe does not fetch
-    assert "upload-artifact" not in text
-    assert "git push" not in text
-    assert "create_pull_request" not in text
-    assert "gh pr create" not in text
+    assert "eth_research.v2d verify" in text  # fail-closed gate before any fetch
+    assert "tools/m3e_fetch_window.sh" in text  # the single hardened curl driver
+    assert "upload-artifact" in text  # inter-job runner-bundle transport
+    assert 'git push origin "HEAD:refs/heads/${{ steps.prepare.outputs.branch }}"' in text
+    assert "bot/m3e-prospective-update/" in text  # push + PR guards pin the prefix
+    assert "gh pr create --draft --base main" in text
     assert not re.search(r"https?://[^\s\"']*coinbase", text, re.IGNORECASE)
-    assert "secrets." not in text
+    assert "secrets." not in text  # the job token is github.token, never a secret
     assert "--force" not in text
     assert "pull_request_target" not in text
     assert "enable_pr_auto_merge" not in text
+    assert "gh pr merge" not in text
+    assert "gh pr ready" not in text
+    assert text.count("contents: write") == 1
+    assert text.count("pull-requests: write") == 1
 
 
 def test_the_pr_check_is_read_only_and_requires_a_draft() -> None:
@@ -74,7 +88,7 @@ def test_the_pr_check_is_read_only_and_requires_a_draft() -> None:
 # eth_research.m3e.verify_m3e_program._no_unsafe_workflow and
 # eth_research.m3f.workflow_inventory.check_inventory, and probed in
 # tests/test_private_workflow_security.py.
-_ARTIFACT_UPLOAD_ALLOWLIST = {"private-release-build.yml"}
+_ARTIFACT_UPLOAD_ALLOWLIST = {"private-release-build.yml", "m3e-prospective-update.yml"}
 
 
 def test_no_m3e_or_other_workflow_uploads_an_artifact() -> None:

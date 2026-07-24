@@ -243,25 +243,54 @@ class TestClosedWorkflowSet:
             for p in WORKFLOWS.glob("*.yml")
             if "upload-artifact" in p.read_text(encoding="utf-8")
         }
-        assert uploaders == {PRIVATE_BASENAME}
+        # The V2D update workflow moves the two isolated runner bundles between
+        # its own jobs as private artifacts (authorized by the committed anchor).
+        assert uploaders == {PRIVATE_BASENAME, "m3e-prospective-update.yml"}
 
     def test_live_supply_chain_scan_is_clean(self) -> None:
         _inv, failures = build_and_check(REPO_ROOT)
         assert failures == []
 
+    def test_v2d_grants_do_not_generalize_to_other_basenames(self) -> None:
+        # The V2D exemption is keyed to the ONE authorized basename. The same
+        # entry properties under any other name must still fail closed in the
+        # shared scanner (and therefore in every suite built on it).
+        from eth_research.m3f.workflow_inventory import check_inventory
+
+        inv = build_inventory(REPO_ROOT)
+        update = next(
+            e for e in inv["workflows"] if Path(e["path"]).name == "m3e-prospective-update.yml"
+        )
+        assert check_inventory({"workflows": [update]}) == []
+        impostor = {**update, "path": ".github/workflows/impostor-update.yml"}
+        failures = check_inventory({"workflows": [impostor]})
+        assert any("write contents" in f for f in failures)
+        assert any("git push" in f for f in failures)
+
     def test_every_live_workflow_is_least_privilege(self) -> None:
+        # The V2D-anchored update workflow is the ONLY workflow allowed to write
+        # contents (job-scoped bot-branch push), push, or move artifacts besides
+        # the private builder. Its YAML carries no market-host literal (the
+        # endpoint comes from the offline-emitted plan), but it IS the single
+        # authorized market-data egress workflow at runtime — documented here and
+        # in tests/test_workflow_security.py, authorized by the committed anchor.
+        update = "m3e-prospective-update.yml"
         inv = build_inventory(REPO_ROOT)
         for e in inv["workflows"]:
             name = Path(e["path"]).name
-            assert e["can_write_contents"] is False, name
-            assert e["can_push"] is False, name
+            if name == update:
+                assert e["can_write_contents"] is True, name
+                assert e["can_push"] is True, name
+            else:
+                assert e["can_write_contents"] is False, name
+                assert e["can_push"] is False, name
             assert e["can_merge_or_release_or_tag"] is False, name
             assert e["contacts_market_host"] is False, name
             assert e["piped_installer"] is False, name
             assert e["uses_all_sha_pinned"] is True, name
             assert e["has_real_permissions_block"] is True, name
             if e["uploads_artifact"]:
-                assert name == PRIVATE_BASENAME, f"{name} uploads but is not allowlisted"
+                assert name in {PRIVATE_BASENAME, update}, f"{name} uploads unexpectedly"
 
 
 # --------------------------------------------------------------------------- #

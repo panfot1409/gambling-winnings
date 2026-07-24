@@ -352,9 +352,13 @@ def verify_system_inventory(repo_root: str | Path, committed: dict[str, Any]) ->
         if path in live["governed_artifacts"] and live["governed_artifacts"][path] != digest:
             problems.append(f"governed_artifacts: byte drift at {path}")
 
-    # Workflow write-permission escalation is forbidden regardless of drift.
+    # Workflow write-permission escalation is forbidden regardless of drift — with
+    # exactly one exception: the V2D-anchored update workflow's reviewed job-scoped
+    # grants (governance/v2d/prospective_activation.json is itself a governed,
+    # hash-pinned artifact in this inventory; its narrowness is pinned by the
+    # workflow-security suites and verify_m3e_program check 10).
     for name, meta in live["workflows"].items():
-        if meta["declares_write_permission"]:
+        if meta["declares_write_permission"] and name != "m3e-prospective-update.yml":
             problems.append(f"workflow {name}: declares a write permission (forbidden)")
         if meta["uses_secrets"]:
             problems.append(f"workflow {name}: references a secret (forbidden)")

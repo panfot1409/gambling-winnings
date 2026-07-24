@@ -25,6 +25,7 @@ from eth_research.m3d.acquisition_plan import (
     ENDPOINT,
     GRANULARITY_SECONDS,
     USER_AGENT,
+    ProspectiveAcquisitionPlan,
     load_prospective_acquisition_plan,
     require_safe_json_filename,
 )
@@ -67,6 +68,10 @@ def emit_curl_plan(plan_path: str | Path, out_path: str | Path) -> int:
     from these validated values only.
     """
     plan = load_prospective_acquisition_plan(plan_path)
+    if not isinstance(plan, ProspectiveAcquisitionPlan):
+        raise AcquisitionRunnerError(
+            "the one-shot runner replays only prospective_acquisition_plan documents"
+        )
     document = {
         "attempt_id": plan.attempt_id,
         "endpoint": ENDPOINT,
@@ -161,6 +166,10 @@ def verify_responses_and_write_receipt(
     tolerated.
     """
     plan = load_prospective_acquisition_plan(plan_path)
+    if not isinstance(plan, ProspectiveAcquisitionPlan):
+        raise AcquisitionRunnerError(
+            "the one-shot runner replays only prospective_acquisition_plan documents"
+        )
     if plan.attempt_id != attempt_id:
         raise AcquisitionRunnerError("attempt id does not match the committed plan")
     staging = Path(staging_dir)

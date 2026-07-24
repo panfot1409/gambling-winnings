@@ -31,8 +31,9 @@ def test_name_and_version_unchanged() -> None:
     proj = _project()
     assert proj["name"] == "eth-research"
     # The GA packaging metadata (URLs, classifiers, no-license, Private :: Do Not Upload,
-    # research/simulation description) is frozen; the active version has since bumped to the V2C
-    # development pre-release. The name is unchanged; the version tracks the live package.
+    # research/simulation description) is frozen; the active version has since bumped to the
+    # V2C development pre-release, where it stays through the no-bump V2D milestone (see
+    # tests/test_version.py). The name is unchanged; the version tracks the live package.
     assert proj["version"] == "2.0.0.dev2"
     assert proj["version"] == eth_research.__version__
 

@@ -37,7 +37,7 @@ from eth_research.m3d.validation import (
 
 RECEIPT_SCHEMA_VERSION = 1
 RECEIPT_KIND = "prospective_attempt_receipt"
-_ALLOWED_CONTENT_TYPE_PREFIX = "application/json"
+_ALLOWED_CONTENT_TYPE = "application/json"
 _OK_STATUS = 200
 
 _RESPONSE_KEYS = {
@@ -55,7 +55,9 @@ _RESPONSE_KEYS = {
 
 def _require_content_type(label: str, value: object) -> str:
     text = require_str(label, value)
-    if not text.split(";")[0].strip().lower().startswith(_ALLOWED_CONTENT_TYPE_PREFIX):
+    # Exact media-type token (optional ``;``-parameters stripped); a prefix test would
+    # admit ``application/jsonx`` and other look-alikes.
+    if text.split(";")[0].strip().lower() != _ALLOWED_CONTENT_TYPE:
         raise M3DValidationError(f"{label} must be application/json, got {text!r}")
     return text
 

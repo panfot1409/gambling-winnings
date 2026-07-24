@@ -28,13 +28,16 @@ from pathlib import Path
 from typing import Any
 
 from eth_research.m3d import _upstream as up
-from eth_research.m3d.acquisition_plan import GENESIS_ATTEMPT_ID
 from eth_research.m3d.cohort import MANIFEST_PATH, verify_cohort_manifest
 from eth_research.m3d.protocol import COHORT_START, MINIMUM_MATURITY_ROWS
 from eth_research.m3d.publication import PUBLICATION_MANIFEST_PATH
-from eth_research.m3d.raw_bundle import build_raw_bundles, cohort_canonical_fingerprint
+from eth_research.m3d.raw_bundle import cohort_canonical_fingerprint
 from eth_research.m3d.reacquisition_audit import REACQUISITION_AUDIT_PATH
 from eth_research.m3d.segment import SEGMENTS_PATH, verify_prospective_segments
+from eth_research.m3d.update_attempts import (
+    UPDATE_ATTEMPTS_PATH,
+    build_accepted_raw_bundles,
+)
 from eth_research.m3e import M3E_PACKAGE_VERSION
 from eth_research.m3e.validation import (
     M3EValidationError,
@@ -114,8 +117,9 @@ def build_accepted_base_document(repo_root: str | Path) -> dict[str, Any]:
     manifest = verify_cohort_manifest(root)
     # 2. Segment chain rebuilds byte-for-byte.
     verify_prospective_segments(root)
-    # 3. Canonical content re-derives from raw bytes and matches the manifest.
-    bundles = build_raw_bundles(root, GENESIS_ATTEMPT_ID)
+    # 3. Canonical content re-derives from raw bytes (genesis + every landed update
+    #    attempt, cross-checked) and matches the manifest.
+    bundles, update_entries = build_accepted_raw_bundles(root)
     fingerprint = cohort_canonical_fingerprint(bundles)
     manifest_fp = require_str(
         "manifest.canonical_content_fingerprint", manifest["canonical_content_fingerprint"]
@@ -147,6 +151,10 @@ def build_accepted_base_document(repo_root: str | Path) -> dict[str, Any]:
         "publication_manifest_sha256": up.hash_file(root, PUBLICATION_MANIFEST_PATH),
         "m3c_candidate_decision_outcome": up.M3C_REJECTED_OUTCOME,
     }
+    # V2D growth: bind the update-attempts ledger once at least one update landed;
+    # a pre-growth base snapshot stays byte-for-byte identical without it.
+    if update_entries:
+        provenance["update_attempts_ledger_sha256"] = up.hash_file(root, UPDATE_ATTEMPTS_PATH)
 
     document: dict[str, Any] = {
         "schema_version": ACCEPTED_BASE_SCHEMA_VERSION,

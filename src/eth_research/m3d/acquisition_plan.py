@@ -356,6 +356,144 @@ def build_prospective_acquisition_plan(
     return ProspectiveAcquisitionPlan.from_mapping(document)
 
 
-def load_prospective_acquisition_plan(path: str | Path) -> ProspectiveAcquisitionPlan:
+# ------------------------------------------------------------------------------------
+# Update-attempt plans (V2D growth): an update attempt directory carries, verbatim, the
+# M3E update plan its runner receipts bind (``receipt.plan_sha256`` is the M3E plan
+# hash). This m3d-native validator accepts exactly that document kind so
+# ``build_raw_bundles`` can replay a landed update attempt from committed bytes without
+# importing m3e (layering: m3e imports m3d, never the reverse). It validates only what
+# the raw-bundle replay needs — constants, window tiling, totals, and the plan's
+# self-hash; the idempotency/base-fingerprint *semantics* stay M3E's job
+# (``verify_m3e_program``), while the hash covers their bytes here.
+# ------------------------------------------------------------------------------------
+
+UPDATE_PLAN_KIND = "prospective_update_plan"
+_UPDATE_PLAN_KEYS = {
+    "schema_version",
+    "kind",
+    "package_version",
+    "endpoint",
+    "documentation_url",
+    "granularity_seconds",
+    "user_agent",
+    "max_buckets_per_request",
+    "base_fingerprint",
+    "accepted_last_open",
+    "first_missing_open",
+    "completed_day_exclusive_end",
+    "expected_total_buckets",
+    "windows",
+    "idempotency_key",
+    "plan_sha256",
+}
+
+
+@dataclass(frozen=True)
+class ProspectiveUpdatePlanView:
+    """A strictly-validated m3d view of a committed M3E update plan."""
+
+    document: dict[str, Any]
+
+    @property
+    def plan_sha256(self) -> str:
+        return str(self.document["plan_sha256"])
+
+    @property
+    def windows(self) -> list[dict[str, Any]]:
+        return list(self.document["windows"])
+
+    def to_json_bytes(self) -> bytes:
+        return canonical_json_bytes(self.document)
+
+    @classmethod
+    def from_mapping(cls, doc: object) -> ProspectiveUpdatePlanView:
+        mapping = require_mapping("update_plan", doc)
+        _require_exact_keys("update_plan", mapping, _UPDATE_PLAN_KEYS)
+        require_exact(
+            "schema_version",
+            require_positive_int("schema_version", mapping["schema_version"]),
+            1,
+        )
+        require_exact("kind", require_str("kind", mapping["kind"]), UPDATE_PLAN_KIND)
+        require_exact("endpoint", require_str("endpoint", mapping["endpoint"]), ENDPOINT)
+        require_exact(
+            "granularity_seconds",
+            require_positive_int("granularity_seconds", mapping["granularity_seconds"]),
+            GRANULARITY_SECONDS,
+        )
+        require_exact("user_agent", require_str("user_agent", mapping["user_agent"]), USER_AGENT)
+        require_exact(
+            "max_buckets_per_request",
+            require_positive_int("max_buckets_per_request", mapping["max_buckets_per_request"]),
+            MAX_BUCKETS_PER_REQUEST,
+        )
+        base_fingerprint = require_str("base_fingerprint", mapping["base_fingerprint"])
+        if len(base_fingerprint) != 64 or any(
+            c not in "0123456789abcdef" for c in base_fingerprint
+        ):
+            raise M3DValidationError("base_fingerprint is not a sha256 hex digest")
+        last_open = _require_utc_midnight("accepted_last_open", mapping["accepted_last_open"])
+        first_missing = _require_utc_midnight("first_missing_open", mapping["first_missing_open"])
+        end = _require_utc_midnight(
+            "completed_day_exclusive_end", mapping["completed_day_exclusive_end"]
+        )
+        if first_missing != last_open + _DAY:
+            raise M3DValidationError("first_missing_open must be accepted_last_open + 1 day")
+        if not end > first_missing:
+            raise M3DValidationError("completed_day_exclusive_end must be after first_missing_open")
+        key = require_str("idempotency_key", mapping["idempotency_key"])
+        if len(key) != 64 or any(c not in "0123456789abcdef" for c in key):
+            raise M3DValidationError("idempotency_key is not a sha256 hex digest")
+
+        windows = [
+            ProspectiveAcquisitionWindow.from_mapping(w)
+            for w in require_list("windows", mapping["windows"])
+        ]
+        _check_tiling(first_missing, end, windows)
+        total = sum(w.expected_bucket_count for w in windows)
+        if total != require_positive_int(
+            "expected_total_buckets", mapping["expected_total_buckets"]
+        ):
+            raise M3DValidationError("expected_total_buckets must equal the summed window buckets")
+
+        document = {
+            "schema_version": 1,
+            "kind": UPDATE_PLAN_KIND,
+            "package_version": require_str("package_version", mapping["package_version"]),
+            "endpoint": ENDPOINT,
+            "documentation_url": require_str("documentation_url", mapping["documentation_url"]),
+            "granularity_seconds": GRANULARITY_SECONDS,
+            "user_agent": USER_AGENT,
+            "max_buckets_per_request": MAX_BUCKETS_PER_REQUEST,
+            "base_fingerprint": base_fingerprint,
+            "accepted_last_open": require_str("accepted_last_open", mapping["accepted_last_open"]),
+            "first_missing_open": require_str("first_missing_open", mapping["first_missing_open"]),
+            "completed_day_exclusive_end": require_str(
+                "completed_day_exclusive_end", mapping["completed_day_exclusive_end"]
+            ),
+            "expected_total_buckets": total,
+            "windows": [w.to_dict() for w in windows],
+            "idempotency_key": key,
+        }
+        expected_hash = canonical_sha256(document)
+        if require_str("plan_sha256", mapping["plan_sha256"]) != expected_hash:
+            raise M3DValidationError("update plan_sha256 does not match the canonical plan hash")
+        document["plan_sha256"] = expected_hash
+        return cls(document=document)
+
+
+def load_prospective_acquisition_plan(
+    path: str | Path,
+) -> ProspectiveAcquisitionPlan | ProspectiveUpdatePlanView:
+    """Load a committed attempt plan, dispatching strictly on its declared kind.
+
+    A genesis/audit attempt carries a ``prospective_acquisition_plan``; a landed
+    update attempt carries, verbatim, the M3E ``prospective_update_plan`` its runner
+    receipt binds. Both paths are strict; any other kind is refused.
+    """
     _raw, doc = load_canonical_json_bytes(Path(path), "prospective_acquisition_plan")
-    return ProspectiveAcquisitionPlan.from_mapping(doc)
+    mapping = require_mapping("plan", doc)
+    kind = require_str("kind", mapping.get("kind"))
+    if kind == UPDATE_PLAN_KIND:
+        return ProspectiveUpdatePlanView.from_mapping(mapping)
+    return ProspectiveAcquisitionPlan.from_mapping(mapping)

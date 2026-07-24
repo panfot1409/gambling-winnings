@@ -31,7 +31,10 @@ def test_status_reports_only_safe_governance_facts() -> None:
     assert status["accepted_base"]["maturity_state"] == "immature"
     assert status["accepted_base"]["evaluation_authorized"] is False
     assert status["registry"]["proposals_recorded"] == 0
-    assert status["workflow_posture"]["active"] is False
+    # The workflow-posture ``active`` flag is derived from the committed V2D activation
+    # anchor (present at this HEAD), not a hard-coded literal.
+    assert status["workflow_posture"]["active"] is True
+    assert (REPO_ROOT / "governance/v2d/prospective_activation.json").is_file()
     assert all(v == 0 for v in status["ledgers"].values())
     # No OHLCV / return / metric value anywhere (recursive self-check already ran).
     _assert_no_forbidden_keys(status)

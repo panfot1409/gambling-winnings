@@ -1,26 +1,22 @@
-# Milestone 3E — review-only prospective-update probe (READY, NOT ACTIVE).
+# Milestone 3E / V2D — DATA-ONLY prospective-update automation (ACTIVE under the
+# committed V2D activation anchor).
 #
-# This standing workflow is a strictly READ-ONLY "update-due probe". On a trusted
-# schedule or manual dispatch it verifies the accepted base and mechanically computes
-# the completed-day cutoff, then reports whether a new completed day is due. It does
-# NOT fetch, does NOT assemble, does NOT upload any artifact, and does NOT push or open
-# a pull request. Consistent with this repository's accepted security posture, no
-# workflow at HEAD writes repository contents, contacts an exchange host, uploads an
-# artifact, or holds a secret.
-#
-# The full acquisition→two-runner-attestation→assemble→draft-PR automation is
-# implemented as OFFLINE machinery (eth_research.m3e: acquire_runner, comparison,
-# transition, assembly, publisher) and proven end-to-end by the disposable-repo
-# rehearsal (tests/test_m3e_publisher_e2e.py). Activating it as a live workflow — which
-# would fetch public candles and open a DRAFT review PR — is a separate, human-reviewed
-# step documented in docs/M3E_PROSPECTIVE_PROTOCOL.md; it is intentionally not wired to
-# run unattended here.
-#
-# On this stacked feature branch a `schedule:` trigger is inert (only default-branch
-# schedules fire) and a `workflow_dispatch:` is not dispatchable, so the probe is ready
-# but not active.
+# Authorized by governance/v2d/prospective_activation.json (checked FAIL-CLOSED by
+# the gate job before any network step). On the weekly schedule or a manual
+# dispatch this workflow: verifies the activation gate and the accepted base;
+# computes the due completed-day window offline; fetches the pinned public
+# Coinbase candles on TWO ISOLATED runner jobs over a hardened curl (endpoint read
+# from the offline-emitted plan — no host literal lives in this file); verifies
+# both runner artifacts offline; assembles + 35-check self-verifies the proposal;
+# stages the append-only cohort extension; pushes ONE new bot branch; and opens
+# ONE draft pull request onto main for human review. It never merges, never
+# undrafts, never retargets, never force-pushes, and never touches an accepted
+# branch. Write grants are job-scoped and minimal: contents write only on the
+# assemble job (bot-branch push), pull-requests write only on the PR-open job.
+# This is the single authorized market-data egress workflow in this repository
+# (see tests/test_workflow_security.py and verify_m3e_program check 10).
 
-name: M3E Prospective Update Probe
+name: M3E Prospective Update
 
 on:
   schedule:
@@ -35,8 +31,56 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  probe:
+  gate_and_plan:
     if: github.repository == 'panfot1409/gambling-winnings'
+    runs-on: ubuntu-latest
+    outputs:
+      due: ${{ steps.plan.outputs.due }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: V2D activation gate (fail-closed, before any network step)
+        run: |
+          set -euo pipefail
+          uv run --no-sync python -m eth_research.v2d verify \
+            --repo-root . \
+            --workflow-basename m3e-prospective-update.yml \
+            --repository "${{ github.repository }}"
+      - name: Compute the due window and the shared update plan (offline)
+        id: plan
+        run: |
+          set -euo pipefail
+          AS_OF="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p "$RUNNER_TEMP/plan"
+          uv run --no-sync python -m eth_research.m3e.acquire_runner plan \
+            --repo-root . --as-of "$AS_OF" --out "$RUNNER_TEMP/plan/update_plan.json"
+          if [ -f "$RUNNER_TEMP/plan/update_plan.json" ]; then
+            printf '%s\n' "$AS_OF" > "$RUNNER_TEMP/plan/as_of.txt"
+            echo "due=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "due=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Share the plan with the isolated runner jobs
+        if: steps.plan.outputs.due == 'true'
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: update-plan
+          path: ${{ runner.temp }}/plan/
+          retention-days: 3
+          if-no-files-found: error
+          # Re-run-all of a due run re-executes this job; v4 artifacts are immutable per run,
+          # so without overwrite the re-upload 409-conflicts and the whole re-run dies here.
+          overwrite: true
+
+  runner_a:
+    needs: gate_and_plan
+    if: needs.gate_and_plan.outputs.due == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -47,17 +91,149 @@ jobs:
           echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
       - name: Sync locked environment
         run: uv sync --locked --all-extras --python 3.12.3
-      - name: Verify the accepted base and report whether an update is due (offline, read-only)
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: update-plan
+          path: ${{ runner.temp }}/plan/
+      - name: Fetch + verify the due window (runner A)
         run: |
           set -euo pipefail
-          AS_OF="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          # Writes the plan to a runner-temp path (never the repo, never an artifact)
-          # only when a new completed day is due; prints DUE or NO-OP either way. This
-          # probe never fetches, assembles, uploads, pushes, or opens a PR.
-          uv run --no-sync python -m eth_research.m3e.acquire_runner plan \
-            --repo-root . --as-of "$AS_OF" --out "$RUNNER_TEMP/update_plan.json"
-      - name: The probe mutated no tracked file
+          bash tools/m3e_fetch_window.sh "$RUNNER_TEMP/plan" "$RUNNER_TEMP/staging" a
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: runner-a
+          path: ${{ runner.temp }}/staging/
+          retention-days: 3
+          if-no-files-found: error
+          overwrite: true
+
+  runner_b:
+    needs: gate_and_plan
+    if: needs.gate_and_plan.outputs.due == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python 3.12.3
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: update-plan
+          path: ${{ runner.temp }}/plan/
+      - name: Fetch + verify the due window (runner B)
         run: |
           set -euo pipefail
-          git diff --exit-code
-          test -z "$(git status --porcelain)"
+          bash tools/m3e_fetch_window.sh "$RUNNER_TEMP/plan" "$RUNNER_TEMP/staging" b
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: runner-b
+          path: ${{ runner.temp }}/staging/
+          retention-days: 3
+          if-no-files-found: error
+          overwrite: true
+
+  assemble_and_publish:
+    needs: [gate_and_plan, runner_a, runner_b]
+    if: needs.gate_and_plan.outputs.due == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # job-scoped: push exactly one new bot/m3e-prospective-update/* branch
+    outputs:
+      branch: ${{ steps.prepare.outputs.branch }}
+      title: ${{ steps.prepare.outputs.title }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/uvenv"
+          "$RUNNER_TEMP/uvenv/bin/python" -m pip install --require-hashes --only-binary=:all: -r ci/uv-requirements.txt
+          echo "$RUNNER_TEMP/uvenv/bin" >> "$GITHUB_PATH"
+      - name: Sync locked environment
+        run: uv sync --locked --all-extras --python 3.12.3
+      - name: Re-run the V2D activation gate on this job's checkout
+        run: |
+          set -euo pipefail
+          uv run --no-sync python -m eth_research.v2d verify \
+            --repo-root . \
+            --workflow-basename m3e-prospective-update.yml \
+            --repository "${{ github.repository }}"
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: update-plan
+          path: ${{ runner.temp }}/plan/
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: runner-a
+          path: ${{ runner.temp }}/runner_a/
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: runner-b
+          path: ${{ runner.temp }}/runner_b/
+      - name: Assemble, self-verify, stage the cohort extension, commit the bot branch
+        id: prepare
+        run: |
+          set -euo pipefail
+          git config user.name "m3e-prospective-update"
+          git config user.email "m3e-prospective-update@users.noreply.github.com"
+          uv run --no-sync python tools/m3e_run_update.py \
+            --repo-root . \
+            --plan-dir "$RUNNER_TEMP/plan" \
+            --runner-a "$RUNNER_TEMP/runner_a" \
+            --runner-b "$RUNNER_TEMP/runner_b" \
+            --output "$GITHUB_OUTPUT" \
+            --body-out "$RUNNER_TEMP/pr_body.md"
+      - name: Push the bot branch (never an accepted branch, never forced)
+        if: steps.prepare.outputs.branch != ''
+        run: |
+          set -euo pipefail
+          case "${{ steps.prepare.outputs.branch }}" in
+            bot/m3e-prospective-update/*) ;;
+            *) echo "refusing to push a non-bot branch"; exit 1 ;;
+          esac
+          git push origin "HEAD:refs/heads/${{ steps.prepare.outputs.branch }}"
+      - name: Share the draft-PR body with the PR-open job
+        if: steps.prepare.outputs.branch != ''
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: pr-body
+          path: ${{ runner.temp }}/pr_body.md
+          retention-days: 3
+          if-no-files-found: error
+          overwrite: true
+
+  open_draft_pr:
+    needs: [gate_and_plan, assemble_and_publish]
+    if: needs.gate_and_plan.outputs.due == 'true' && needs.assemble_and_publish.outputs.branch != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # job-scoped: open exactly one DRAFT PR; no merge verbs exist here
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: pr-body
+          path: ${{ runner.temp }}/body/
+      - name: Open the draft update-proposal PR (human review required)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BRANCH="${{ needs.assemble_and_publish.outputs.branch }}"
+          case "$BRANCH" in
+            bot/m3e-prospective-update/*) ;;
+            *) echo "refusing a non-bot head"; exit 1 ;;
+          esac
+          if gh pr list --head "$BRANCH" --state open --json number --jq 'length' | grep -qv '^0$'; then
+            echo "a PR for $BRANCH already exists; idempotent skip"
+            exit 0
+          fi
+          gh pr create --draft --base main --head "$BRANCH" \
+            --title "${{ needs.assemble_and_publish.outputs.title }}" \
+            --body-file "$RUNNER_TEMP/body/pr_body.md"

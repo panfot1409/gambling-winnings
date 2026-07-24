@@ -154,6 +154,18 @@ def build_raw_bundles(repo_root: str | Path, attempt_id: str) -> list[Prospectiv
         raise M3DValidationError("receipt plan hash does not match the committed plan")
 
     by_ordinal = {int(w["ordinal"]): w for w in plan.windows}
+    # The receipt must cover exactly the plan windows — no unknown ordinal (which would
+    # otherwise raise a bare KeyError, breaking the M3DValidationError contract) and no
+    # missing window (a strict subset would rebuild a truncated cohort). This mirrors the
+    # m3e runner boundary's full-coverage requirement (m3e.acquisition).
+    receipt_ordinals = [int(r["ordinal"]) for r in receipt.responses]
+    if len(set(receipt_ordinals)) != len(receipt_ordinals):
+        raise M3DValidationError("receipt has duplicate window ordinals")
+    if set(receipt_ordinals) != set(by_ordinal):
+        raise M3DValidationError(
+            "receipt windows do not exactly cover the plan windows "
+            f"(receipt {sorted(set(receipt_ordinals))}, plan {sorted(by_ordinal)})"
+        )
     bundles: list[ProspectiveRawBundle] = []
     for response in receipt.responses:
         ordinal = int(response["ordinal"])
@@ -166,6 +178,11 @@ def build_raw_bundles(repo_root: str | Path, attempt_id: str) -> list[Prospectiv
         raw_bytes = up.read_bytes(repo_root, f"{raw_dir}/{raw_name}")
         if sha256_bytes(raw_bytes) != response["response_sha256"]:
             raise M3DValidationError(f"raw file {raw_name} SHA-256 does not match the receipt")
+        if len(raw_bytes) != int(response["response_byte_length"]):
+            raise M3DValidationError(
+                f"raw file {raw_name} byte length {len(raw_bytes)} does not match the "
+                f"receipt {int(response['response_byte_length'])}"
+            )
         bundle = _bundle_from_raw(
             ordinal,
             raw_name,

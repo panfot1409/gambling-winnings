@@ -165,12 +165,20 @@ def test_seam_refuses_to_reuse_a_preexisting_branch(
     clone = m3a_checkout
     proposal_dir = _stage(clone, m3e_write_runner)
     git = _SubprocessGitPort(clone)
+    origin_branch = git.current_branch()
     # First pass prepares the branch; a repeat must skip (never force-reuse an orphan).
     first = prepare_update_proposal(
         clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=_PROPOSAL_REL
     )
     assert first.outcome == OUTCOME_PREPARED
     assert first.proposal_branch is not None
+    # Production repeat runs start from a fresh checkout of the (ungrown) accepted
+    # branch — the staged growth lives only on the bot branch until a human merges
+    # it. Model that: return to the pre-update branch, re-stage the runner bundles,
+    # and the repeat must skip on the pre-existing bot branch, never force-reuse it.
+    git._run("checkout", "--quiet", origin_branch)
+    assert git.status_porcelain() == ""
+    proposal_dir = _stage(clone, m3e_write_runner)
     second = prepare_update_proposal(
         clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=_PROPOSAL_REL
     )
@@ -211,3 +219,24 @@ def test_seam_refuses_a_proposal_relpath_that_is_not_the_proposal_dir(
         b.startswith("bot/m3e-prospective-update/")
         for b in git._run("branch", "--format=%(refname:short)").split()
     )
+
+
+def test_rehearsal_clone_is_pinned_to_a_named_branch(m3a_checkout: Path) -> None:
+    """The disposable rehearsal clone must sit on a real, *named* local branch.
+
+    ``actions/checkout`` leaves a ``pull_request`` CI run on a detached HEAD, and a
+    ``--local`` clone of a detached (or mid-suite re-checked-out) repository is itself
+    detached — so ``current_branch()`` returns the literal ``"HEAD"``. A seam test that
+    models a repeat run by returning to the accepted branch
+    (``git checkout <current_branch>``) would then be a silent no-op that strands the
+    working tree on a bot branch's staged cohort growth; the next plan sees an
+    already-grown base and crashes on a spurious no-op. Regression for the V2D
+    activation-PR CI failure — the ``make_m3a_checkout`` fixture pins a named branch so
+    the accepted cohort is modelled the way production holds it (never a detached HEAD).
+    """
+    git = _SubprocessGitPort(m3a_checkout)
+    branch = git.current_branch()
+    assert branch not in ("", "HEAD")
+    assert git.branch_exists(branch)
+    # The round-trip the seam rehearsal depends on is a real branch switch, not a no-op.
+    assert not branch.startswith("bot/m3e-prospective-update/")

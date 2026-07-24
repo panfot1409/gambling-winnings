@@ -21,6 +21,13 @@ from pathlib import Path
 from typing import Any
 
 from eth_research.m3f import M3F_PACKAGE_VERSION
+from eth_research.m3f.growable import (
+    GROWABLE_APPEND_CHAINS,
+    GROWABLE_CURRENT_STATE,
+    is_growable_new_path,
+    require_exact_prefix,
+    v2d_activation_anchor_active,
+)
 from eth_research.m3f.validation import (
     M3FValidationError,
     canonical_json_bytes,
@@ -350,6 +357,14 @@ def verify_catalog(repo_root: str | Path) -> CatalogResult:
         return CatalogResult(False, (), (f"catalog_load: {exc}",))
     acc.ok("01_catalog_bytes_canonical")
 
+    # V2D: with a strictly-valid committed activation anchor, the enumerated
+    # growable cohort surface verifies APPEND-ONLY against the accepted baseline
+    # instead of byte-static; absent the anchor every divergence fails as accepted.
+    try:
+        growth_active = v2d_activation_anchor_active(root)
+    except M3FValidationError as exc:
+        return CatalogResult(False, (), (f"v2d_anchor: {exc}",))
+
     artifacts = require_list(catalog.get("artifacts"), "artifacts")
     catalogued: set[str] = set()
     for entry in artifacts:
@@ -362,10 +377,33 @@ def verify_catalog(repo_root: str | Path) -> CatalogResult:
         except (OSError, M3FValidationError) as exc:
             acc.fail("02_artifact_present", f"{rel}: {exc}")
             continue
-        if sha256_bytes(raw) != require_sha256_hex(rec.get("sha256"), "artifact.sha256"):
-            acc.fail("03_artifact_hash", f"{rel}: sha256 mismatch")
-        if len(raw) != require_int(rec.get("byte_length"), "artifact.byte_length"):
-            acc.fail("04_artifact_length", f"{rel}: byte_length mismatch")
+        want_sha = require_sha256_hex(rec.get("sha256"), "artifact.sha256")
+        want_len = require_int(rec.get("byte_length"), "artifact.byte_length")
+        byte_static = sha256_bytes(raw) == want_sha and len(raw) == want_len
+        if not byte_static and growth_active and rel in GROWABLE_APPEND_CHAINS:
+            # The accepted chain bytes must survive as an exact prefix. The
+            # baseline is recovered from the immutable accepted-main commit so a
+            # rewritten prefix cannot hide behind a matching length claim.
+            try:
+                baseline = _blob_bytes(root, EXPECTED_ACCEPTED_MAIN_SHA, rel)
+                if sha256_bytes(baseline) != want_sha:
+                    raise M3FValidationError("pinned baseline drifted from the catalog")
+                require_exact_prefix(baseline, raw, rel)
+            except (subprocess.CalledProcessError, M3FValidationError) as exc:
+                acc.fail("03_artifact_hash", f"{rel}: append-only check failed: {exc}")
+        elif not byte_static and growth_active and rel in GROWABLE_CURRENT_STATE:
+            # A replaced snapshot of the growing cohort: byte-stasis is delegated
+            # to its own milestone rebuild-from-raw-bytes verifier; here it must
+            # at least remain a canonical committed artifact.
+            try:
+                load_canonical_json(raw, rel)
+            except M3FValidationError as exc:
+                acc.fail("03_artifact_hash", f"{rel}: not canonical after growth: {exc}")
+        elif not byte_static:
+            if sha256_bytes(raw) != want_sha:
+                acc.fail("03_artifact_hash", f"{rel}: sha256 mismatch")
+            if len(raw) != want_len:
+                acc.fail("04_artifact_length", f"{rel}: byte_length mismatch")
         # A5: labels are recomputed from the path, not merely checked for vocab
         # membership, so a relabelled artifact (e.g. m2b evidence forged as m3f) is caught.
         try:
@@ -386,6 +424,8 @@ def verify_catalog(repo_root: str | Path) -> CatalogResult:
         all_tracked = _tracked_governed_files(root)
         tracked = {p for p in all_tracked if _is_accepted_stack(p)}
         orphans = sorted(tracked - catalogued)
+        if growth_active:
+            orphans = [p for p in orphans if not is_growable_new_path(p)]
         stale = sorted(catalogued - tracked)
         if orphans:
             acc.fail("08_no_orphan_governed_files", f"uncatalogued: {orphans[:5]}")
@@ -491,6 +531,28 @@ def _verify_git_provenance(root: Path, catalog: dict[str, Any], acc: _Accum) -> 
             "14_accepted_stack_anchored", "pinned accepted-main not present; anchor not applicable"
         )
     else:
+        try:
+            growth_active = v2d_activation_anchor_active(root)
+        except M3FValidationError as exc:
+            acc.fail("14_accepted_stack_anchored", f"v2d anchor invalid: {exc}")
+            return
+        pathspecs: list[str] = list(ACCEPTED_STACK_PREFIXES)
+        if growth_active:
+            # The growable surface is verified append-only (chains prefix-anchored
+            # below; snapshots delegated to their milestone verifiers); every other
+            # accepted byte stays anchored to the immutable commit exactly.
+            from eth_research.m3f.growable import (
+                GROWABLE_NEW_FILES,
+                GROWABLE_NEW_PATH_PREFIXES,
+            )
+
+            excludes = (
+                *GROWABLE_APPEND_CHAINS,
+                *GROWABLE_CURRENT_STATE,
+                *GROWABLE_NEW_FILES,
+            )
+            pathspecs.extend(f":(exclude){rel}" for rel in excludes)
+            pathspecs.extend(f":(exclude){prefix}*" for prefix in GROWABLE_NEW_PATH_PREFIXES)
         diff = subprocess.run(
             [
                 "git",
@@ -500,7 +562,7 @@ def _verify_git_provenance(root: Path, catalog: dict[str, Any], acc: _Accum) -> 
                 "--quiet",
                 EXPECTED_ACCEPTED_MAIN_SHA,
                 "--",
-                *ACCEPTED_STACK_PREFIXES,
+                *pathspecs,
             ],
             capture_output=True,
         )
@@ -511,6 +573,13 @@ def _verify_git_provenance(root: Path, catalog: dict[str, Any], acc: _Accum) -> 
                 "14_accepted_stack_anchored",
                 "accepted M2B-M3E evidence differs from the pinned accepted-main commit",
             )
+        if growth_active:
+            for rel in GROWABLE_APPEND_CHAINS:
+                try:
+                    baseline = _blob_bytes(root, EXPECTED_ACCEPTED_MAIN_SHA, rel)
+                    require_exact_prefix(baseline, (root / rel).read_bytes(), rel)
+                except (subprocess.CalledProcessError, OSError, M3FValidationError) as exc:
+                    acc.fail("14_accepted_stack_anchored", f"{rel}: {exc}")
 
 
 def _verify_expected_state(root: Path, catalog: dict[str, Any], acc: _Accum) -> None:
@@ -525,11 +594,26 @@ def _verify_expected_state(root: Path, catalog: dict[str, Any], acc: _Accum) -> 
     except (OSError, M3FValidationError) as exc:
         acc.fail("11_expected_state", f"cannot load governance artifacts: {exc}")
         return
+    try:
+        growth_active = v2d_activation_anchor_active(root)
+    except M3FValidationError as exc:
+        acc.fail("11_expected_state", f"v2d anchor invalid: {exc}")
+        return
     if decision.get("outcome") != expected.get("m3c_outcome"):
         acc.fail("11_m3c_outcome_bound", "m3c outcome drifted from catalog")
-    if base.get("row_count") != expected.get("m3d_cohort_rows"):
+    rows = base.get("row_count")
+    want_rows = expected.get("m3d_cohort_rows")
+    if not isinstance(rows, int) or isinstance(rows, bool):
+        acc.fail("12_m3d_rows_bound", "live row_count is not an integer")
+    elif rows != want_rows and not (
+        growth_active and isinstance(want_rows, int) and rows > want_rows
+    ):
+        # Growth may only RAISE the row count above the at-acceptance value.
         acc.fail("12_m3d_rows_bound", "cohort rows drifted from catalog")
-    if base.get("maturity_state") != expected.get("m3d_maturity_state"):
+    maturity = base.get("maturity_state")
+    if maturity != expected.get("m3d_maturity_state") and not (
+        growth_active and maturity == "immature" and isinstance(rows, int) and rows < 365
+    ):
         acc.fail("13_m3d_maturity_bound", "maturity drifted from catalog")
     if bool(base.get("evaluation_authorized")) is not bool(
         expected.get("m3d_evaluation_authorized")

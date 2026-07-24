@@ -522,6 +522,15 @@ def make_m3a_checkout(tmp_path: Path) -> Path:
     )
     _git(clone, "config", "user.email", "test@example.com")
     _git(clone, "config", "user.name", "Test Researcher")
+    # Pin the clone onto a real, named local branch representing the accepted cohort.
+    # ``actions/checkout`` leaves the CI workspace on a *detached HEAD* for
+    # ``pull_request`` events, and a ``--local`` clone of a detached repo is itself
+    # detached — so ``current_branch()`` would return the literal ``"HEAD"`` and a
+    # test's "return to the accepted branch" (``git checkout HEAD``) would be a no-op
+    # that strands the working tree on a bot branch's staged growth. Forcing a named
+    # branch models production (the accepted cohort lives on a named branch, never a
+    # detached HEAD) and makes the rehearsal deterministic in both environments.
+    _git(clone, "checkout", "-B", "accepted-cohort")
     # Overlay the working-tree source and the CI verifier scripts so the rehearsal
     # exercises the *current* package and CI gates (which may carry uncommitted
     # changes); commit only if they differ from the cloned HEAD, so a clean tree

@@ -147,11 +147,14 @@ def test_assert_draft_only_rejects_a_bot_base() -> None:
 
 
 def test_assert_draft_only_pins_the_base_to_the_accepted_cohort_branch() -> None:
-    # The base is never the default branch, another milestone branch, or empty.
+    # The accepted cohort lives on the true-merged default branch, so the pinned
+    # base is exactly ``main`` — never a stale milestone branch, a bot branch,
+    # another ref spelling, or empty.
+    assert ACCEPTED_COHORT_BRANCH == "main"
     for bad_base in (
-        "main",
         "master",
         "claude/m3c-adaptive-research-governance",
+        "claude/m3d-prospective-evidence-governance",
         "",
         "refs/heads/main",
     ):

@@ -29,7 +29,13 @@ def test_workflow_inventory_all_real_workflows_pass_the_supply_chain_check() -> 
     inv, failures = wf.build_and_check(REPO_ROOT)
     assert inv["workflow_count"] >= 8
     assert failures == [], f"unexpected workflow violations: {failures}"
-    assert all(e["can_write_contents"] is False for e in inv["workflows"])
+    # Only the V2D-anchored update workflow holds its reviewed job-scoped write
+    # grant; check_inventory above already proved it is otherwise least-privilege
+    # and that the grant does not generalize to any other basename.
+    from pathlib import Path as _P
+
+    writers = {_P(e["path"]).name for e in inv["workflows"] if e["can_write_contents"] is True}
+    assert writers <= {"m3e-prospective-update.yml"}
     assert all(e["uses_all_sha_pinned"] for e in inv["workflows"])
 
 

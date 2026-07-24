@@ -105,7 +105,67 @@ def _build_records(repo_root: str | Path) -> list[dict[str, Any]]:
         "source_commit": require_str("source_commit", receipt.document["source_commit"]),
         "publication_bundle_hash": publication_bundle_hash,
     }
-    return [genesis, segment]
+    records = [genesis, segment]
+    records.extend(_update_segment_records(repo_root))
+    return records
+
+
+def _update_segment_records(repo_root: str | Path) -> list[dict[str, Any]]:
+    """One chained segment per landed update attempt (V2D growth; empty pre-growth).
+
+    Each update segment is the same deterministic function of its attempt's
+    committed plan + receipt + raw bytes as the genesis segment is of its own; the
+    ledger only supplies the attempt *order*, never a trusted value.
+    """
+    from eth_research.m3d.update_attempts import load_update_attempt_entries
+
+    records: list[dict[str, Any]] = []
+    for entry in load_update_attempt_entries(repo_root):
+        attempt_id = str(entry["attempt_id"])
+        raw_dir = f"research/m3d/raw/coinbase/{attempt_id}"
+        bundles = build_raw_bundles(repo_root, attempt_id)
+        rows = combined_canonical_rows(bundles)
+        receipt = load_prospective_attempt_receipt(
+            Path(repo_root) / f"{raw_dir}/acquisition_receipt.json"
+        )
+        receipt_hash = up.hash_file(repo_root, f"{raw_dir}/acquisition_receipt.json")
+        segment_id = f"prospective-segment-{int(entry['ordinal']):03d}"
+        canonical_fp = cohort_canonical_fingerprint(bundles)
+        raw_bundle_fp = domain_sha256(
+            "prospective_segment_raw_bundle",
+            {"attempt_id": attempt_id, "bundles": [b.to_dict() for b in bundles]},
+        )
+        publication_bundle_hash = domain_sha256(
+            "prospective_segment_publication",
+            {
+                "segment_id": segment_id,
+                "attempt_receipt_hash": receipt_hash,
+                "raw_bundle_fingerprint": raw_bundle_fp,
+                "canonical_content_fingerprint": canonical_fp,
+            },
+        )
+        from eth_research.m3d import M3D_PACKAGE_VERSION
+
+        records.append(
+            {
+                "schema_version": SEGMENTS_SCHEMA_VERSION,
+                "entry_kind": "segment",
+                "segment_id": segment_id,
+                "source_plan_hash": require_str("plan_sha256", receipt.plan_sha256),
+                "attempt_receipt_hash": receipt_hash,
+                "raw_bundle_fingerprint": raw_bundle_fp,
+                "canonical_content_fingerprint": canonical_fp,
+                "first_open": rows[0][0],
+                "last_open": rows[-1][0],
+                "row_count": len(rows),
+                "interval_seconds": _INTERVAL_SECONDS,
+                "created_at_utc": require_str("created_at_utc", receipt.document["created_at_utc"]),
+                "package_version": M3D_PACKAGE_VERSION,
+                "source_commit": require_str("source_commit", receipt.document["source_commit"]),
+                "publication_bundle_hash": publication_bundle_hash,
+            }
+        )
+    return records
 
 
 def build_prospective_segments_bytes(repo_root: str | Path) -> bytes:

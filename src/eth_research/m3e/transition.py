@@ -29,12 +29,11 @@ from typing import Any
 
 import pandas as pd
 
-from eth_research.m3d.acquisition_plan import GENESIS_ATTEMPT_ID
 from eth_research.m3d.raw_bundle import (
-    build_raw_bundles,
     cohort_canonical_fingerprint,
     combined_canonical_rows,
 )
+from eth_research.m3d.update_attempts import build_accepted_raw_bundles
 from eth_research.m3e.accepted_base import AcceptedProspectiveBase
 from eth_research.m3e.acquisition import fingerprint_new_window_rows
 from eth_research.m3e.validation import (
@@ -99,7 +98,7 @@ def build_update_transition(
     new_window_fingerprint: str,
 ) -> ProspectiveUpdateTransition:
     """Prove the accepted → proposed transition is a strict append; HARD STOP otherwise."""
-    old_bundles = build_raw_bundles(repo_root, GENESIS_ATTEMPT_ID)
+    old_bundles, _entries = build_accepted_raw_bundles(repo_root)
     old_rows = combined_canonical_rows(old_bundles)
     if not old_rows:
         raise M3EValidationError("accepted cohort has no rows")

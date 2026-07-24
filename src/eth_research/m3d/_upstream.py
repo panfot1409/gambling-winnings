@@ -128,7 +128,16 @@ def resolve(repo_root: str | Path, relpath: str) -> Path:
     candidate = (root / pure).resolve()
     if root != candidate and root not in candidate.parents:
         raise M3DValidationError(f"path {relpath!r} escapes repo root")
-    if candidate.is_symlink() or not candidate.is_file():
+    # Reject a symlink at any component of the relative chain. ``candidate`` above is
+    # already resolved (it followed every link), so ``candidate.is_symlink()`` can never
+    # be true for an in-repo symlink; the component walk below is what actually enforces
+    # the docstring's "no symlink" guarantee (mirrors m3f.validation.safe_repo_path).
+    cursor = root
+    for part in pure.parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            raise M3DValidationError(f"path {relpath!r} is not a regular file")
+    if not candidate.is_file():
         raise M3DValidationError(f"path {relpath!r} is not a regular file")
     return candidate
 

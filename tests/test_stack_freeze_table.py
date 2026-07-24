@@ -70,16 +70,48 @@ def test_freeze_table_covers_every_research_file() -> None:
             or p.startswith("research/v2ab/")
         )
     }
+    # V2D: with the committed activation anchor, the reviewed update path may add
+    # new prospective evidence (update attempts, proposals, the attempts ledger)
+    # that post-dates this accepted-stack snapshot; it is verified append-only by
+    # the m3d/m3e/m3f verifiers, not by this table.
+    from eth_research.m3f.growable import is_growable_new_path, v2d_activation_anchor_active
+
+    if v2d_activation_anchor_active(REPO_ROOT):
+        tracked = {p for p in tracked if not is_growable_new_path(p)}
     listed = {row["path"] for row in _table()["files"]}
     assert listed == tracked, f"table drift: missing={tracked - listed}, extra={listed - tracked}"
 
 
 def test_every_frozen_artifact_still_matches_its_recorded_hash() -> None:
+    # V2D growable surface: under the committed activation anchor the append
+    # chains must keep the snapshot as an exact hash-verified prefix, and the
+    # replaced cohort snapshots are verified by their own milestone rebuilds
+    # (verify_m3d_program / verify_accepted_base) rather than byte-stasis here.
+    from eth_research.m3f.growable import (
+        GROWABLE_APPEND_CHAINS,
+        GROWABLE_CURRENT_STATE,
+        v2d_activation_anchor_active,
+    )
+
+    grown = v2d_activation_anchor_active(REPO_ROOT)
     mismatches: list[str] = []
     for row in _table()["files"]:
         data = (REPO_ROOT / row["path"]).read_bytes()
-        if hashlib.sha256(data).hexdigest() != row["sha256"] or len(data) != row["byte_length"]:
-            mismatches.append(row["path"])
+        byte_static = (
+            hashlib.sha256(data).hexdigest() == row["sha256"] and len(data) == row["byte_length"]
+        )
+        if byte_static:
+            continue
+        if grown and row["path"] in GROWABLE_APPEND_CHAINS:
+            want_len = int(row["byte_length"])
+            if (
+                len(data) >= want_len
+                and hashlib.sha256(data[:want_len]).hexdigest() == row["sha256"]
+            ):
+                continue
+        if grown and row["path"] in GROWABLE_CURRENT_STATE:
+            continue
+        mismatches.append(row["path"])
     assert not mismatches, f"freeze-table hash drift: {mismatches}"
 
 

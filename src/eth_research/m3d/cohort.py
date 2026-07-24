@@ -75,7 +75,9 @@ def assess_prospective_maturity(repo_root: str | Path) -> dict[str, Any]:
     independent reacquisition. Even a mature cohort is **not** evaluation
     authorized — M3D authorizes nothing.
     """
-    bundles = build_raw_bundles(repo_root, GENESIS_ATTEMPT_ID)
+    from eth_research.m3d.update_attempts import build_accepted_raw_bundles
+
+    bundles, _entries = build_accepted_raw_bundles(repo_root)
     rows = combined_canonical_rows(bundles)
     row_count = len(rows)
     opens = [pd.Timestamp(row[0]) for row in rows]
@@ -118,10 +120,30 @@ def _acquisition_provenance(repo_root: str | Path, attempt_id: str) -> dict[str,
     }
 
 
+def _update_acquisition_provenance(repo_root: str | Path, entry: dict[str, Any]) -> dict[str, Any]:
+    """Per-landed-update provenance (may span multiple plan windows, unlike genesis)."""
+    attempt_id = str(entry["attempt_id"])
+    raw_dir = f"research/m3d/raw/coinbase/{attempt_id}"
+    bundles = build_raw_bundles(repo_root, attempt_id)
+    return {
+        "attempt_id": attempt_id,
+        "plan_sha256": up.hash_file(repo_root, f"{raw_dir}/acquisition_plan.json"),
+        "receipt_sha256": up.hash_file(repo_root, f"{raw_dir}/acquisition_receipt.json"),
+        "window_count": len(bundles),
+        "raw_bundle_fingerprints": [b.canonical_content_fingerprint for b in bundles],
+        "attempt_canonical_fingerprint": cohort_canonical_fingerprint(bundles),
+        "proposal_id": str(entry["proposal_id"]),
+    }
+
+
 def _build_document(repo_root: str | Path) -> dict[str, Any]:
     from eth_research.m3d import M3D_PACKAGE_VERSION
+    from eth_research.m3d.update_attempts import (
+        UPDATE_ATTEMPTS_PATH,
+        build_accepted_raw_bundles,
+    )
 
-    bundles = build_raw_bundles(repo_root, GENESIS_ATTEMPT_ID)
+    bundles, update_entries = build_accepted_raw_bundles(repo_root)
     rows = combined_canonical_rows(bundles)
     if not rows:
         raise M3DValidationError("cannot build a cohort manifest with no rows")
@@ -134,7 +156,7 @@ def _build_document(repo_root: str | Path) -> dict[str, Any]:
         if facts["byte_count"] != 0:
             raise M3DValidationError(f"sealed ledger {name} must stay byte-empty (HARD STOP)")
 
-    provenance = {
+    provenance: dict[str, Any] = {
         "genesis_acquisition": _acquisition_provenance(repo_root, GENESIS_ATTEMPT_ID),
         "audit_acquisition": _acquisition_provenance(repo_root, AUDIT_ATTEMPT_ID),
         "canonical_content_fingerprint": cohort_canonical_fingerprint(bundles),
@@ -148,6 +170,14 @@ def _build_document(repo_root: str | Path) -> dict[str, Any]:
         "data_use_ledger_sha256": up.hash_file(repo_root, DATA_USE_PATH),
         "exhaustion_decision_sha256": up.hash_file(repo_root, EXHAUSTION_PATH),
     }
+    # V2D growth: bind the update-attempts ledger and each landed update's evidence.
+    # Both keys appear only once at least one update has landed, so a pre-growth
+    # manifest stays byte-for-byte identical to the accepted genesis-only manifest.
+    if update_entries:
+        provenance["update_attempts_ledger_sha256"] = up.hash_file(repo_root, UPDATE_ATTEMPTS_PATH)
+        provenance["update_acquisitions"] = [
+            _update_acquisition_provenance(repo_root, entry) for entry in update_entries
+        ]
 
     document: dict[str, Any] = {
         "schema_version": MANIFEST_SCHEMA_VERSION,

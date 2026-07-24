@@ -3,8 +3,9 @@
 ``python -m eth_research.m3e.status --repo-root .`` prints only safe governance
 facts — the accepted-base identity and boundaries, the content fingerprint (a hash,
 never a price), the maturity/authorization flags, the pinned review policy, the false
-governance flags, the append-only registry summary, the workflow posture (ready, not
-active), and the three ledger byte counts. It never prints OHLCV values, returns,
+governance flags, the append-only registry summary, the workflow posture (whose
+``active`` flag is derived from the committed V2D activation anchor), and the three
+ledger byte counts. It never prints OHLCV values, returns,
 signals, weights, positions, P&L, metrics, or rankings, and it computes none.
 """
 
@@ -57,6 +58,20 @@ FORBIDDEN_STATUS_KEY_SUBSTRINGS = (
     "momentum",
 )
 
+_ACTIVATION_ANCHOR_RELPATH = "governance/v2d/prospective_activation.json"
+
+
+def _activation_anchor_present(repo_root: Path) -> bool:
+    """Whether the committed V2D data-only activation anchor is present.
+
+    Reported as the ``active`` posture — the anchor is the activation switch. This is a
+    plain file-presence check on purpose: m3e must not import the v2d/m3f layers that own
+    the anchor's self-hash validation, so the authoritative activation gate remains
+    ``python -m eth_research.v2d verify``. Whether the schedule additionally *fires* also
+    requires being on the default branch, which this offline CLI cannot observe.
+    """
+    return (repo_root / _ACTIVATION_ANCHOR_RELPATH).is_file()
+
 
 def build_status(repo_root: str | Path) -> dict[str, Any]:
     """Assemble the data-only status facts (raises if anything fails to verify)."""
@@ -89,7 +104,10 @@ def build_status(repo_root: str | Path) -> dict[str, Any]:
         },
         "workflow_posture": {
             "standing_update_workflow": "m3e-prospective-update.yml",
-            "active": False,
+            # Derived from the committed V2D activation anchor (the switch), not hard-coded:
+            # true once the data-only collection is activated. The schedule additionally
+            # fires only on the default branch (see `python -m eth_research.v2d verify`).
+            "active": _activation_anchor_present(Path(repo_root)),
             "last_live_run": "29441490761",
             "last_live_outcome": "no-op",
         },

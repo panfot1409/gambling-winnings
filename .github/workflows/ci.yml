@@ -62,7 +62,12 @@ jobs:
           jq . "$RUNNER_TEMP/m3e_status.json"
           test "$(jq -r '.accepted_base.maturity_state' "$RUNNER_TEMP/m3e_status.json")" = "immature"
           test "$(jq -r '.accepted_base.evaluation_authorized' "$RUNNER_TEMP/m3e_status.json")" = "false"
-          test "$(jq -r '.workflow_posture.active' "$RUNNER_TEMP/m3e_status.json")" = "false"
+          # V2D activates the review-only update workflow: the committed activation
+          # anchor (governance/v2d/prospective_activation.json) makes the posture
+          # active. Activation grows *data only* — every governance/safety flag below
+          # stays false and every sealed ledger byte-empty (maturity is not evaluation
+          # authorization; proposals are draft-only and human-merged).
+          test "$(jq -r '.workflow_posture.active' "$RUNNER_TEMP/m3e_status.json")" = "true"
           test "$(jq -r '.registry.proposals_recorded' "$RUNNER_TEMP/m3e_status.json")" = "0"
           test "$(jq -r '.governance_flags.strategy_evaluated' "$RUNNER_TEMP/m3e_status.json")" = "false"
           test "$(jq -r '.governance_flags.money_moved' "$RUNNER_TEMP/m3e_status.json")" = "false"

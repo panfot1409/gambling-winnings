@@ -54,7 +54,7 @@ RESPONSES_SIDECAR = "_responses.jsonl"
 RUNNER_PLAN_FILENAME = "update_plan.json"
 RUNNER_RECEIPT_FILENAME = "acquisition_receipt.json"
 CURL_PLAN_FILENAME = "_curl_plan.json"
-_JSON_CONTENT_TYPE_PREFIX = "application/json"
+_JSON_CONTENT_TYPE = "application/json"
 _SIDECAR_KEYS = {"ordinal", "filename", "http_code", "retrieved_at", "content_type"}
 
 
@@ -167,12 +167,9 @@ def verify_responses_and_write_receipt(
             raise AcquisitionRunnerError(
                 f"window {ordinal} returned HTTP {record.http_code}, not 200"
             )
-        if (
-            not record.content_type.split(";")[0]
-            .strip()
-            .lower()
-            .startswith(_JSON_CONTENT_TYPE_PREFIX)
-        ):
+        # Exact media-type token match (optional ``;``-parameters stripped) — a prefix
+        # test would admit ``application/jsonx`` and similar look-alikes.
+        if record.content_type.split(";")[0].strip().lower() != _JSON_CONTENT_TYPE:
             raise AcquisitionRunnerError(f"window {ordinal} content-type {record.content_type!r}")
         body_path = staging / str(window["raw_filename"])
         if body_path.is_symlink() or not body_path.is_file():

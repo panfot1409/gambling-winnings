@@ -23,7 +23,10 @@ from eth_research._atomic import write_atomic
 from eth_research.m3d.publication import publish_bundle
 from eth_research.m3e.proposal import AssembledProposal, assemble_proposal
 from eth_research.m3e.validation import M3EValidationError
-from eth_research.m3e.verify_m3e_program import verify_update_proposal
+from eth_research.m3e.verify_m3e_program import (
+    EXPECTED_PROPOSAL_CHECK_COUNT,
+    verify_update_proposal,
+)
 
 
 class ProposalAssemblyError(M3EValidationError):
@@ -57,8 +60,11 @@ def assemble_update_proposal(
     # Self-verify the written proposal end-to-end; roll back if it does not hold.
     try:
         checks = verify_update_proposal(root, directory)
-        if len(checks) != 35:  # pragma: no cover - defensive
-            raise ProposalAssemblyError(f"self-verify produced {len(checks)} checks, expected 35")
+        if len(checks) != EXPECTED_PROPOSAL_CHECK_COUNT:  # pragma: no cover - defensive
+            raise ProposalAssemblyError(
+                f"self-verify produced {len(checks)} checks, "
+                f"expected {EXPECTED_PROPOSAL_CHECK_COUNT}"
+            )
     except BaseException as exc:
         for path, original in previous.items():
             with contextlib.suppress(OSError):
