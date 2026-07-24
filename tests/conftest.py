@@ -531,6 +531,18 @@ def make_m3a_checkout(tmp_path: Path) -> Path:
     # branch models production (the accepted cohort lives on a named branch, never a
     # detached HEAD) and makes the rehearsal deterministic in both environments.
     _git(clone, "checkout", "-B", "accepted-cohort")
+    # A ``--local`` clone of a source checked out *on* the accepted-cohort branch (the
+    # push-to-``main`` checkout of post-merge main CI) carries a stray local ``main``
+    # branch; a production update runner checks out a detached HEAD at ``main``'s SHA with
+    # no local accepted branch. Drop the inherited ``main`` (if present) so the rehearsal
+    # stays faithful and the seam tests' "the accepted branch is never materialised /
+    # advanced" assertion (``not branch_exists("main")``) is meaningful in every CI event.
+    subprocess.run(
+        ["git", "-C", str(clone), "branch", "-D", "main"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     # Overlay the working-tree source and the CI verifier scripts so the rehearsal
     # exercises the *current* package and CI gates (which may carry uncommitted
     # changes); commit only if they differ from the cloned HEAD, so a clean tree
