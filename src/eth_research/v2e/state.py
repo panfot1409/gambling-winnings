@@ -568,7 +568,14 @@ def _package_version() -> str:
 _FORBIDDEN_KEY_FRAGMENTS = ("secret", "token", "credential", "password", "env", "candle", "price")
 
 
+_FORBIDDEN_VALUE_MARKERS = ("/home/", "/root/", "-----BEGIN", "\x00")
+
+
 def _assert_publishable(node: Any, trail: str) -> None:
+    if isinstance(node, str):
+        for marker in _FORBIDDEN_VALUE_MARKERS:
+            if marker in node:
+                raise DashboardStateError(f"forbidden status value at {trail}")
     if isinstance(node, dict):
         for key, value in node.items():
             lowered = str(key).lower()

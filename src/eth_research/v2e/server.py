@@ -49,7 +49,9 @@ class V2EServerError(RuntimeError):
 
 
 def _is_loopback(host: str) -> bool:
-    if host in {"localhost", ""}:
+    # An empty host is INADDR_ANY (bind ALL interfaces) to Python sockets, so it is
+    # explicitly NOT loopback here (auditor finding: silent all-interface bind).
+    if host == "localhost":
         return True
     try:
         return ipaddress.ip_address(host).is_loopback
@@ -107,6 +109,10 @@ class _Handler(BaseHTTPRequestHandler):
     do_PUT = _refuse_mutation
     do_PATCH = _refuse_mutation
     do_DELETE = _refuse_mutation
+    # Not mutations, but refused identically so every common verb gets the defensive
+    # headers instead of the stdlib 501 page (defense-in-depth, auditor finding).
+    do_OPTIONS = _refuse_mutation
+    do_TRACE = _refuse_mutation
 
     def do_HEAD(self) -> None:
         self.do_GET()

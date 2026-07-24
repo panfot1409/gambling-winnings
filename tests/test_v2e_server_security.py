@@ -61,6 +61,19 @@ class TestBindPosture:
         with pytest.raises(V2EServerError, match="allow_lan"):
             create_server(lambda: None, host="0.0.0.0", port=0)  # type: ignore[arg-type,return-value]
 
+    def test_empty_host_is_not_loopback(self) -> None:
+        # An empty host means INADDR_ANY (bind ALL interfaces) to Python sockets, so it
+        # must demand the explicit LAN opt-in exactly like "0.0.0.0" (auditor-2 HIGH).
+        with pytest.raises(V2EServerError, match="allow_lan"):
+            create_server(lambda: None, host="", port=0)  # type: ignore[arg-type,return-value]
+
+    @pytest.mark.parametrize("method", ["OPTIONS", "TRACE"])
+    def test_options_and_trace_are_refused_with_headers(self, served: int, method: str) -> None:
+        status, headers, _ = _get(served, "/", method=method)
+        assert status == 405
+        assert headers["allow"] == "GET, HEAD"
+        assert headers["x-content-type-options"] == "nosniff"
+
     def test_lan_bind_prints_warning(self, capsys: pytest.CaptureFixture[str]) -> None:
         state = build_dashboard_state(REPO_ROOT)
         server = create_server(lambda: state, host="0.0.0.0", port=0, allow_lan=True)
