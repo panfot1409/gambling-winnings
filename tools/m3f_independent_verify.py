@@ -493,6 +493,30 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
             set(new_state) == set(ACCEPTANCE_TRANSITIONED_PATHS),
             "new state does not pin exactly the transitioned paths",
         )
+        # Re-derive the record's own semantics: hashing proves self-consistency,
+        # not truth, so a coordinated reseal must still fail here.
+        prev_rows = previous.get("row_count")
+        new_rows = new_accepted.get("row_count")
+        appended = dict(record.get("append_interval") or {}).get("row_count")
+        for label, value in (
+            ("previous row_count", prev_rows),
+            ("new row_count", new_rows),
+            ("appended row_count", appended),
+        ):
+            _require(isinstance(value, int) and not isinstance(value, bool), f"{label} not an int")
+        _require(
+            appended >= 1 and new_rows == prev_rows + appended and new_rows < 365,
+            f"acceptance {proposal_id}: row arithmetic false or claims maturity",
+        )
+        proof = record.get("append_only_proof")
+        _require(isinstance(proof, dict), "append_only_proof missing")
+        _require(proof.get("is_append_only") is True, "append-only proof is not affirmative")
+        for counter in ("prior_rows_changed", "prior_rows_deleted"):
+            _require(proof.get(counter) == 0, f"{counter} is non-zero")
+        _require(bool(new_accepted.get("created")), "record pins no created evidence")
+        for logical, facts in dict(record.get("sealed_ledgers") or {}).items():
+            _require(isinstance(facts, dict), f"sealed_ledgers.{logical} malformed")
+            _require(facts.get("byte_count") == 0, f"sealed ledger {logical} claims bytes")
         _require(record.get("evaluation_authorized") is False, "record authorizes evaluation")
         _require(record.get("maturity_state") == "immature", "record claims maturity")
         flags = record.get("governance_flags")
@@ -520,6 +544,15 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
         sorted(created) == sorted(accepted),
         f"created proposals {sorted(created)} != accepted {sorted(accepted)}",
     )
+    # An acceptance directory that no registry line references is illegal: without
+    # this the whole acceptances/ prefix would be an unaudited drop zone.
+    acceptances_dir = root / ACCEPTANCES_ROOT_RELPATH
+    if acceptances_dir.is_dir():
+        on_disk = sorted(p.name for p in acceptances_dir.iterdir() if p.is_dir())
+        _require(
+            on_disk == sorted(accepted),
+            f"acceptance directories {on_disk} do not match the chain {sorted(accepted)}",
+        )
     for rel, want in sorted(expected.items()):
         live = _sha256(_read_bytes(root, rel))
         _require(

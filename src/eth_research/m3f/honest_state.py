@@ -64,6 +64,15 @@ def derive_honest_state(repo_root: str | Path) -> dict[str, Any]:
     anchor_active = v2d_activation_anchor_active(root)
     acceptance = read_acceptance_state(root)
     accepted_proposals = acceptance.count if acceptance is not None else 0
+    if acceptance is not None:
+        # The chain's expected state is not advisory: the working tree must equal
+        # it byte-for-byte, or the cohort drifted outside a governed acceptance.
+        for relpath, expected_sha in sorted(acceptance.expected_state.items()):
+            live = sha256_bytes((root / relpath).read_bytes())
+            if live != expected_sha:
+                raise M3FValidationError(
+                    f"HARD STOP: {relpath} does not equal the acceptance chain-head state"
+                )
 
     state = {
         "schema_version": 1,

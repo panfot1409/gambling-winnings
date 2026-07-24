@@ -36,6 +36,7 @@ from eth_research.m3f.validation import (
     M3FValidationError,
     canonical_json_bytes,
     load_canonical_json,
+    require_int,
     require_mapping,
     require_str,
     strict_jsonl_records,
@@ -321,6 +322,33 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
             raise M3FValidationError(
                 f"acceptance {proposal_id}: new state must pin exactly the transitioned paths"
             )
+        # Re-derive the record's arithmetic and its own safety assertions. Hashing
+        # alone only proves self-consistency, so a coordinated reseal would pass;
+        # a forged record must also be internally TRUE.
+        prev_rows = require_int(previous.get("row_count"), "previous_accepted.row_count")
+        new_rows = require_int(new_accepted.get("row_count"), "new_accepted.row_count")
+        interval = require_mapping(record.get("append_interval"), "append_interval")
+        appended = require_int(interval.get("row_count"), "append_interval.row_count")
+        if appended < 1 or new_rows != prev_rows + appended or new_rows >= 365:
+            raise M3FValidationError(
+                f"acceptance {proposal_id}: row arithmetic is false or claims maturity"
+            )
+        proof = require_mapping(record.get("append_only_proof"), "append_only_proof")
+        if proof.get("is_append_only") is not True:
+            raise M3FValidationError(f"acceptance {proposal_id}: append-only proof not affirmative")
+        for counter in ("prior_rows_changed", "prior_rows_deleted"):
+            if require_int(proof.get(counter), counter) != 0:
+                raise M3FValidationError(f"acceptance {proposal_id}: {counter} is non-zero")
+        if not require_mapping(new_accepted.get("created"), "new_accepted.created"):
+            raise M3FValidationError(f"acceptance {proposal_id}: pins no created evidence")
+        for logical, facts in require_mapping(
+            record.get("sealed_ledgers"), "sealed_ledgers"
+        ).items():
+            entry = require_mapping(facts, f"sealed_ledgers.{logical}")
+            if require_int(entry.get("byte_count"), "byte_count") != 0:
+                raise M3FValidationError(
+                    f"acceptance {proposal_id}: sealed ledger {logical} claims bytes"
+                )
         if record.get("evaluation_authorized") is not False:
             raise M3FValidationError(f"acceptance {proposal_id} claims evaluation authority")
         if record.get("maturity_state") != "immature":

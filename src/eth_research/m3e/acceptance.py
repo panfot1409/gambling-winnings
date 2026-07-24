@@ -27,8 +27,15 @@ stdlib readers):
   ordered acceptance chain; there is no "anything newer is fine" mode;
 * a production proposal present in the tree **without** a covering acceptance record
   is illegal (exactly the condition that made the pre-acceptance checks red);
-* deleting, reordering, duplicating, or editing any chain element breaks the hash
-  chain or a self-hash and fails closed;
+* deleting, reordering, or duplicating a chain element breaks the hash chain and
+  fails closed, and a naive edit breaks a self-hash. A *coordinated* reseal (edit
+  a field, recompute the self-hash, rebind the registry entry, re-chain the
+  ledger) defeats hashing alone — so every load additionally RE-DERIVES the
+  record's semantics (:func:`_require_semantics_hold`) and cross-checks the chain
+  head against the committed accepted base. A forged record must therefore also
+  be internally *true*, not merely internally consistent. Detection of a reseal
+  by an actor who can rewrite committed history additionally rests on git;
+  that limit is stated, not papered over;
 * acceptance N+1 must start from the exact accepted state of acceptance N;
 * nothing here reads a market value: every binding is a hash, count, date, flag, or
   identity string — the module is data-governance only.
@@ -236,6 +243,89 @@ def build_genesis_record(repo_root: str | Path) -> dict[str, Any]:
     }
 
 
+def _require_semantics_hold(record: dict[str, Any], proposal_id: str) -> None:
+    """Re-derive an acceptance record's arithmetic and its own safety assertions.
+
+    These are the invariants ``build_acceptance_record`` enforced when the record
+    was created. Checking them again on every load is what makes a coordinated
+    reseal (edit a field, recompute the self-hash, rebind the registry entry,
+    re-chain the ledger) fail: the forged content must now also be internally
+    *true*, not merely internally consistent.
+    """
+    previous = require_mapping("previous_accepted", record.get("previous_accepted"))
+    new_accepted = require_mapping("new_accepted", record.get("new_accepted"))
+    interval = require_mapping("append_interval", record.get("append_interval"))
+    proof = require_mapping("append_only_proof", record.get("append_only_proof"))
+
+    old_rows = require_int("previous_accepted.row_count", previous.get("row_count"))
+    new_rows = require_int("new_accepted.row_count", new_accepted.get("row_count"))
+    appended = require_int("append_interval.row_count", interval.get("row_count"))
+    if old_rows < 0 or appended < 1 or new_rows != old_rows + appended:
+        raise AcceptanceError(
+            f"acceptance {proposal_id}: row arithmetic is false "
+            f"({old_rows} + {appended} != {new_rows})"
+        )
+    if new_rows >= 365:
+        raise AcceptanceError(
+            f"acceptance {proposal_id}: claims a mature cohort while asserting immaturity"
+        )
+    # The record's own append-only assertion must be TRUE, not merely present.
+    if proof.get("is_append_only") is not True:
+        raise AcceptanceError(f"acceptance {proposal_id}: append-only proof is not affirmative")
+    for counter in ("prior_rows_changed", "prior_rows_deleted"):
+        if require_int(f"append_only_proof.{counter}", proof.get(counter)) != 0:
+            raise AcceptanceError(
+                f"acceptance {proposal_id}: {counter} is non-zero — prior rows were disturbed"
+            )
+    if "prior_rows_are_exact_prefix" in proof and proof.get("prior_rows_are_exact_prefix") is not True:
+        raise AcceptanceError(f"acceptance {proposal_id}: prior rows are not an exact prefix")
+    if require_int("prior_row_count", proof.get("prior_row_count", old_rows)) != old_rows:
+        raise AcceptanceError(f"acceptance {proposal_id}: measured prior row count disagrees")
+    # Evidence pins must exist; an empty `created` map would trivially satisfy the
+    # created-evidence check against ANY tree.
+    created = require_mapping("new_accepted.created", new_accepted.get("created"))
+    if not created:
+        raise AcceptanceError(f"acceptance {proposal_id}: pins no created evidence")
+    # Sealed-ledger facts inside the record must state emptiness, not any byte count.
+    for logical, facts in require_mapping(
+        "sealed_ledgers", record.get("sealed_ledgers")
+    ).items():
+        entry = require_mapping(f"sealed_ledgers.{logical}", facts)
+        if require_int(f"{logical}.byte_count", entry.get("byte_count")) != 0:
+            raise AcceptanceError(f"acceptance {proposal_id}: sealed ledger {logical} not empty")
+        if require_sha256_hex(f"{logical}.sha256", entry.get("sha256")) != EMPTY_SHA256:
+            raise AcceptanceError(f"acceptance {proposal_id}: sealed ledger {logical} digest wrong")
+    _require_utc_instant(
+        f"acceptance {proposal_id}: acceptance_time", record.get("acceptance_time")
+    )
+    for field in ("proposal_head_commit", "expected_parent_commit"):
+        value = require_nonempty_str(field, record.get(field))
+        if len(value) != 40 or any(c not in "0123456789abcdef" for c in value):
+            raise AcceptanceError(f"acceptance {proposal_id}: {field} is not a 40-hex commit id")
+
+
+def _require_tree_matches_accepted_base(root: Path, record: dict[str, Any]) -> None:
+    """The record's claimed new state must match the COMMITTED accepted base.
+
+    Without this, a resealed record could claim any row count while the pinned
+    ``accepted_base.json`` bytes say otherwise.
+    """
+    new_accepted = require_mapping("new_accepted", record.get("new_accepted"))
+    _, base_doc = _load_json(root / "research/m3e/accepted_base.json", "accepted_base.json")
+    base = require_mapping("accepted_base", base_doc)
+    for field, key in (
+        ("row_count", "row_count"),
+        ("last_open", "last_open"),
+        ("base_sha256", "base_sha256"),
+        ("canonical_content_fingerprint", "canonical_content_fingerprint"),
+    ):
+        if new_accepted.get(field) != base.get(key):
+            raise AcceptanceError(
+                f"acceptance chain head disagrees with the committed accepted base on {field!r} "
+                f"(record={new_accepted.get(field)!r}, base={base.get(key)!r})"
+            )
+
+
 @dataclasses.dataclass(frozen=True)
 class AcceptanceEntry:
     """One verified acceptance in chain order."""
@@ -311,8 +401,8 @@ def _measure_prior_rows(root: Path, proposal_dir: Path) -> dict[str, Any]:
     """
     from eth_research.m3d.raw_bundle import combined_canonical_rows
     from eth_research.m3d.update_attempts import build_accepted_raw_bundles
-    from eth_research.m3e.acquisition import load_and_verify_runner
     from eth_research.m3e.proposal import RUNNER_A_DIR
+    from eth_research.m3e.runner_boundary import load_and_verify_runner
 
     bundles, _entries = build_accepted_raw_bundles(root)
     runner_a = load_and_verify_runner(proposal_dir / RUNNER_A_DIR, runner_label="a")
@@ -740,6 +830,11 @@ def load_acceptance_chain(
             {k: v for k, v in body.items() if k != "governance_flags"},
             f"acceptance record {proposal_id}",
         )
+        # RE-DERIVE the record's semantics; never accept them as self-asserted.
+        # A self-hash only proves the record is internally consistent with itself,
+        # so a coordinated reseal (edit + re-hash + re-chain) would otherwise pass.
+        # Every row — not just the newest — must survive these.
+        _require_semantics_hold(record, proposal_id)
 
         completion: dict[str, Any] = {}
         completion_path = root / ACCEPTANCES_ROOT / proposal_id / ACCEPTANCE_COMPLETION_NAME
@@ -870,6 +965,9 @@ def verify_acceptance_program(repo_root: str | Path, *, deep: bool = True) -> li
     record("A01_chain_loads_strictly", f"acceptances={len(chain)}")
     accepted = require_all_proposals_accepted(root)
     record("A02_every_proposal_accepted", ",".join(accepted) or "none")
+    if chain:
+        _require_tree_matches_accepted_base(root, chain[-1].record)
+        record("A02b_chain_head_matches_accepted_base")
 
     state = expected_current_state(root)
     for path, expected in sorted(state.items()):
