@@ -22,7 +22,6 @@ filesystem paths, and no source text.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -305,9 +304,7 @@ def _proposal_panel(
     manifest = _load_strict_object(checkout, f"{rel}/proposal_manifest.json")
     transition = _load_strict_object(checkout, f"{rel}/update_transition.json")
 
-    committed_base = _require_regular_file(root, "research/m3e/accepted_base.json")
-    committed_sha = hashlib.sha256(committed_base.read_bytes()).hexdigest()
-    if manifest.get("accepted_base_sha256") != committed_sha:
+    if manifest.get("accepted_base_sha256") != accepted.base_sha256:
         raise DashboardStateError(
             "stale or wrong-parent proposal: its accepted_base_sha256 does not match the "
             "accepted base committed in this repository"
@@ -324,7 +321,7 @@ def _proposal_panel(
     return ProposalPanel(
         configured=True,
         detail="pending draft proposal verified against the accepted base (unmerged)",
-        proposal_id=str(manifest["proposal_id"]),
+        proposal_id=pdir.name,
         proposal_branch=str(manifest["proposal_branch"]),
         proposed_row_count=proposed_rows,
         new_completed_days=new_rows,
@@ -490,6 +487,9 @@ def build_dashboard_state(
         raise DashboardStateError("repo root must be a real directory")
     generated_at = now if now is not None else datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    # The sealed ledgers are the most critical invariant: check them first so a
+    # violated seal is reported as exactly that, not as a downstream byte mismatch.
+    sealed = _sealed_ledger_facts(root)
     try:
         accepted = verify_accepted_base(root)
     except (M3EValidationError, StrictJSONError, OSError, ValueError) as exc:
@@ -503,7 +503,6 @@ def build_dashboard_state(
     except V2DActivationError as exc:
         raise _fail("V2D activation anchor", exc) from exc
 
-    sealed = _sealed_ledger_facts(root)
     readiness = _verified_paper_readiness(root)
     try:
         fresh = derive_paper_readiness(root)
