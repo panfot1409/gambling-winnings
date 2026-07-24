@@ -199,7 +199,12 @@ def test_independent_verifier_passes_on_real_repo() -> None:
     payload = tool.verify(REPO_ROOT)
     assert payload["ok"], payload["failures"]
     assert payload["facts"]["m3c_verdict"] == "rejected_for_development_gate_promotion"
-    assert payload["facts"]["m3e_production_proposal_count"] == 0
+    # Every production proposal the registry records must be covered by the acceptance
+    # chain the tool walks independently (check 09), so the count is the accepted count
+    # rather than a pre-growth literal.
+    created = payload["facts"]["m3e_created_proposal_ids"]
+    assert payload["facts"]["m3e_production_proposal_count"] == len(created)
+    assert "09_acceptance_chain" in set(payload["checks"])
 
 
 def test_independent_verifier_fails_on_registered_repo_missing_catalog(tmp_path: Path) -> None:

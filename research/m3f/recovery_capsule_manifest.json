@@ -1,6 +1,6 @@
 {
   "capsule_algorithm": "sha256-over-sorted-path-sha256-length-lines-v1",
-  "capsule_digest": "14d78c8d1d3a2d8bb8a249f48940e4268389715c52f79a36c112da9613ab1243",
+  "capsule_digest": "b8d847fc90d97648bf8df7e57512d71831e556e785d09b8ec63aed1f8d75fb5a",
   "contains_sealed_partition_contents": false,
   "contains_secrets_or_credentials": false,
   "excludes": [
@@ -9,7 +9,7 @@
     "reports/",
     ".github/"
   ],
-  "file_count": 138,
+  "file_count": 137,
   "files": [
     {
       "byte_length": 51198,
@@ -690,11 +690,6 @@
       "byte_length": 770,
       "path": "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/update_transition.json",
       "sha256": "ae04e8ef3743d7a57379a40eee72fb6a6b6d90eab0a2249025e3c69b92e370bf"
-    },
-    {
-      "byte_length": 39635,
-      "path": "research/m3f/freeze_catalog.json",
-      "sha256": "f57fdd99aa482fee6ba6e26b6d9f373ccb08fe51fea66f6f28b39dc6f3760fe6"
     },
     {
       "byte_length": 61067,

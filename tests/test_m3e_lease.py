@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 import eth_research
@@ -25,7 +26,10 @@ _KEY2 = "b" * 64
 
 def _real_plan() -> tuple[AcceptedProspectiveBase, ProspectiveUpdatePlan]:
     base = verify_accepted_base(REPO_ROOT)
-    return base, build_update_plan(base, plan_update_window(base, "2026-07-22T02:17:00Z"))
+    # A due as_of derived from the committed base: one week past the first missing
+    # day (7 settled completed days due), at the scheduled 02:17 UTC cadence.
+    as_of = pd.Timestamp(base.last_open) + pd.Timedelta(days=8, hours=2, minutes=17)
+    return base, build_update_plan(base, plan_update_window(base, as_of))
 
 
 def test_branch_name_is_deterministic_and_prefixed() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -21,11 +22,21 @@ REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 def test_derive_real_repo_honest_state_holds_invariants() -> None:
     state = derive_honest_state(REPO_ROOT)
     assert state["m3c_candidate_verdict"] == "rejected_for_development_gate_promotion"
-    assert state["m3d_cohort_row_count"] == 3
+    # The cohort row count is the committed accepted state, cross-checked against the
+    # acceptance chain rather than pinned to a literal: growth is lawful only through
+    # a recorded acceptance, and the cohort must stay strictly below maturity.
+    accepted = json.loads((REPO_ROOT / "research/m3e/accepted_base.json").read_text())
+    assert state["m3d_cohort_row_count"] == accepted["row_count"]
+    assert state["m3d_cohort_row_count"] < state["m3d_maturity_threshold"]
     assert state["m3d_maturity_state"] == "immature"
     assert state["m3d_evaluation_authorized"] is False
-    assert state["m3e_active"] is False
-    assert state["m3e_production_proposal_count"] == 0
+    # Every production proposal in the tree must be covered by an acceptance record,
+    # and the V2D anchor is what makes such growth lawful at all.
+    assert state["m3e_production_proposal_count"] == state["m3e_accepted_proposal_count"]
+    assert state["m3e_active"] is (state["m3e_production_proposal_count"] > 0)
+    if state["m3e_production_proposal_count"] > 0:
+        assert (REPO_ROOT / "governance/v2d/prospective_activation.json").is_file()
+        assert (REPO_ROOT / "research/m3e/acceptance_registry.jsonl").is_file()
     assert state["standing_workflow_can_write_contents"] is False
     for facts in state["ledgers"].values():
         assert facts["byte_count"] == 0
@@ -64,8 +75,8 @@ def test_state_machine_accepts_the_terminal_set() -> None:
     [
         ("m3c_candidate_verdict", "eligible_for_development_gate_promotion"),
         ("m3d_evaluation_authorized", True),
-        ("m3e_active", True),
-        ("m3e_production_proposal_count", 1),
+        ("m3e_production_proposal_count", 1),  # inactive M3E with a proposal
+        ("m3e_accepted_proposal_count", 1),  # inactive M3E with an acceptance
         ("standing_workflow_can_write_contents", True),
         ("m3d_cohort_row_count", 400),  # >= threshold but labelled immature
     ],
@@ -75,6 +86,40 @@ def test_state_machine_refuses_impossible_combinations(key: str, value: object) 
     bad[key] = value
     with pytest.raises(M3FValidationError):
         derive_state(bad)
+
+
+@pytest.mark.parametrize(
+    ("proposals", "accepted"),
+    [(1, 0), (2, 1), (0, 1)],
+)
+def test_active_m3e_refuses_proposals_not_covered_by_acceptances(
+    proposals: int, accepted: int
+) -> None:
+    # Under the V2D anchor, growth is lawful ONLY when every committed production
+    # proposal is covered by exactly one acceptance record (and vice versa); any
+    # mismatch stays as impossible as an unaccepted proposal always was.
+    bad = _valid_honest_state()
+    bad["m3e_active"] = True
+    bad["m3e_production_proposal_count"] = proposals
+    bad["m3e_accepted_proposal_count"] = accepted
+    with pytest.raises(M3FValidationError):
+        derive_state(bad)
+
+
+def test_active_m3e_with_fully_accepted_growth_is_the_exact_terminal_set() -> None:
+    good = _valid_honest_state()
+    good["m3e_active"] = True
+    good["m3e_production_proposal_count"] = 1
+    good["m3e_accepted_proposal_count"] = 1
+    state = verify_state(good)
+    assert set(state.labels) == {
+        "accepted_stack_stable",
+        "rejected_candidate_terminal",
+        "immature_cohort_unauthorized",
+        "reviewed_growth_active",
+    }
+    # the inactive label can never co-occur with the active one
+    assert "review_only_ready_inactive" not in state.labels
 
 
 def test_state_machine_rejects_bool_as_int_and_int_as_bool() -> None:

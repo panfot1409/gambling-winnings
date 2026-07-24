@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -27,10 +28,38 @@ def test_status_guard_rejects_a_numeric_evaluation_quantity() -> None:
 def test_status_reports_only_safe_governance_facts() -> None:
     status = build_status(REPO_ROOT)
     assert status["kind"] == "m3e_review_only_update_status"
-    assert status["accepted_base"]["row_count"] == 3
+    # The reported base facts must equal the committed accepted snapshot (which
+    # itself is byte-verified against the M3D evidence), never a hard-coded state.
+    committed = json.loads((REPO_ROOT / "research/m3e/accepted_base.json").read_text())
+    assert status["accepted_base"]["row_count"] == committed["row_count"]
+    assert status["accepted_base"]["last_open"] == committed["last_open"]
+    assert (
+        status["accepted_base"]["canonical_content_fingerprint"]
+        == committed["canonical_content_fingerprint"]
+    )
     assert status["accepted_base"]["maturity_state"] == "immature"
     assert status["accepted_base"]["evaluation_authorized"] is False
-    assert status["registry"]["proposals_recorded"] == 0
+    # The registry summary must equal the committed append-only proposal registry,
+    # and the accepted V2E proposal must be on its books.
+    registry_entries = [
+        json.loads(line)
+        for line in (REPO_ROOT / "research/m3e/proposal_registry.jsonl").read_text().splitlines()
+    ]
+    proposals = [e for e in registry_entries if e.get("entry_kind") == "proposal"]
+    assert status["registry"]["record_count"] == len(registry_entries)
+    assert status["registry"]["proposals_recorded"] == len(proposals)
+    accepted_ids = {
+        e["proposal_id"]
+        for e in (
+            json.loads(line)
+            for line in (REPO_ROOT / "research/m3e/acceptance_registry.jsonl")
+            .read_text()
+            .splitlines()
+        )
+        if e.get("entry_kind") == "acceptance"
+    }
+    assert accepted_ids  # governance accepted at least the V2E growth proposal
+    assert accepted_ids <= {p["proposal_id"] for p in proposals}
     # The workflow-posture ``active`` flag is derived from the committed V2D activation
     # anchor (present at this HEAD), not a hard-coded literal.
     assert status["workflow_posture"]["active"] is True

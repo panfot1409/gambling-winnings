@@ -1,7 +1,7 @@
 {
   "all_failure_drills_detected": true,
-  "capsule_digest": "14d78c8d1d3a2d8bb8a249f48940e4268389715c52f79a36c112da9613ab1243",
-  "capsule_file_count": 138,
+  "capsule_digest": "b8d847fc90d97648bf8df7e57512d71831e556e785d09b8ec63aed1f8d75fb5a",
+  "capsule_file_count": 137,
   "failure_drills": [
     {
       "detected": true,

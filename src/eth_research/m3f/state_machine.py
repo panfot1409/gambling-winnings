@@ -78,9 +78,7 @@ def derive_state(honest_state: dict[str, Any]) -> GovernanceState:
     # V2D-anchored active growth: every production proposal must be covered by an
     # acceptance record (an uncovered proposal stays exactly as impossible as it
     # was pre-acceptance), and no unauthorized workflow may hold a write grant.
-    accepted = require_int(
-        s.get("m3e_accepted_proposal_count", 0), "m3e_accepted_proposal_count"
-    )
+    accepted = require_int(s.get("m3e_accepted_proposal_count", 0), "m3e_accepted_proposal_count")
     if not active:
         if proposals != 0:
             raise M3FValidationError("impossible: inactive M3E but a production proposal exists")
@@ -114,7 +112,9 @@ def verify_state(honest_state: dict[str, Any]) -> GovernanceState:
     mixture, never anything else.
     """
     state = derive_state(honest_state)
-    active = require_bool(require_mapping(honest_state, "honest_state").get("m3e_active"), "m3e_active")
+    active = require_bool(
+        require_mapping(honest_state, "honest_state").get("m3e_active"), "m3e_active"
+    )
     expected = {
         "accepted_stack_stable",
         "rejected_candidate_terminal",

@@ -10,6 +10,7 @@ temporary tree so the assertions hold both before and after the R (registration)
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -79,10 +80,12 @@ def test_raise_for_status_is_silent_when_all_available_checks_pass() -> None:
 def test_replay_status_reports_governance_facts() -> None:
     status = replay_status(REPO_ROOT)
     assert status["m3c_verdict"] == "rejected_for_development_gate_promotion"
-    assert status["m3d_cohort_rows"] == 3
+    # Row count and activity are the committed accepted state (growth is lawful only
+    # through recorded acceptances), not pre-growth literals.
+    accepted = json.loads((REPO_ROOT / "research/m3e/accepted_base.json").read_text())
+    assert status["m3d_cohort_rows"] == accepted["row_count"]
     assert status["m3d_maturity"] == "immature"
-    assert status["m3e_active"] is False
-    assert status["m3e_production_proposal_count"] == 0
+    assert status["m3e_active"] is (status["m3e_production_proposal_count"] > 0)
     assert isinstance(status["checks"], list)
     assert "01_honest_state_invariants" in status["checks"]
 

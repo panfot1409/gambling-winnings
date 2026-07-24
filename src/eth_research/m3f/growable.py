@@ -153,11 +153,11 @@ ACCEPTANCE_TRANSITIONED_PATHS: tuple[str, ...] = (
 
 #: Independently byte-frozen tables that pin the pre-acceptance state; the chain
 #: genesis must agree with every one that is present, and at least one must be
-#: present (all three exist in a full checkout; the recovery capsule carries them
-#: as governance evidence).
+#: present (both exist in a full checkout; the recovery capsule carries them as
+#: governance evidence). The M3F freeze catalog is deliberately NOT an authority:
+#: it is rebuilt at re-registration and snapshots the *current* state.
 ACCEPTANCE_GENESIS_AUTHORITIES: tuple[str, ...] = (
     "docs/M3C_M3E_STACK_FREEZE_TABLE.json",
-    "research/m3f/freeze_catalog.json",
     "research/v2ab/stack_freeze_table.json",
 )
 
@@ -176,13 +176,11 @@ class AcceptanceView:
 
 
 def _authority_pins(root: Path, relpath: str) -> dict[str, str]:
-    doc = require_mapping(
-        load_canonical_json((root / relpath).read_bytes(), relpath), relpath
-    )
+    doc = require_mapping(load_canonical_json((root / relpath).read_bytes(), relpath), relpath)
     rows: list[Any] | None = None
     for key in ("files", "artifacts", "entries"):
         if key in doc:
-            rows = list(doc[key])  # type: ignore[arg-type]
+            rows = list(doc[key])
             break
     if rows is None:
         raise M3FValidationError(f"{relpath}: unrecognized freeze-table shape")
@@ -331,9 +329,7 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
             record.get("governance_flags"), "governance_flags"
         ).items():
             if value is not False:
-                raise M3FValidationError(
-                    f"acceptance {proposal_id}: governance flag {name} is set"
-                )
+                raise M3FValidationError(f"acceptance {proposal_id}: governance flag {name} is set")
         completion_path = record_dir / "acceptance_completion.json"
         if completion_path.is_symlink() or not completion_path.is_file():
             raise M3FValidationError(
@@ -349,9 +345,10 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
             prefix=_ACCEPTANCE_COMPLETION_PREFIX,
             label=f"completion {proposal_id}",
         )
-        if completion.get("acceptance_sha256") != record.get(
-            "acceptance_sha256"
-        ) or completion.get("proposal_id") != proposal_id:
+        if (
+            completion.get("acceptance_sha256") != record.get("acceptance_sha256")
+            or completion.get("proposal_id") != proposal_id
+        ):
             raise M3FValidationError(f"completion {proposal_id} does not bind its record")
         accepted.append(proposal_id)
         expected = new_state
@@ -362,9 +359,5 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
     if acceptances_dir.exists():
         on_disk = {p.name for p in acceptances_dir.iterdir() if p.is_dir()}
         if on_disk - set(accepted):
-            raise M3FValidationError(
-                "acceptance directories exist outside the registry chain"
-            )
-    return AcceptanceView(
-        accepted_ids=tuple(accepted), expected_state=expected, created=created
-    )
+            raise M3FValidationError("acceptance directories exist outside the registry chain")
+    return AcceptanceView(accepted_ids=tuple(accepted), expected_state=expected, created=created)

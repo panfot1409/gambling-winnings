@@ -1,4 +1,9 @@
-"""Mechanical completed-day cutoff and the no-op decision (commit 4)."""
+"""Mechanical completed-day cutoff and the no-op decision (commit 4).
+
+All boundary instants are derived from the committed accepted base's ``last_open``
+(never hard-coded), so the same boundary semantics are checked against whatever
+cohort state governance has accepted.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +18,11 @@ from eth_research.m3e.cutoff import completed_day_exclusive_end, plan_update_win
 from eth_research.m3e.validation import M3EValidationError
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
+_DAY = pd.Timedelta(days=1)
+
+
+def _z(ts: pd.Timestamp) -> str:
+    return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 @pytest.fixture(scope="module")
@@ -20,73 +30,103 @@ def base() -> AcceptedProspectiveBase:
     return verify_accepted_base(REPO_ROOT)
 
 
-def test_today_is_a_noop_nothing_new_is_due(base: AcceptedProspectiveBase) -> None:
-    # 2026-07-15: accepted last open is 2026-07-14; 2026-07-15 is still forming.
-    decision = plan_update_window(base, "2026-07-15T09:00:00Z")
+@pytest.fixture(scope="module")
+def last_open(base: AcceptedProspectiveBase) -> pd.Timestamp:
+    return pd.Timestamp(base.last_open)
+
+
+def test_today_is_a_noop_nothing_new_is_due(
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
+) -> None:
+    # Mid-morning on the first missing day: that candle is still forming.
+    first_missing = last_open + _DAY
+    decision = plan_update_window(base, first_missing + pd.Timedelta(hours=9))
     assert decision.is_noop is True
     assert decision.expected_new_buckets == 0
-    assert decision.first_missing_open == "2026-07-15T00:00:00Z"
-    assert decision.completed_day_exclusive_end == "2026-07-15T00:00:00Z"
+    assert decision.first_missing_open == _z(first_missing)
+    assert decision.completed_day_exclusive_end == _z(first_missing)
     assert decision.window_start is None
     assert decision.window_end is None
 
 
-def test_same_day_as_last_open_is_a_noop(base: AcceptedProspectiveBase) -> None:
-    decision = plan_update_window(base, "2026-07-14T12:00:00Z")
+def test_same_day_as_last_open_is_a_noop(
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
+) -> None:
+    decision = plan_update_window(base, last_open + pd.Timedelta(hours=12))
     assert decision.is_noop is True
 
 
-def test_just_before_first_candle_completes_is_a_noop(base: AcceptedProspectiveBase) -> None:
-    decision = plan_update_window(base, "2026-07-15T23:59:59Z")
+def test_just_before_first_candle_completes_is_a_noop(
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
+) -> None:
+    decision = plan_update_window(
+        base, last_open + _DAY + pd.Timedelta(hours=23, minutes=59, seconds=59)
+    )
     assert decision.is_noop is True
 
 
-def test_one_completed_day_becomes_due_after_it_settles(base: AcceptedProspectiveBase) -> None:
-    # 07-15 closes at 07-16T00:00; it becomes due only once it has settled past the
-    # _SETTLE_DELAY (1h) floor — here 2h after close.
-    decision = plan_update_window(base, "2026-07-16T02:00:00Z")
+def test_one_completed_day_becomes_due_after_it_settles(
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
+) -> None:
+    # The first missing day closes at last_open + 2 days; it becomes due only once it
+    # has settled past the _SETTLE_DELAY (1h) floor — here 2h after close.
+    decision = plan_update_window(base, last_open + 2 * _DAY + pd.Timedelta(hours=2))
     assert decision.is_noop is False
     assert decision.expected_new_buckets == 1
-    assert decision.window_start == "2026-07-15T00:00:00Z"
-    assert decision.window_end == "2026-07-16T00:00:00Z"
+    assert decision.window_start == _z(last_open + _DAY)
+    assert decision.window_end == _z(last_open + 2 * _DAY)
 
 
-def test_a_just_closed_candle_is_deferred_until_it_settles(base: AcceptedProspectiveBase) -> None:
-    # A run fired seconds after 07-15's close (07-16T00:00) must NOT fetch it — the venue
-    # may still revise it. It stays a NO-OP until _SETTLE_DELAY (1h) has elapsed.
-    just_after = plan_update_window(base, "2026-07-16T00:00:30Z")
+def test_a_just_closed_candle_is_deferred_until_it_settles(
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
+) -> None:
+    # A run fired seconds after the first missing day's close (last_open + 2 days)
+    # must NOT fetch it — the venue may still revise it. It stays a NO-OP until
+    # _SETTLE_DELAY (1h) has elapsed.
+    close = last_open + 2 * _DAY
+    just_after = plan_update_window(base, close + pd.Timedelta(seconds=30))
     assert just_after.is_noop is True
     assert just_after.expected_new_buckets == 0
-    within_delay = plan_update_window(base, "2026-07-16T00:59:59Z")
+    within_delay = plan_update_window(base, close + pd.Timedelta(minutes=59, seconds=59))
     assert within_delay.is_noop is True
-    at_delay = plan_update_window(base, "2026-07-16T01:00:00Z")
+    at_delay = plan_update_window(base, close + pd.Timedelta(hours=1))
     assert at_delay.is_noop is False
-    assert at_delay.window_end == "2026-07-16T00:00:00Z"
+    assert at_delay.window_end == _z(close)
 
 
-def test_multiple_completed_days_are_bound_contiguously(base: AcceptedProspectiveBase) -> None:
-    decision = plan_update_window(base, "2026-07-20T02:17:00Z")
+def test_multiple_completed_days_are_bound_contiguously(
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
+) -> None:
+    decision = plan_update_window(base, last_open + 6 * _DAY + pd.Timedelta(hours=2, minutes=17))
     assert decision.is_noop is False
-    assert decision.expected_new_buckets == 5  # 07-15, 16, 17, 18, 19
-    assert decision.window_start == "2026-07-15T00:00:00Z"
-    assert decision.window_end == "2026-07-20T00:00:00Z"
+    assert decision.expected_new_buckets == 5  # the five settled days after last_open
+    assert decision.window_start == _z(last_open + _DAY)
+    assert decision.window_end == _z(last_open + 6 * _DAY)
 
 
-def test_a_clock_rewind_before_the_base_hard_stops(base: AcceptedProspectiveBase) -> None:
+def test_a_clock_rewind_before_the_base_hard_stops(
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
+) -> None:
     with pytest.raises(M3EValidationError, match="predates the accepted last open"):
-        plan_update_window(base, "2026-07-13T09:00:00Z")
+        plan_update_window(base, last_open - _DAY + pd.Timedelta(hours=9))
 
 
-def test_a_naive_non_utc_as_of_is_rejected(base: AcceptedProspectiveBase) -> None:
+def test_a_naive_non_utc_as_of_is_rejected(
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
+) -> None:
+    naive = (last_open + _DAY + pd.Timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%S")
     with pytest.raises((M3EValidationError, ValueError)):
-        plan_update_window(base, "2026-07-16T00:00:01")  # no tz → not UTC-aware
+        plan_update_window(base, naive)  # no tz → not UTC-aware
 
 
-def test_the_window_end_never_includes_the_forming_candle(base: AcceptedProspectiveBase) -> None:
-    # At 2026-07-16T12:00 the 07-16 candle is forming; the window must stop at 07-16.
-    decision = plan_update_window(base, "2026-07-16T12:00:00Z")
-    assert decision.window_end == "2026-07-16T00:00:00Z"
-    assert decision.expected_new_buckets == 1  # only 07-15 is completed
+def test_the_window_end_never_includes_the_forming_candle(
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
+) -> None:
+    # At mid-day one day past the first missing close, the current day's candle is
+    # forming; the window must stop at its midnight.
+    decision = plan_update_window(base, last_open + 2 * _DAY + pd.Timedelta(hours=12))
+    assert decision.window_end == _z(last_open + 2 * _DAY)
+    assert decision.expected_new_buckets == 1  # only the first missing day is completed
 
 
 # --------------------------------------------------------------------------- #
@@ -109,21 +149,23 @@ def test_cutoff_is_exact_floor_to_utc_midnight_at_boundaries() -> None:
 
 
 def test_one_microsecond_before_the_first_due_midnight_is_a_noop(
-    base: AcceptedProspectiveBase,
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
 ) -> None:
-    # 2026-07-15 completes at 2026-07-16T00:00:00Z; one microsecond before is still a NO-OP.
-    decision = plan_update_window(base, "2026-07-15T23:59:59.999999Z")
+    # The first missing day completes at last_open + 2 days; one microsecond before
+    # that midnight is still a NO-OP.
+    decision = plan_update_window(base, last_open + 2 * _DAY - pd.Timedelta(microseconds=1))
     assert decision.is_noop is True
 
 
 def test_one_microsecond_after_the_first_due_midnight_is_still_unsettled(
-    base: AcceptedProspectiveBase,
+    base: AcceptedProspectiveBase, last_open: pd.Timestamp
 ) -> None:
-    # One microsecond after 07-15's close the candle has not settled past _SETTLE_DELAY,
-    # so it is a NO-OP; the effective settled cutoff drops to the prior midnight.
-    decision = plan_update_window(base, "2026-07-16T00:00:00.000001Z")
+    # One microsecond after the first missing day's close the candle has not settled
+    # past _SETTLE_DELAY, so it is a NO-OP; the effective settled cutoff drops to the
+    # prior midnight (the first missing open itself).
+    decision = plan_update_window(base, last_open + 2 * _DAY + pd.Timedelta(microseconds=1))
     assert decision.is_noop is True
-    assert decision.completed_day_exclusive_end == "2026-07-15T00:00:00Z"
+    assert decision.completed_day_exclusive_end == _z(last_open + _DAY)
 
 
 def test_a_malformed_as_of_is_rejected(base: AcceptedProspectiveBase) -> None:

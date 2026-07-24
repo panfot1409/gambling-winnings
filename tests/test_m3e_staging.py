@@ -16,9 +16,10 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from eth_research.m3e.accepted_base import verify_accepted_base
+from eth_research.m3e.accepted_base import AcceptedProspectiveBase, verify_accepted_base
 from eth_research.m3e.orchestrator import (
     OUTCOME_PREPARED,
     PreparedProposal,
@@ -28,8 +29,13 @@ from eth_research.m3e.staging import StagingError, stage_cohort_extension
 from eth_research.m3e.validation import M3EValidationError
 from eth_research.m3e.verify_m3e_program import verify_landed_update
 
-_AS_OF = "2026-07-22T02:17:00Z"
 _PROPOSAL_REL = "research/m3e/proposals/staging-rehearsal"
+
+
+def _due_as_of(base: AcceptedProspectiveBase) -> str:
+    """A due as_of derived from the clone's accepted base (7 settled days due)."""
+    ts = pd.Timestamp(base.last_open) + pd.Timedelta(days=8, hours=2, minutes=17)
+    return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class _GitPort:
@@ -74,7 +80,8 @@ def _prepare(
     from eth_research.m3e.update_plan import build_update_plan
 
     base = verify_accepted_base(clone)
-    plan = build_update_plan(base, plan_update_window(base, _AS_OF))
+    as_of = _due_as_of(base)
+    plan = build_update_plan(base, plan_update_window(base, as_of))
     proposal_dir = clone / _PROPOSAL_REL
     for label in ("a", "b"):
         m3e_write_runner(
@@ -89,7 +96,7 @@ def _prepare(
     subprocess.run(["git", "-C", str(clone), "config", "user.name", "Rehearsal"], check=True)
     git = _GitPort(clone)
     result = prepare_update_proposal(
-        clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=_PROPOSAL_REL
+        clone, proposal_dir, as_of=as_of, git=git, proposal_relpath=_PROPOSAL_REL
     )
     assert result.outcome == OUTCOME_PREPARED
     return git, result
@@ -167,7 +174,7 @@ def test_double_stage_is_refused_and_rolls_back(
 
     clone = m3a_checkout
     base = verify_accepted_base(clone)
-    plan = build_update_plan(base, plan_update_window(base, _AS_OF))
+    plan = build_update_plan(base, plan_update_window(base, _due_as_of(base)))
     proposal_dir = clone / _PROPOSAL_REL
     for label in ("a", "b"):
         m3e_write_runner(

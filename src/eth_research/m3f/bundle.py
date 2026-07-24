@@ -62,10 +62,10 @@ SEALED_LEDGERS = (
 )
 # Tracked governance evidence carried so a materialized capsule can re-prove
 # lawful growth offline (V2D anchor + acceptance-chain genesis authorities).
+# No research/m3f/ path belongs here: the capsule keeps excluding the M3F layer.
 GOVERNANCE_EVIDENCE_FILES = (
     "governance/v2d/prospective_activation.json",
     "docs/M3C_M3E_STACK_FREEZE_TABLE.json",
-    "research/m3f/freeze_catalog.json",
     "research/v2ab/stack_freeze_table.json",
 )
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -99,9 +99,7 @@ def capsule_files(repo_root: str | Path) -> list[str]:
     root = Path(repo_root)
     out = _git(root, "ls-files", "-z", "--", GOVERNED_ROOT + "/")
     files = [p for p in out.split("\0") if p and p.startswith(ACCEPTED_STACK_PREFIXES)]
-    evidence = _git(
-        root, "ls-files", "-z", "--", *GOVERNANCE_EVIDENCE_FILES
-    )
+    evidence = _git(root, "ls-files", "-z", "--", *GOVERNANCE_EVIDENCE_FILES)
     files.extend(p for p in evidence.split("\0") if p)
     return sorted(set(files))
 

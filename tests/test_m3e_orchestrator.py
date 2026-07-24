@@ -17,8 +17,10 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
+from eth_research.m3e.accepted_base import AcceptedProspectiveBase
 from eth_research.m3e.orchestrator import (
     OUTCOME_NOOP,
     OUTCOME_PREPARED,
@@ -29,8 +31,16 @@ from eth_research.m3e.orchestrator import (
 from eth_research.m3e.publisher import ACCEPTED_COHORT_BRANCH
 from eth_research.m3e.validation import M3EValidationError
 
-_AS_OF = "2026-07-22T02:17:00Z"
 _PROPOSAL_REL = "research/m3e/proposals/rehearsal"
+
+
+def _z(ts: pd.Timestamp) -> str:
+    return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _due_as_of(base: AcceptedProspectiveBase) -> str:
+    """A due as_of derived from the clone's accepted base (7 settled days due)."""
+    return _z(pd.Timestamp(base.last_open) + pd.Timedelta(days=8, hours=2, minutes=17))
 
 
 class _SubprocessGitPort:
@@ -74,13 +84,15 @@ def test_subprocess_git_port_satisfies_the_protocol() -> None:
     assert isinstance(_SubprocessGitPort(Path(".")), GitPort)
 
 
-def _stage(clone: Path, m3e_write_runner: Callable[..., object]) -> Path:
+def _stage(
+    clone: Path, m3e_write_runner: Callable[..., object]
+) -> tuple[Path, AcceptedProspectiveBase]:
     from eth_research.m3e.accepted_base import verify_accepted_base
     from eth_research.m3e.cutoff import plan_update_window
     from eth_research.m3e.update_plan import build_update_plan
 
     base = verify_accepted_base(clone)
-    plan = build_update_plan(base, plan_update_window(base, _AS_OF))
+    plan = build_update_plan(base, plan_update_window(base, _due_as_of(base)))
     proposal_dir = clone / _PROPOSAL_REL
     for label in ("a", "b"):
         m3e_write_runner(
@@ -93,18 +105,18 @@ def _stage(clone: Path, m3e_write_runner: Callable[..., object]) -> Path:
         )
     subprocess.run(["git", "-C", str(clone), "config", "user.email", "a@b.c"], check=True)
     subprocess.run(["git", "-C", str(clone), "config", "user.name", "Rehearsal"], check=True)
-    return proposal_dir
+    return proposal_dir, base
 
 
 def test_seam_prepares_one_draft_and_leaves_the_accepted_branch_untouched(
     m3a_checkout: Path, m3e_write_runner: Callable[..., object]
 ) -> None:
     clone = m3a_checkout
-    proposal_dir = _stage(clone, m3e_write_runner)
+    proposal_dir, base = _stage(clone, m3e_write_runner)
     git = _SubprocessGitPort(clone)
 
     result = prepare_update_proposal(
-        clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=_PROPOSAL_REL
+        clone, proposal_dir, as_of=_due_as_of(base), git=git, proposal_relpath=_PROPOSAL_REL
     )
     assert result.outcome == OUTCOME_PREPARED
     assert result.proposal_branch is not None
@@ -124,11 +136,12 @@ def test_seam_is_a_noop_when_nothing_is_due(
     m3a_checkout: Path, m3e_write_runner: Callable[..., object]
 ) -> None:
     clone = m3a_checkout
-    proposal_dir = _stage(clone, m3e_write_runner)
+    proposal_dir, base = _stage(clone, m3e_write_runner)
     git = _SubprocessGitPort(clone)
-    # 2026-07-14 == accepted last open → nothing new is due.
+    # Mid-day on the accepted last open's own day → nothing new is due.
+    same_day = _z(pd.Timestamp(base.last_open) + pd.Timedelta(hours=12))
     result = prepare_update_proposal(
-        clone, proposal_dir, as_of="2026-07-14T12:00:00Z", git=git, proposal_relpath=_PROPOSAL_REL
+        clone, proposal_dir, as_of=same_day, git=git, proposal_relpath=_PROPOSAL_REL
     )
     assert result.outcome == OUTCOME_NOOP
     assert result.commit_sha is None
@@ -138,19 +151,17 @@ def test_seam_skips_idempotently_when_the_lease_reports_an_open_proposal(
     m3a_checkout: Path, m3e_write_runner: Callable[..., object]
 ) -> None:
     clone = m3a_checkout
-    proposal_dir = _stage(clone, m3e_write_runner)
+    proposal_dir, base = _stage(clone, m3e_write_runner)
     git = _SubprocessGitPort(clone)
-    from eth_research.m3e.accepted_base import verify_accepted_base
     from eth_research.m3e.cutoff import plan_update_window
     from eth_research.m3e.update_plan import build_update_plan
 
-    base = verify_accepted_base(clone)
-    plan = build_update_plan(base, plan_update_window(base, _AS_OF))
+    plan = build_update_plan(base, plan_update_window(base, _due_as_of(base)))
 
     result = prepare_update_proposal(
         clone,
         proposal_dir,
-        as_of=_AS_OF,
+        as_of=_due_as_of(base),
         git=git,
         proposal_relpath=_PROPOSAL_REL,
         existing_open_proposal_keys={plan.idempotency_key},
@@ -163,12 +174,12 @@ def test_seam_refuses_to_reuse_a_preexisting_branch(
     m3a_checkout: Path, m3e_write_runner: Callable[..., object]
 ) -> None:
     clone = m3a_checkout
-    proposal_dir = _stage(clone, m3e_write_runner)
+    proposal_dir, base = _stage(clone, m3e_write_runner)
     git = _SubprocessGitPort(clone)
     origin_branch = git.current_branch()
     # First pass prepares the branch; a repeat must skip (never force-reuse an orphan).
     first = prepare_update_proposal(
-        clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=_PROPOSAL_REL
+        clone, proposal_dir, as_of=_due_as_of(base), git=git, proposal_relpath=_PROPOSAL_REL
     )
     assert first.outcome == OUTCOME_PREPARED
     assert first.proposal_branch is not None
@@ -178,9 +189,9 @@ def test_seam_refuses_to_reuse_a_preexisting_branch(
     # and the repeat must skip on the pre-existing bot branch, never force-reuse it.
     git._run("checkout", "--quiet", origin_branch)
     assert git.status_porcelain() == ""
-    proposal_dir = _stage(clone, m3e_write_runner)
+    proposal_dir, base = _stage(clone, m3e_write_runner)
     second = prepare_update_proposal(
-        clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=_PROPOSAL_REL
+        clone, proposal_dir, as_of=_due_as_of(base), git=git, proposal_relpath=_PROPOSAL_REL
     )
     assert second.outcome == OUTCOME_SKIPPED
     assert second.proposal_branch == first.proposal_branch
@@ -190,15 +201,17 @@ def test_seam_refuses_a_tampered_accepted_base(
     m3a_checkout: Path, m3e_write_runner: Callable[..., object]
 ) -> None:
     clone = m3a_checkout
-    proposal_dir = _stage(clone, m3e_write_runner)
+    proposal_dir, base = _stage(clone, m3e_write_runner)
     git = _SubprocessGitPort(clone)
+    # Derive the due as_of from the honest base *before* forging the snapshot.
+    as_of = _due_as_of(base)
     accepted = clone / "research/m3e/accepted_base.json"
     doc = json.loads(accepted.read_text())
-    doc["row_count"] = 999  # a stale/forged base
+    doc["row_count"] = int(doc["row_count"]) + 987  # a stale/forged base
     accepted.write_text(json.dumps(doc))
     with pytest.raises(M3EValidationError):
         prepare_update_proposal(
-            clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=_PROPOSAL_REL
+            clone, proposal_dir, as_of=as_of, git=git, proposal_relpath=_PROPOSAL_REL
         )
 
 
@@ -209,10 +222,12 @@ def test_seam_refuses_a_proposal_relpath_that_is_not_the_proposal_dir(
     # the proposal directory. A hostile/mistaken relpath (here the repo root ".") that
     # would stage unrelated files onto the bot branch is refused before any git effect.
     clone = m3a_checkout
-    proposal_dir = _stage(clone, m3e_write_runner)
+    proposal_dir, base = _stage(clone, m3e_write_runner)
     git = _SubprocessGitPort(clone)
     with pytest.raises(M3EValidationError, match="proposal_relpath must name the proposal"):
-        prepare_update_proposal(clone, proposal_dir, as_of=_AS_OF, git=git, proposal_relpath=".")
+        prepare_update_proposal(
+            clone, proposal_dir, as_of=_due_as_of(base), git=git, proposal_relpath="."
+        )
     # No bot branch was created — the refusal happened before the single git effect.
     assert git.current_branch() != "."
     assert not any(

@@ -14,6 +14,7 @@ forever-invariant passed fail-open.
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -59,7 +60,25 @@ def _minimal_repo(tmp_path: Path, registry_body: str) -> Path:
 
 
 def _real_registry_prefix() -> str:
-    return (REPO_ROOT / "research/m3e/proposal_registry.jsonl").read_text(encoding="utf-8")
+    """The committed registry's PRE-PROPOSAL prefix (genesis + audit_noop).
+
+    These F1 fixtures build minimal repositories that carry no V2D activation
+    anchor and no acceptance chain, so they must start from the registry state
+    that needs neither: the hash-chained prefix up to (and excluding) the first
+    ``proposal`` record. Slicing the real committed chain — rather than pasting a
+    literal — keeps the control case bound to the real genesis bytes while the
+    production registry grows through reviewed, accepted proposals.
+    """
+    raw = (REPO_ROOT / "research/m3e/proposal_registry.jsonl").read_text(encoding="utf-8")
+    kept: list[str] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        if json.loads(line).get("entry_kind") == "proposal":
+            break
+        kept.append(line)
+    assert kept, "registry has no pre-proposal prefix"
+    return "".join(f"{line}\n" for line in kept)
 
 
 def test_f1_clean_repo_registry_still_derives(tmp_path: Path) -> None:

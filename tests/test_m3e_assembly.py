@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 import eth_research
@@ -26,7 +27,9 @@ REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
 
 def _stage_runners(m3e_write_runner: Callable[..., object], proposal_dir: Path) -> None:
     base = verify_accepted_base(REPO_ROOT)
-    plan = build_update_plan(base, plan_update_window(base, "2026-07-22T02:17:00Z"))
+    # A due as_of derived from the committed base (7 settled days due).
+    as_of = pd.Timestamp(base.last_open) + pd.Timedelta(days=8, hours=2, minutes=17)
+    plan = build_update_plan(base, plan_update_window(base, as_of))
     m3e_write_runner(
         proposal_dir / "runner_a",
         plan,

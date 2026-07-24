@@ -92,12 +92,11 @@ ACCEPTANCE_REGISTRY_RELPATH = "research/m3e/acceptance_registry.jsonl"
 ACCEPTANCES_ROOT_RELPATH = "research/m3e/acceptances"
 _ACCEPTANCE_RECORD_PREFIX = b"m3d/m3e/proposal_acceptance_record\n"
 _ACCEPTANCE_COMPLETION_PREFIX = b"m3d/m3e/proposal_acceptance_completion\n"
-ACCEPTANCE_TRANSITIONED_PATHS = tuple(
-    sorted((*GROWABLE_APPEND_CHAINS, *GROWABLE_CURRENT_STATE))
-)
+ACCEPTANCE_TRANSITIONED_PATHS = tuple(sorted((*GROWABLE_APPEND_CHAINS, *GROWABLE_CURRENT_STATE)))
+# The M3F freeze catalog is NOT an authority here: it is rebuilt at
+# re-registration and snapshots the current (not pre-acceptance) state.
 ACCEPTANCE_GENESIS_AUTHORITIES = (
     "docs/M3C_M3E_STACK_FREEZE_TABLE.json",
-    "research/m3f/freeze_catalog.json",
     "research/v2ab/stack_freeze_table.json",
 )
 REJECTED_VERDICT = "rejected_for_development_gate_promotion"
@@ -455,8 +454,7 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
         records.append(record)
     genesis = records[0]
     _require(
-        genesis.get("entry_kind") == "genesis"
-        and genesis.get("kind") == "m3e_acceptance_registry",
+        genesis.get("entry_kind") == "genesis" and genesis.get("kind") == "m3e_acceptance_registry",
         "acceptance genesis sentinel malformed",
     )
     pins = genesis.get("pre_acceptance_state")
@@ -510,9 +508,7 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
         )
         completion = _loads(completion_path.read_text(encoding="utf-8"))
         _require(isinstance(completion, dict), "completion is not an object")
-        _acceptance_self_hash_ok(
-            completion, "completion_sha256", _ACCEPTANCE_COMPLETION_PREFIX
-        )
+        _acceptance_self_hash_ok(completion, "completion_sha256", _ACCEPTANCE_COMPLETION_PREFIX)
         _require(
             completion.get("acceptance_sha256") == record.get("acceptance_sha256")
             and completion.get("proposal_id") == proposal_id,
@@ -632,7 +628,20 @@ def _check_honest_state(root: Path, facts: dict[str, Any]) -> None:
             facts["m3d_maturity_state"] == "immature" or live_rows >= 365,
             "unlawful live maturity state below the 365 floor",
         )
-    _require(state.get("m3e_active") is False, "honest_state reports m3e_active true")
+    # ``m3e_active`` in the COMMITTED record is the AT-M3F-ACCEPTANCE historical fact
+    # (false: no anchor, no proposal). Under lawful growth it is not compared to the
+    # live world — the live world is proved instead by the anchor plus check 09's
+    # independent acceptance-chain coverage. Without growth it must still be false,
+    # exactly as accepted.
+    active = state.get("m3e_active")
+    _require(isinstance(active, bool), "honest_state.m3e_active is not a bool")
+    if grown:
+        _require(
+            _v2d_anchor_active(root),
+            "grown repository lacks a valid V2D activation anchor",
+        )
+    else:
+        _require(active is False, "honest_state reports m3e_active true")
     _require(
         state.get("standing_workflow_can_write_contents") is False,
         "honest_state reports a write-capable standing workflow",

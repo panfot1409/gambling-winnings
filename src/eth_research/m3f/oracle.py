@@ -206,9 +206,7 @@ def oracle_matches_honest_state(root: Path) -> None:
     view = read_acceptance_state(root)
     accepted_count = view.count if view is not None else 0
     if state["m3e_accepted_proposal_count"] != accepted_count:
-        raise M3FValidationError(
-            "honest_state accepted count disagrees with the acceptance chain"
-        )
+        raise M3FValidationError("honest_state accepted count disagrees with the acceptance chain")
 
 
 ORACLES: tuple[tuple[str, Any], ...] = (

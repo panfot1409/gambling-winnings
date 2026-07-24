@@ -112,6 +112,25 @@ def _governance_repo(tmp_path: Path) -> Path:
         REPO_ROOT / "research/m3e/proposal_registry.jsonl",
         tmp_path / "research/m3e/proposal_registry.jsonl",
     )
+    # The copied registry carries whatever production proposals the real repository
+    # has accepted, so the synthetic repo must also carry the governance evidence
+    # that makes them lawful (the V2D activation anchor, the acceptance chain, and
+    # the byte-frozen genesis authority tables the chain is anchored to). Without
+    # it every test here would trip the "proposal without an anchor" invariant
+    # first, instead of the specific invariant it is written to prove.
+    for evidence in (
+        "governance/v2d/prospective_activation.json",
+        "docs/M3C_M3E_STACK_FREEZE_TABLE.json",
+        "research/v2ab/stack_freeze_table.json",
+        "research/m3e/acceptance_registry.jsonl",
+    ):
+        source = REPO_ROOT / evidence
+        if source.is_file():
+            (tmp_path / evidence).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, tmp_path / evidence)
+    acceptances = REPO_ROOT / "research/m3e/acceptances"
+    if acceptances.is_dir():
+        shutil.copytree(acceptances, tmp_path / "research/m3e/acceptances")
     for empty in (
         "research/m2b/test_evaluations.jsonl",
         "research/m3a/development_gate_access.jsonl",

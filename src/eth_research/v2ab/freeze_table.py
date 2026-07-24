@@ -366,7 +366,7 @@ def verify_freeze_table(repo_root: str | Path) -> list[str]:
                 growth_lawful = True
                 chain_state = dict(view.expected_state)
                 chain_created = dict(view.created)
-    except Exception as exc:  # noqa: BLE001 - any chain defect must surface, fail closed
+    except Exception as exc:
         problems.append(f"acceptance chain invalid: {exc}")
 
     _M3F_REBUILDABLE = {
@@ -386,9 +386,7 @@ def verify_freeze_table(repo_root: str | Path) -> list[str]:
                     problems.append(f"{extra}: could not re-derive entry: {exc}")
                     continue
                 if have.sha256 != pinned:
-                    problems.append(
-                        f"{extra}: growth evidence does not match its acceptance pin"
-                    )
+                    problems.append(f"{extra}: growth evidence does not match its acceptance pin")
             continue
         problems.append(f"unlisted governed artifact present in the tree: {extra}")
 
@@ -402,9 +400,7 @@ def verify_freeze_table(repo_root: str | Path) -> list[str]:
         if have.sha256 != want.sha256 or have.byte_count != want.byte_count:
             if growth_lawful and relpath in chain_state:
                 if have.sha256 != chain_state[relpath]:
-                    problems.append(
-                        f"{relpath}: does not equal the chain-head accepted state"
-                    )
+                    problems.append(f"{relpath}: does not equal the chain-head accepted state")
             elif growth_lawful and relpath in _M3F_REBUILDABLE:
                 try:
                     if relpath.endswith("recovery_capsule_manifest.json"):
@@ -415,7 +411,7 @@ def verify_freeze_table(repo_root: str | Path) -> list[str]:
                         from eth_research.m3f.recovery import verify_drill_record
 
                         verify_drill_record(root)
-                except Exception as exc:  # noqa: BLE001 - delegation must stay fail-closed
+                except Exception as exc:
                     problems.append(
                         f"{relpath}: {_M3F_REBUILDABLE[relpath]} does not re-verify: {exc}"
                     )

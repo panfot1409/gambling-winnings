@@ -1,10 +1,12 @@
 """V2D growth-core tests: update-attempts ledger, plan dispatch, grown-tree replay.
 
-Three claims are proven here, none touching the real repository:
+Three claims are proven here, never mutating the real repository:
 
-1. **Byte-neutrality at zero updates** — with no ``update_attempts.jsonl``, every
-   multi-attempt rebuild is byte-for-byte identical to the committed genesis-only
-   artifact, so the growth machinery changes nothing until an update lands.
+1. **The committed growth replays** — the committed ``update_attempts.jsonl``
+   verifies as an append chain whose entries bind the governance-accepted update
+   attempts (evidence directory, plan/receipt hashes, acceptance record), and
+   every multi-attempt rebuild is byte-for-byte identical to the committed
+   artifacts, so the growth machinery reproduces exactly the accepted state.
 2. **The m3e→m3d plan bridge** — an M3E update plan built from the real accepted
    base is accepted verbatim by the m3d kind-dispatched loader (and refused when
    tampered), so a landed update attempt replays from committed bytes alone.
@@ -13,6 +15,10 @@ Three claims are proven here, none touching the real repository:
    deterministic rebuilds yields a tree on which the WHOLE m3d program, the m3e
    accepted base, and the V2D activation gate all pass with the grown row count —
    and every tamper (gap, ledger/bytes mismatch, raw flip) is refused.
+
+Expectations for the real tree are DERIVED from the committed governance evidence
+(the accepted base, the acceptance registry, and each acceptance record) so the
+same semantic checks keep holding as future append-only proposals are accepted.
 """
 
 from __future__ import annotations
@@ -38,9 +44,14 @@ from eth_research.m3d.cohort import (
     build_cohort_manifest_bytes,
     publish_prospective_cohort,
 )
+from eth_research.m3d.protocol import COHORT_START
 from eth_research.m3d.quality import QUALITY_PATH, build_prospective_quality_bytes
-from eth_research.m3d.receipt import ProspectiveAttemptReceipt
-from eth_research.m3d.segment import SEGMENTS_PATH, build_prospective_segments_bytes
+from eth_research.m3d.receipt import ProspectiveAttemptReceipt, load_prospective_attempt_receipt
+from eth_research.m3d.segment import (
+    SEGMENTS_PATH,
+    build_prospective_segments_bytes,
+    verify_prospective_segments,
+)
 from eth_research.m3d.update_attempts import (
     UPDATE_ATTEMPTS_PATH,
     accepted_attempt_ids,
@@ -75,6 +86,43 @@ _TREE_COPY: tuple[str, ...] = (
 
 _SOURCE_COMMIT = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 
+_ACCEPTANCE_REGISTRY = "research/m3e/acceptance_registry.jsonl"
+_ACCEPTANCES_DIR = "research/m3e/acceptances"
+
+
+def _registry_acceptances() -> list[dict[str, Any]]:
+    """Acceptance entries of the committed governance registry, in append order."""
+    raw = (REPO_ROOT / _ACCEPTANCE_REGISTRY).read_text()
+    records = [json.loads(line) for line in raw.splitlines() if line]
+    acceptances = [r for r in records if r.get("entry_kind") == "acceptance"]
+    assert acceptances, "the acceptance registry must record the accepted growth"
+    return acceptances
+
+
+def _acceptance_document(registry_entry: dict[str, Any]) -> dict[str, Any]:
+    """Load one acceptance record and cross-check the registry's binding to it."""
+    proposal_id = str(registry_entry["proposal_id"])
+    doc: dict[str, Any] = json.loads(
+        (REPO_ROOT / _ACCEPTANCES_DIR / proposal_id / "acceptance.json").read_text()
+    )
+    assert doc["proposal_id"] == proposal_id
+    assert doc["acceptance_sha256"] == registry_entry["acceptance_sha256"]
+    return doc
+
+
+def _plus_days(open_z: str, days: int) -> str:
+    return (pd.Timestamp(open_z) + pd.Timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _compact_day(open_z: str) -> str:
+    return open_z[:10].replace("-", "")
+
+
+def _as_of_after(last_open: str, days: int) -> str:
+    """A 03:00Z instant ``days`` after ``last_open`` — safely past the settle delay,
+    so exactly the ``days - 1`` candles after ``last_open`` are due."""
+    return (pd.Timestamp(last_open) + pd.Timedelta(days=days)).strftime("%Y-%m-%dT03:00:00Z")
+
 
 @pytest.fixture
 def tree(tmp_path: Path) -> Path:
@@ -90,13 +138,61 @@ def tree(tmp_path: Path) -> Path:
 
 
 # --------------------------------------------------------------------------------------------------
-# 1. Byte-neutrality at zero update attempts (real tree, read-only)
+# 1. The committed growth replays (real tree, read-only)
 # --------------------------------------------------------------------------------------------------
 
 
-def test_zero_updates_leave_every_rebuild_byte_identical() -> None:
-    assert load_update_attempt_entries(REPO_ROOT) == []
-    assert accepted_attempt_ids(REPO_ROOT) == ["coinbase-eth-usd-prospective-genesis-001"]
+def test_committed_ledger_binds_every_accepted_update_attempt() -> None:
+    # Loading verifies the hash chain, the pinned genesis sentinel, and contiguity.
+    entries = load_update_attempt_entries(REPO_ROOT)
+    acceptances = _registry_acceptances()
+    # Exactly one landed attempt per governance acceptance, in the same order.
+    assert len(entries) == len(acceptances) >= 1
+    assert [e["proposal_id"] for e in entries] == [a["proposal_id"] for a in acceptances]
+
+    # Genesis is always first; every landed update attempt follows in ledger order.
+    assert accepted_attempt_ids(REPO_ROOT) == [
+        "coinbase-eth-usd-prospective-genesis-001",
+        *(str(e["attempt_id"]) for e in entries),
+    ]
+
+    # The newest entry binds the newest acceptance record and its committed
+    # attempt evidence directory, byte-for-byte.
+    acceptance = _acceptance_document(acceptances[-1])
+    newest = entries[-1]
+    assert newest["proposal_id"] == acceptance["proposal_id"]
+    assert newest["plan_sha256"] == acceptance["update_plan_sha256"]
+    interval = acceptance["append_interval"]
+    assert newest["first_open"] == interval["first_open"]
+    assert newest["last_open"] == interval["last_open"]
+    assert newest["row_count"] == interval["row_count"]
+    raw_dir = REPO_ROOT / f"research/m3d/raw/coinbase/{newest['attempt_id']}"
+    assert raw_dir.is_dir()
+    assert sha256_bytes((raw_dir / "acquisition_receipt.json").read_bytes()) == str(
+        newest["receipt_sha256"]
+    )
+    receipt = load_prospective_attempt_receipt(raw_dir / "acquisition_receipt.json")
+    assert receipt.plan_sha256 == newest["plan_sha256"]
+
+    # The segment chain verifies with the genesis segment first and exactly one
+    # extra segment per committed update attempt.
+    records = verify_prospective_segments(REPO_ROOT)
+    segments = [r for r in records if r.get("entry_kind") == "segment"]
+    assert records[1] == segments[0]  # the genesis segment directly follows the sentinel
+    assert segments[0]["segment_id"] == "prospective-segment-000"
+    assert segments[0]["first_open"] == COHORT_START
+    assert len(segments) == 1 + len(entries)
+
+    # The grown cohort is the genesis rows plus every attested appended window.
+    bundles, _ = build_accepted_raw_bundles(REPO_ROOT)
+    base = verify_accepted_base(REPO_ROOT)
+    assert sum(b.row_count for b in bundles) == base.row_count
+    assert base.row_count == acceptance["new_accepted"]["row_count"]
+    assert base.last_open == acceptance["new_accepted"]["last_open"]
+    assert base.last_open == newest["last_open"]
+
+
+def test_committed_rebuilds_stay_byte_identical_after_growth() -> None:
     for rel, rebuild in (
         (SEGMENTS_PATH, build_prospective_segments_bytes),
         (QUALITY_PATH, build_prospective_quality_bytes),
@@ -111,10 +207,11 @@ def test_zero_updates_leave_every_rebuild_byte_identical() -> None:
 # --------------------------------------------------------------------------------------------------
 
 
-def _real_update_plan(as_of: str = "2026-07-17T03:00:00Z") -> ProspectiveUpdatePlan:
+def _real_update_plan(days_after_last: int = 3) -> ProspectiveUpdatePlan:
     base = verify_accepted_base(REPO_ROOT)
-    decision = plan_update_window(base, as_of)
+    decision = plan_update_window(base, _as_of_after(base.last_open, days_after_last))
     assert not decision.is_noop
+    assert decision.expected_new_buckets == days_after_last - 1
     return build_update_plan(base, decision)
 
 
@@ -160,15 +257,18 @@ def _coinbase_raw_bytes(opens: list[str]) -> bytes:
 
 
 def _land_update(
-    tree_root: Path, *, as_of: str, proposal_id: str = "m3e-update-fixture-001"
+    tree_root: Path, *, days_after_last: int, proposal_id: str = "m3e-update-fixture-001"
 ) -> str:
     """Fabricate + land one update attempt exactly as the reviewed path would.
 
+    The as-of instant is derived from the tree's CURRENT accepted base, so exactly
+    ``days_after_last - 1`` new settled days beyond its last open are landed.
     Returns the attempt id. Writes the raw evidence dir, appends the ledger entry,
     and rewrites every derived artifact via the deterministic builders (the same
     sequence the M3E staging step performs).
     """
     base = verify_accepted_base(tree_root)
+    as_of = _as_of_after(base.last_open, days_after_last)
     decision = plan_update_window(base, as_of)
     plan = build_update_plan(base, decision)
     (window,) = plan.windows  # short due windows tile into exactly one request
@@ -250,18 +350,20 @@ def _land_update(
 
 
 def test_grown_tree_verifies_end_to_end(tree: Path) -> None:
-    attempt_id = _land_update(tree, as_of="2026-07-17T03:00:00Z")  # lands 07-15..07-16
+    base0 = verify_accepted_base(tree)
+    committed_ids = [str(e["attempt_id"]) for e in load_update_attempt_entries(tree)]
+    attempt_id = _land_update(tree, days_after_last=3)  # lands exactly the next 2 days
 
     entries = load_update_attempt_entries(tree)
-    assert [e["attempt_id"] for e in entries] == [attempt_id]
+    assert [str(e["attempt_id"]) for e in entries] == [*committed_ids, attempt_id]
     bundles, _ = build_accepted_raw_bundles(tree)
-    assert sum(b.row_count for b in bundles) == 5  # 3 genesis + 2 landed
+    assert sum(b.row_count for b in bundles) == base0.row_count + 2  # accepted + 2 landed
 
     checks = verify_m3d_program(tree)
     assert len(checks) == 25
     base = verify_accepted_base(tree)
-    assert base.row_count == 5
-    assert base.last_open == "2026-07-16T00:00:00Z"
+    assert base.row_count == base0.row_count + 2
+    assert base.last_open == _plus_days(base0.last_open, 2)
     assert base.document["maturity_state"] == "immature"
     assert base.document["evaluation_authorized"] is False
     assert "update_attempts_ledger_sha256" in base.document["provenance"]
@@ -274,17 +376,24 @@ def test_grown_tree_verifies_end_to_end(tree: Path) -> None:
         workflow_basename="m3e-prospective-update.yml",
         repository="panfot1409/gambling-winnings",
     )
-    assert gate_base.row_count == 5
+    assert gate_base.row_count == base0.row_count + 2
 
 
 def test_second_update_builds_on_the_grown_base(tree: Path) -> None:
-    _land_update(tree, as_of="2026-07-17T03:00:00Z")
+    base0 = verify_accepted_base(tree)
+    committed = len(load_update_attempt_entries(tree))
+    _land_update(tree, days_after_last=3)  # lands 2 days
+    grown_last = verify_accepted_base(tree).last_open
     second = _land_update(
-        tree, as_of="2026-07-19T03:00:00Z", proposal_id="m3e-update-fixture-002"
-    )  # lands 07-17..07-18
-    assert verify_accepted_base(tree).row_count == 7
-    assert [e["ordinal"] for e in load_update_attempt_entries(tree)] == [1, 2]
-    assert second.startswith("coinbase-eth-usd-prospective-update-20260717-20260718-")
+        tree, days_after_last=3, proposal_id="m3e-update-fixture-002"
+    )  # lands the next 2 days after the grown base
+    assert verify_accepted_base(tree).row_count == base0.row_count + 4
+    assert [e["ordinal"] for e in load_update_attempt_entries(tree)] == list(
+        range(1, committed + 3)
+    )
+    first_c = _compact_day(_plus_days(grown_last, 1))
+    last_c = _compact_day(_plus_days(grown_last, 2))
+    assert second.startswith(f"coinbase-eth-usd-prospective-update-{first_c}-{last_c}-")
     assert len(verify_m3d_program(tree)) == 25
 
 
@@ -294,21 +403,26 @@ def test_second_update_builds_on_the_grown_base(tree: Path) -> None:
 
 
 def test_gap_entry_is_refused(tree: Path) -> None:
-    _land_update(tree, as_of="2026-07-17T03:00:00Z")  # accepted through 07-16
-    # Forge a second entry that skips 07-17 (starts at 07-18): contiguity refusal.
+    _land_update(tree, days_after_last=3)  # accepted through last_open + 2 days
+    entries = load_update_attempt_entries(tree)
+    accepted_last = str(entries[-1]["last_open"])
+    # Forge a next entry that skips the day right after the accepted window
+    # (starts two days after it): contiguity refusal.
+    skipped_open = _plus_days(accepted_last, 2)
+    day = _compact_day(skipped_open)
     ledger_path = tree / UPDATE_ATTEMPTS_PATH
     entry = {
         "schema_version": 1,
         "entry_kind": "update_attempt",
-        "ordinal": 2,
-        "attempt_id": "coinbase-eth-usd-prospective-update-20260718-20260718-" + "0" * 16,
-        "first_open": "2026-07-18T00:00:00Z",
-        "last_open": "2026-07-18T00:00:00Z",
+        "ordinal": len(entries) + 1,
+        "attempt_id": f"coinbase-eth-usd-prospective-update-{day}-{day}-" + "0" * 16,
+        "first_open": skipped_open,
+        "last_open": skipped_open,
         "row_count": 1,
         "plan_sha256": "0" * 64,
         "receipt_sha256": "0" * 64,
         "proposal_id": "forged",
-        "created_at_utc": "2026-07-19T00:00:00Z",
+        "created_at_utc": _plus_days(accepted_last, 3),
         "package_version": "0.7.0",
     }
     ledger_path.write_bytes(extend_update_attempts_bytes(ledger_path.read_bytes(), entry))
@@ -317,22 +431,23 @@ def test_gap_entry_is_refused(tree: Path) -> None:
 
 
 def test_ledger_facts_must_match_the_bytes(tree: Path) -> None:
-    _land_update(tree, as_of="2026-07-17T03:00:00Z")
+    _land_update(tree, days_after_last=3)
     ledger_path = tree / UPDATE_ATTEMPTS_PATH
-    raw = ledger_path.read_bytes()
-    # Rewrite the entry with an inflated row_count/last_open but a valid chain.
-    lines = raw.decode().splitlines()
-    record = json.loads(lines[1])
+    lines = ledger_path.read_bytes().decode().splitlines()
+    # Re-append the newest entry with an inflated row_count/last_open but a valid
+    # chain (the accepted prefix, including every prior entry, stays untouched).
+    record = json.loads(lines[-1])
     del record[PREVIOUS_FIELD]
-    record["row_count"] = 3
-    record["last_open"] = "2026-07-17T00:00:00Z"
-    ledger_path.write_bytes(extend_update_attempts_bytes(None, record))
+    record["row_count"] = int(record["row_count"]) + 1
+    record["last_open"] = _plus_days(str(record["last_open"]), 1)
+    prefix = ("\n".join(lines[:-1]) + "\n").encode()
+    ledger_path.write_bytes(extend_update_attempts_bytes(prefix, record))
     with pytest.raises(M3DValidationError, match="does not match the bytes"):
         build_accepted_raw_bundles(tree)
 
 
 def test_tampered_update_raw_byte_is_refused(tree: Path) -> None:
-    attempt_id = _land_update(tree, as_of="2026-07-17T03:00:00Z")
+    attempt_id = _land_update(tree, days_after_last=3)
     raw_dir = tree / f"research/m3d/raw/coinbase/{attempt_id}"
     raw_files = [p for p in raw_dir.iterdir() if p.name.startswith("coinbase-eth-usd-1d")]
     (raw_file,) = raw_files
@@ -342,8 +457,8 @@ def test_tampered_update_raw_byte_is_refused(tree: Path) -> None:
 
 
 def test_appending_preserves_the_exact_prefix(tree: Path) -> None:
-    _land_update(tree, as_of="2026-07-17T03:00:00Z")
+    _land_update(tree, days_after_last=3)  # lands 2 days
     before = (tree / UPDATE_ATTEMPTS_PATH).read_bytes()
-    _land_update(tree, as_of="2026-07-18T03:00:00Z", proposal_id="m3e-update-fixture-002")
+    _land_update(tree, days_after_last=2, proposal_id="m3e-update-fixture-002")  # lands 1 day
     after = (tree / UPDATE_ATTEMPTS_PATH).read_bytes()
     assert after.startswith(before)  # append-only: the accepted prefix never rewrites

@@ -86,12 +86,13 @@ TRANSITIONED_STATE_PATHS: tuple[str, ...] = (
     "research/m3e/proposal_registry.jsonl",
 )
 
-#: Three byte-frozen, independently-committed tables that pin the pre-acceptance
-#: bytes of every transitioned path. The chain genesis must agree with ALL of them,
-#: so a forged genesis cannot re-root the chain onto invented history.
+#: Byte-frozen, independently-committed tables that pin the pre-acceptance bytes
+#: of every transitioned path. The chain genesis must agree with ALL of them, so a
+#: forged genesis cannot re-root the chain onto invented history. (The M3F freeze
+#: catalog is deliberately NOT an authority: it is rebuilt at re-registration and
+#: therefore snapshots the *current* state, not the pre-acceptance state.)
 _GENESIS_AUTHORITIES: tuple[str, ...] = (
     "docs/M3C_M3E_STACK_FREEZE_TABLE.json",
-    "research/m3f/freeze_catalog.json",
     "research/v2ab/stack_freeze_table.json",
 )
 
@@ -361,17 +362,13 @@ def build_acceptance_record(
         receipt_raw, _ = _load_json(
             rdir / "acquisition_receipt.json", f"{runner}/acquisition_receipt.json"
         )
-        raws = sorted(
-            p for p in rdir.iterdir() if p.name.startswith("coinbase-") and p.is_file()
-        )
+        raws = sorted(p for p in rdir.iterdir() if p.name.startswith("coinbase-") and p.is_file())
         if not raws:
             raise AcceptanceError(f"{runner}: no raw response payload committed")
         runner_evidence[runner] = {
             "update_plan_sha256": hashlib.sha256(plan_raw).hexdigest(),
             "acquisition_receipt_sha256": hashlib.sha256(receipt_raw).hexdigest(),
-            "raw_response_sha256": {
-                p.name: _sha256_file(p, f"{runner}/{p.name}") for p in raws
-            },
+            "raw_response_sha256": {p.name: _sha256_file(p, f"{runner}/{p.name}") for p in raws},
         }
     if (
         runner_evidence["runner_a"]["raw_response_sha256"]
@@ -379,12 +376,9 @@ def build_acceptance_record(
     ):
         raise AcceptanceError("runner raw payloads are not byte-identical")
 
-    accepted_state = {
-        path: _sha256_file(root / path, path) for path in TRANSITIONED_STATE_PATHS
-    }
+    accepted_state = {path: _sha256_file(root / path, path) for path in TRANSITIONED_STATE_PATHS}
     created_state = {
-        path: _sha256_file(root / path, path)
-        for path in _created_evidence_paths(root, proposal_id)
+        path: _sha256_file(root / path, path) for path in _created_evidence_paths(root, proposal_id)
     }
 
     sealed = {}
@@ -464,7 +458,7 @@ def build_acceptance_record(
             "sha256": hashlib.sha256(quality_raw).hexdigest(),
             "verdict_keys": sorted(str(k) for k in quality_map),
         },
-        "governance_flags": {k: False for k in sorted(flags)},
+        "governance_flags": dict.fromkeys(sorted(flags), False),
         "sealed_ledgers": sealed,
         "evaluation_authorized": False,
         "maturity_state": "immature",
@@ -505,9 +499,7 @@ def build_completion_record(
         "schema_version": ACCEPTANCE_SCHEMA_VERSION,
         "kind": ACCEPTANCE_COMPLETION_KIND,
         "package_version": M3E_PACKAGE_VERSION,
-        "proposal_id": require_nonempty_str(
-            "proposal_id", acceptance_record.get("proposal_id")
-        ),
+        "proposal_id": require_nonempty_str("proposal_id", acceptance_record.get("proposal_id")),
         "acceptance_sha256": require_sha256_hex(
             "acceptance_sha256", acceptance_record.get("acceptance_sha256")
         ),
@@ -553,9 +545,7 @@ def publish_acceptance(repo_root: str | Path, record: dict[str, Any]) -> Path:
     registry_path = root / ACCEPTANCE_REGISTRY_PATH
     if registry_path.exists():
         _, records = load_and_verify_chain(root, ACCEPTANCE_REGISTRY_PATH)
-        bodies = [
-            {k: v for k, v in rec.items() if k != "previous_line_sha256"} for rec in records
-        ]
+        bodies = [{k: v for k, v in rec.items() if k != "previous_line_sha256"} for rec in records]
     else:
         bodies = [build_genesis_record(root)]
     bodies.append(
@@ -650,9 +640,7 @@ def load_acceptance_chain(
         if proposal_id in seen_ids:
             raise AcceptanceError(f"proposal {proposal_id} accepted twice")
         seen_ids.add(proposal_id)
-        entry_sha = require_sha256_hex(
-            "entry.acceptance_sha256", entry.get("acceptance_sha256")
-        )
+        entry_sha = require_sha256_hex("entry.acceptance_sha256", entry.get("acceptance_sha256"))
 
         record_path = root / ACCEPTANCES_ROOT / proposal_id / ACCEPTANCE_RECORD_NAME
         _, record_doc = _load_json(record_path, f"acceptance record {proposal_id}")
@@ -664,9 +652,7 @@ def load_acceptance_chain(
             label=f"acceptance record {proposal_id}",
         )
         if record["acceptance_sha256"] != entry_sha:
-            raise AcceptanceError(
-                f"registry entry {position} does not bind the committed record"
-            )
+            raise AcceptanceError(f"registry entry {position} does not bind the committed record")
         if (
             record.get("kind") != ACCEPTANCE_RECORD_KIND
             or record.get("schema_version") != ACCEPTANCE_SCHEMA_VERSION
@@ -692,9 +678,7 @@ def load_acceptance_chain(
             raise AcceptanceError(
                 f"acceptance {proposal_id}: new state must pin exactly the transitioned paths"
             )
-        require_exact(
-            "record.evaluation_authorized", record.get("evaluation_authorized"), False
-        )
+        require_exact("record.evaluation_authorized", record.get("evaluation_authorized"), False)
         require_exact("record.maturity_state", record.get("maturity_state"), "immature")
         for name, value in require_mapping(
             "record.governance_flags", record.get("governance_flags")
@@ -768,8 +752,7 @@ def expected_current_state(repo_root: str | Path, *, upto: int | None = None) ->
 
 def accepted_proposal_ids(repo_root: str | Path) -> tuple[str, ...]:
     return tuple(
-        entry.proposal_id
-        for entry in load_acceptance_chain(repo_root, require_completion=False)
+        entry.proposal_id for entry in load_acceptance_chain(repo_root, require_completion=False)
     )
 
 
@@ -852,9 +835,10 @@ def verify_acceptance_program(repo_root: str | Path, *, deep: bool = True) -> li
     if chain:
         newest = chain[-1]
         created = require_mapping(
-            "new_accepted", newest.record["new_accepted"]
-        ).get("created")
-        for path, sha in sorted(require_mapping("created", created).items()):
+            "created",
+            require_mapping("new_accepted", newest.record["new_accepted"]).get("created"),
+        )
+        for path, sha in sorted(created.items()):
             actual = _sha256_file(root / str(path), str(path))
             if actual != require_sha256_hex(f"created {path}", sha):
                 raise AcceptanceError(f"created evidence {path} drifted from its acceptance pin")
@@ -877,9 +861,7 @@ def verify_acceptance_program(repo_root: str | Path, *, deep: bool = True) -> li
                 ),
             ):
                 if not commit or not _git_head_contains(root, str(commit)):
-                    raise AcceptanceError(
-                        f"{label} {str(commit)[:12]}… is not an ancestor of HEAD"
-                    )
+                    raise AcceptanceError(f"{label} {str(commit)[:12]}… is not an ancestor of HEAD")
             record("A06_commits_are_ancestors")
     else:
         record("A04_created_evidence_pinned", "no acceptances")

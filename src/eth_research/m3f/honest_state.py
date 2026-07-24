@@ -216,7 +216,18 @@ def verify_honest_state(repo_root: str | Path) -> None:
     committed = load_canonical_json(committed_raw, "honest_state")
     if not isinstance(committed, dict):
         raise M3FValidationError("committed honest_state.json is not an object")
-    if committed_md != render_honest_state_md(committed):
+    # The committed record is the immutable AT-M3F-ACCEPTANCE snapshot: it may lack
+    # facts introduced by strictly-later governance (that is forward-only evolution,
+    # not tampering), but every fact it DOES carry must still render and every
+    # immutable fact is re-checked below. A tampered/truncated record must fail
+    # closed as a validation error, never as an uncaught KeyError out of the renderer.
+    try:
+        rendered_md = render_honest_state_md(committed)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise M3FValidationError(
+            f"committed honest_state.json cannot render its Markdown record: {exc}"
+        ) from exc
+    if committed_md != rendered_md:
         raise M3FValidationError("committed HONEST_STATE.md does not reproduce from the JSON")
     immutable = (
         "schema_version",

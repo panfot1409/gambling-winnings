@@ -47,13 +47,18 @@ def test_failure_drills_are_all_detected() -> None:
     report = failure_drills(REPO_ROOT)
     assert report["all_detected"] is True
     names = {d["name"] for d in report["drills"]}
-    assert names == {
+    expected = {
         "dropped_file",
         "flipped_byte",
         "injected_proposal",
         "nonempty_sealed_ledger",
         "broken_registry_chain",
     }
+    # Post-acceptance repositories additionally drill the acceptance chain: dropping
+    # an acceptance record must strand its production proposal and be detected.
+    if (REPO_ROOT / "research/m3e/acceptance_registry.jsonl").is_file():
+        expected.add("dropped_acceptance_record")
+    assert names == expected
     for drill in report["drills"]:
         assert drill["detected"] is True, drill["name"]
 
