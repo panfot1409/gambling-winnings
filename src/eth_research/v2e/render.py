@@ -16,10 +16,10 @@ from eth_research.v2e.state import REHEARSAL_BANNER, DashboardState
 _CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
 
 _CSS = """
-:root { color-scheme: light dark; }
+:root { color-scheme: dark; }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
-       background: #101418; color: #e8edf2; }
+body { margin: 0; overflow-wrap: anywhere; background: #101418; color: #e8edf2;
+       font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; }
 main { max-width: 42rem; margin: 0 auto; padding: 0.75rem; }
 header { padding: 1rem 0.75rem 0.5rem; border-bottom: 1px solid #2a3440; }
 h1 { font-size: 1.15rem; margin: 0 0 0.25rem; }
@@ -249,7 +249,7 @@ def render_html(state: DashboardState, *, rehearsal: bool = False) -> str:
                 ("Open positions", _e(s.paper_engine.open_positions)),
                 ("Pending orders", _e(s.paper_engine.pending_orders)),
                 ("Fills", _e(s.paper_engine.fills)),
-                ("Realized/unrealized P&amp;L", _e(s.paper_engine.pnl)),
+                ("Realized/unrealized P&L", _e(s.paper_engine.pnl)),
                 ("Kill switch", f'<span class="ok">{_e(s.paper_engine.kill_switch)}</span>'),
             ]
         )

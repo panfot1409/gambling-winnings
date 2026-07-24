@@ -105,6 +105,25 @@ class TestBypassResistance:
         with pytest.raises(PaperGateError):
             transition("approved", "active", degraded, token=real)
 
+    def test_subclassed_requirements_cannot_lie_via_properties(self) -> None:
+        # auditor-5 F2: a requirements subclass overriding all_satisfied/unmet must be
+        # refused by exact-type checks at minting and at the active transition.
+        class Liar(PaperActivationRequirements):
+            @property
+            def all_satisfied(self) -> bool:
+                return True
+
+            @property
+            def unmet(self) -> tuple[str, ...]:
+                return ()
+
+        liar = Liar(**{f.name: False for f in dataclasses.fields(PaperActivationRequirements)})
+        with pytest.raises(PaperGateError, match="exact PaperActivationRequirements"):
+            request_activation_token(liar)
+        real_token = request_activation_token(_ALL_TRUE)
+        with pytest.raises(PaperGateError, match="exact PaperActivationRequirements"):
+            transition("approved", "active", liar, token=real_token)
+
     def test_environment_variables_do_not_exist_as_a_bypass(self) -> None:
         os.environ["V2E_PAPER_FORCE"] = "1"
         try:

@@ -212,8 +212,15 @@ class ActivationToken:
         return self._requirements
 
 
+def _require_genuine_requirements(requirements: PaperActivationRequirements) -> None:
+    """Refuse subclasses: the gate trusts field values, never overridable behavior."""
+    if type(requirements) is not PaperActivationRequirements:
+        raise PaperGateError("requirements must be the exact PaperActivationRequirements type")
+
+
 def request_activation_token(requirements: PaperActivationRequirements) -> ActivationToken:
     """Mint an activation token — refused unless every requirement is satisfied."""
+    _require_genuine_requirements(requirements)
     if not requirements.all_satisfied:
         raise PaperGateError(
             "paper activation refused; unmet requirements: " + ", ".join(requirements.unmet)
@@ -240,6 +247,7 @@ def transition(
             f"transition to {target!r} refused; unmet: " + ", ".join(requirements.unmet)
         )
     if target == "active":
+        _require_genuine_requirements(requirements)
         if token is None or type(token) is not ActivationToken:
             raise PaperGateError("entering 'active' requires a genuine activation token")
         if not token.requirements.all_satisfied or not requirements.all_satisfied:

@@ -318,6 +318,13 @@ def _proposal_panel(
     proposed_rows = int(str(transition["proposed_row_count"]))
     if old_rows != accepted.row_count or old_rows + new_rows != proposed_rows:
         raise DashboardStateError("proposal row arithmetic conflates accepted and proposed state")
+    # auditor-4 F3: the two-runner agreement shown on the dashboard must be read from
+    # the bundle's comparison record, never asserted from the panel's mere existence.
+    comparison = _load_strict_object(checkout, f"{rel}/acquisition_comparison.json")
+    if comparison.get("canonical_content_match") is not True:
+        raise DashboardStateError("proposal runner comparison does not record a byte match")
+    if comparison.get("runners_isolated") is not True:
+        raise DashboardStateError("proposal runner comparison does not record isolated runners")
     return ProposalPanel(
         configured=True,
         detail="pending draft proposal verified against the accepted base (unmerged)",
@@ -457,7 +464,7 @@ def _paper_engine_panel(
 
 
 def _timeline(
-    anchor: dict[str, Any], accepted: AcceptedProspectiveBase
+    anchor: dict[str, Any], accepted: AcceptedProspectiveBase, proposal: ProposalPanel
 ) -> tuple[tuple[str, str], ...]:
     return (
         ("V1 offline research platform", "accepted milestones M1-M4B merged and verified"),
@@ -469,7 +476,14 @@ def _timeline(
             f"anchor authorized on {anchor.get('authorized_on', 'unknown')}; "
             f"accepted cohort {accepted.row_count} rows through {accepted.last_open}",
         ),
-        ("Pending proposal", "one DATA-ONLY draft update proposal awaiting human review"),
+        (
+            "Pending proposal",
+            (
+                "one DATA-ONLY draft update proposal verified locally; awaiting human review"
+                if proposal.configured
+                else "check GitHub for any pending draft proposal (not locally verified)"
+            ),
+        ),
         ("Strategy events", "none — no strategy has ever been evaluated"),
         ("Paper events", "none — paper trading has never started"),
     )
@@ -555,7 +569,7 @@ def build_dashboard_state(
         integrity=_integrity_panel(root, sealed, True, proposal),
         candidate=_candidate_panel(readiness),
         paper_engine=_paper_engine_panel(requirements, readiness),
-        timeline=_timeline(anchor, accepted),
+        timeline=_timeline(anchor, accepted, proposal),
     )
 
 

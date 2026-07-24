@@ -162,6 +162,24 @@ class TestProposalCheckout:
         with pytest.raises(DashboardStateError, match="stale or wrong-parent"):
             build_dashboard_state(m3a_checkout, proposal_checkout=checkout)
 
+    def test_tampered_runner_comparison_refuses(self, tmp_path: Path) -> None:
+        # auditor-4 F3: the two-runner byte-agreement claim must be READ from the
+        # bundle's comparison record, so a falsified record refuses the build.
+        import shutil
+
+        source = Path("/tmp/claude-0/v2e-proposal-checkout")
+        if not source.is_dir():
+            pytest.skip("real proposal checkout not present in this environment")
+        checkout = tmp_path / "tampered"
+        shutil.copytree(source / "research", checkout / "research")
+        pdir = next((checkout / "research/m3e/proposals").iterdir())
+        comparison = pdir / "acquisition_comparison.json"
+        doc = json.loads(comparison.read_text("utf-8"))
+        doc["canonical_content_match"] = False
+        comparison.write_text(json.dumps(doc, sort_keys=True) + "\n", "utf-8")
+        with pytest.raises(DashboardStateError, match="runner comparison"):
+            build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
+
 
 class TestRendering:
     def test_page_is_phone_ready_and_csp_locked(self, real_state: DashboardState) -> None:
@@ -196,6 +214,25 @@ class TestRendering:
         assert REHEARSAL_BANNER == "UI/OPERATIONS REHEARSAL — NOT PAPER TRADING"
         assert REHEARSAL_BANNER not in render_html(real_state)
         assert REHEARSAL_BANNER in render_html(real_state, rehearsal=True)
+
+    def test_pnl_label_is_not_double_escaped(self, real_state: DashboardState) -> None:
+        page = render_html(real_state)
+        assert "P&amp;L" in page  # single, correct escape of "P&L"
+        assert "amp;amp;" not in page  # auditor-4 F2: no double escaping anywhere
+
+    def test_body_wraps_long_tokens_for_phones(self, real_state: DashboardState) -> None:
+        # auditor-4 F1: the 40-hex commit in the header must be breakable at 390px.
+        page = render_html(real_state)
+        assert "body { margin: 0; overflow-wrap: anywhere;" in page
+        assert "color-scheme: dark" in page  # F7: page is dark-only by design
+
+    def test_timeline_pending_row_tracks_proposal_visibility(
+        self, real_state: DashboardState
+    ) -> None:
+        # auditor-4 F5: without a checkout the timeline must not assert unverified
+        # external PR state as fact.
+        labels = dict(real_state.timeline)
+        assert "not locally verified" in labels["Pending proposal"]
 
     def test_no_fabricated_activity(self, real_state: DashboardState) -> None:
         page = render_html(real_state)
