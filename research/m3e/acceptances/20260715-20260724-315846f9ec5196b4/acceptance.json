@@ -1,0 +1,154 @@
+{
+  "acceptance_sha256": "78aa4c23678531806dadbae0d1ab56a65a77ae4d805f31f918a981b80bd52506",
+  "acceptance_time": "2026-07-24T13:30:00Z",
+  "append_interval": {
+    "first_open": "2026-07-15T00:00:00Z",
+    "last_open": "2026-07-23T00:00:00Z",
+    "row_count": 9
+  },
+  "append_only_proof": {
+    "is_append_only": true,
+    "landed_verification_checks": [
+      "L01_grown_base_rebuilds",
+      "L02_genesis_fingerprint_anchored",
+      "L03_grown_m3d_program_intact",
+      "L04_proposal_manifest_self_hash",
+      "L05_runners_reverify_and_agree",
+      "L06_idempotency_consistent",
+      "L07_ledger_entry_binds_proposal",
+      "L08_attempt_evidence_verbatim_from_runner_a",
+      "L09_grown_rows_are_old_plus_attested_append",
+      "L10_registry_binds_proposal",
+      "L11_data_only_invariants_hold"
+    ],
+    "prior_rows_changed": 0,
+    "prior_rows_deleted": 0
+  },
+  "canonical_content_fingerprint": "ab22a0861d25781358404a4165a9b839e81871ff28e4785749c6c1207a6588f3",
+  "comparison_sha256": "a360a3ddb1ca2f63a3d3ac59ae47aa7618e7ade27e56fefb8d0dcdc540eaa1f8",
+  "evaluation_authorized": false,
+  "expected_parent_commit": "ba2dcc1d63f29a009d3660be2d960388a9615da0",
+  "governance_flags": {
+    "candidate_declared": false,
+    "money_moved": false,
+    "performance_metrics_computed": false,
+    "promotion_decision_exists": false,
+    "strategy_evaluated": false
+  },
+  "kind": "m3e_proposal_acceptance",
+  "maturity_state": "immature",
+  "new_accepted": {
+    "accepted_base_file_sha256": "0fbae5f7abbccb93fcb21575745151f68e8b8c194e10c644654d266a3aec6925",
+    "base_sha256": "4e7b888bf3efb4c2256d3d091f034a11e2f663aa1ae7dad0f801452ce29f99cb",
+    "canonical_content_fingerprint": "ab22a0861d25781358404a4165a9b839e81871ff28e4785749c6c1207a6588f3",
+    "created": {
+      "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4/acquisition_plan.json": "b61905d3f5cc2278ede75decffd2808f80a5250baeaae31d3788219490f27022",
+      "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4/acquisition_receipt.json": "769146ce202f5fe9cd2bfbdbfaca472231146211bcb049ac104956205b21c66b",
+      "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4/coinbase-eth-usd-1d-update_0000_20260715_20260724.json": "43cfa2eadecbb322379e2f5edeaf5a5de512a6e19312a20aa419c258a2c6cc02",
+      "research/m3d/update_attempts.jsonl": "754493bcbc2f3cd2a976d2310e398c6a222c9d2f835da36f7926eb41745be97e",
+      "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/acquisition_comparison.json": "3c8d483bfda0aa6ebad41652035a33c72c089bb2357f6a81ad1b0d5f26b52e9f",
+      "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/proposal_manifest.json": "b276334cc1b8a6391cf87f55d070d3bd9351935bf690174d469520bf1f468b8e",
+      "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_a/acquisition_receipt.json": "769146ce202f5fe9cd2bfbdbfaca472231146211bcb049ac104956205b21c66b",
+      "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_a/coinbase-eth-usd-1d-update_0000_20260715_20260724.json": "43cfa2eadecbb322379e2f5edeaf5a5de512a6e19312a20aa419c258a2c6cc02",
+      "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_a/update_plan.json": "b61905d3f5cc2278ede75decffd2808f80a5250baeaae31d3788219490f27022",
+      "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_b/acquisition_receipt.json": "12d6f113f85c6a544203a21a152ac49853f3ef18e173d6cb420a8f68e15eb2b0",
+      "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_b/coinbase-eth-usd-1d-update_0000_20260715_20260724.json": "43cfa2eadecbb322379e2f5edeaf5a5de512a6e19312a20aa419c258a2c6cc02",
+      "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_b/update_plan.json": "b61905d3f5cc2278ede75decffd2808f80a5250baeaae31d3788219490f27022",
+      "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/update_transition.json": "ae04e8ef3743d7a57379a40eee72fb6a6b6d90eab0a2249025e3c69b92e370bf"
+    },
+    "last_open": "2026-07-23T00:00:00Z",
+    "row_count": 12,
+    "state": {
+      "research/m3d/prospective_manifest.json": "a3b9b522ed60b597a38c821e15ea8b5c776edc0d128381b854ac4c39ef3c14ac",
+      "research/m3d/prospective_quality.json": "8db517b0820b730784d734e873a4964cfe19b99dbdd52abdb13aed2f560c2728",
+      "research/m3d/prospective_segments.jsonl": "7d338720562382d2c1fe74c42baa029f9a6237659ad6d7390937f8aab45534bf",
+      "research/m3d/publication_manifest.json": "88a3fea7366fce2351382a22ac8f06dd1eefd1acd015ed101996110f76552004",
+      "research/m3e/accepted_base.json": "0fbae5f7abbccb93fcb21575745151f68e8b8c194e10c644654d266a3aec6925",
+      "research/m3e/proposal_registry.jsonl": "067df0cb58e179d6c7750fb837dacd2b3ec5cabf2e6e4550e4abcc10f95324aa"
+    }
+  },
+  "package_version": "0.8.0",
+  "previous_accepted": {
+    "base_sha256": "c7af0ecc3c3e2f3b838a405e1bc017e7e0b183639302d2eb7654d4299426373f",
+    "canonical_content_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+    "last_open": "2026-07-14T00:00:00Z",
+    "row_count": 3,
+    "state": {
+      "research/m3d/prospective_manifest.json": "24457fb92a300b28cf5343283be9d39772cd599ec16e641235fd9cc0bc1be4b4",
+      "research/m3d/prospective_quality.json": "f39929484784db99af4ec314f25cfc7cf6e5eef73d9cc43834b47e2f32e7c0eb",
+      "research/m3d/prospective_segments.jsonl": "05cd7b84c06aac9b02f2843dd3ae04d6a9a03f87e23ed432ed0e3497e53aef20",
+      "research/m3d/publication_manifest.json": "aea4c96b9d6e90e2faf96d0bea52f8775306816a1ec18d5f0158b7d703ad1f65",
+      "research/m3e/accepted_base.json": "ff6c382ffd9b823c7ff0feff33ca6c56828f5aeaeb43336cfe2b2459bba28990",
+      "research/m3e/proposal_registry.jsonl": "18ab31d0b3534189ad8c9687040612b8c7cb42c873a44656c20e77f672584181"
+    }
+  },
+  "proposal_head_commit": "779df6bb6c7ab4ac312e9d8fe7028392581db237",
+  "proposal_id": "20260715-20260724-315846f9ec5196b4",
+  "proposal_manifest_sha256": "f914d03ba2615f88cee90e8fff5e5837fb600ee420dce2c5b6c831bfcf5a28e4",
+  "proposed_cohort_fingerprint": "f06eb43eae8df9b2ea0d15e431136f4e9b3b0846dc46dee97f2a93c3c73a78dc",
+  "quality": {
+    "sha256": "8db517b0820b730784d734e873a4964cfe19b99dbdd52abdb13aed2f560c2728",
+    "verdict_keys": [
+      "attempt_id",
+      "errors",
+      "first_open",
+      "kind",
+      "last_open",
+      "m2b_final_open",
+      "package_version",
+      "row_count",
+      "schema_version",
+      "total_errors",
+      "update_attempt_ids",
+      "warnings"
+    ]
+  },
+  "runner_a_identity": [
+    "ba2dcc1d63f29a009d3660be2d960388a9615da0",
+    "30068014058",
+    "github-hosted-runner-a-30068014058"
+  ],
+  "runner_b_identity": [
+    "ba2dcc1d63f29a009d3660be2d960388a9615da0",
+    "30068014058",
+    "github-hosted-runner-b-30068014058"
+  ],
+  "runner_evidence": {
+    "runner_a": {
+      "acquisition_receipt_sha256": "769146ce202f5fe9cd2bfbdbfaca472231146211bcb049ac104956205b21c66b",
+      "raw_response_sha256": {
+        "coinbase-eth-usd-1d-update_0000_20260715_20260724.json": "43cfa2eadecbb322379e2f5edeaf5a5de512a6e19312a20aa419c258a2c6cc02"
+      },
+      "update_plan_sha256": "b61905d3f5cc2278ede75decffd2808f80a5250baeaae31d3788219490f27022"
+    },
+    "runner_b": {
+      "acquisition_receipt_sha256": "12d6f113f85c6a544203a21a152ac49853f3ef18e173d6cb420a8f68e15eb2b0",
+      "raw_response_sha256": {
+        "coinbase-eth-usd-1d-update_0000_20260715_20260724.json": "43cfa2eadecbb322379e2f5edeaf5a5de512a6e19312a20aa419c258a2c6cc02"
+      },
+      "update_plan_sha256": "b61905d3f5cc2278ede75decffd2808f80a5250baeaae31d3788219490f27022"
+    }
+  },
+  "schema_version": 1,
+  "sealed_ledgers": {
+    "development_gate": {
+      "byte_count": 0,
+      "path": "research/m3a/development_gate_access.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "final_holdout": {
+      "byte_count": 0,
+      "path": "research/m2b/test_evaluations.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "prospective_evaluation": {
+      "byte_count": 0,
+      "path": "research/m3d/prospective_evaluations.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "sequence": 1,
+  "transition_sha256": "87f24dfbf5f7cb9c541c9ebe460a935a7c05bee3eafc94f2e5ad4de12111043b",
+  "update_plan_sha256": "3a4cd5af0f4ab83170b9444823bc3c2d1686c589965eefc4038d71cad0318f18"
+}
+
