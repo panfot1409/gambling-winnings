@@ -157,13 +157,29 @@ def oracle_m3e_registry_chain(root: Path) -> None:
     if len(line_strs) != len(records):
         raise M3FValidationError("m3e registry line/record count mismatch")
     prev = EMPTY_SHA256
+    created_ids: list[str] = []
     for line, record in zip(line_strs, records, strict=True):
         mapping = require_mapping(record, "m3e_registry_record")
         if require_sha256_hex(mapping.get("previous_line_sha256"), "previous_line_sha256") != prev:
             raise M3FValidationError("m3e registry hash chain is broken")
         prev = sha256_bytes(line.encode("utf-8"))
-    if count_created_proposals(raw) != 0:
-        raise M3FValidationError("m3e registry records a created production proposal")
+        if mapping.get("entry_kind") == "proposal":
+            created_ids.append(str(mapping.get("proposal_id", "")))
+    if count_created_proposals(raw) != len(created_ids):
+        raise M3FValidationError("m3e registry proposal accounting is inconsistent")
+    if created_ids:
+        # A created production proposal is lawful ONLY when covered by a verified
+        # acceptance record; anything uncovered fails exactly as it always did.
+        from eth_research.m3f.growable import read_acceptance_state
+
+        view = read_acceptance_state(root)
+        accepted = set(view.accepted_ids) if view is not None else set()
+        uncovered = [pid for pid in created_ids if pid not in accepted]
+        if uncovered:
+            raise M3FValidationError(
+                "m3e registry records a created production proposal without an "
+                f"acceptance record: {uncovered}"
+            )
 
 
 def oracle_sealed_ledgers_triple(root: Path) -> None:
@@ -185,6 +201,14 @@ def oracle_matches_honest_state(root: Path) -> None:
         raise M3FValidationError("honest_state row count disagrees with the accepted base")
     if state["m3e_production_proposal_count"] != proposals:
         raise M3FValidationError("honest_state proposal count disagrees with the registry")
+    from eth_research.m3f.growable import read_acceptance_state
+
+    view = read_acceptance_state(root)
+    accepted_count = view.count if view is not None else 0
+    if state["m3e_accepted_proposal_count"] != accepted_count:
+        raise M3FValidationError(
+            "honest_state accepted count disagrees with the acceptance chain"
+        )
 
 
 ORACLES: tuple[tuple[str, Any], ...] = (

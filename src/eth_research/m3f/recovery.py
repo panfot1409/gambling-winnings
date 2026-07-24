@@ -167,6 +167,24 @@ def failure_drills(repo_root: str | Path) -> dict[str, Any]:
             detector=_detect_oracles,
         ),
     ]
+    # Post-acceptance repos: dropping an acceptance record must strand its
+    # production proposal and be detected (uncovered proposals are illegal).
+    acceptance_records = [
+        entry["path"]
+        for entry in manifest["files"]
+        if str(entry["path"]).startswith("research/m3e/acceptances/")
+        and str(entry["path"]).endswith("/acceptance.json")
+    ]
+    if acceptance_records:
+        drills.append(
+            _run_failure_drill(
+                "dropped_acceptance_record",
+                manifest,
+                root,
+                drop=frozenset({acceptance_records[0]}),
+                detector=_detect_honest_state,
+            )
+        )
     drills.sort(key=lambda d: d["name"])
     return {"drills": drills, "all_detected": all(d["detected"] for d in drills)}
 

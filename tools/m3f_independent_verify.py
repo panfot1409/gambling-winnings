@@ -86,6 +86,20 @@ GROWABLE_CURRENT_STATE = (
     "research/m3d/publication_manifest.json",
     "research/m3e/accepted_base.json",
 )
+# The V2E acceptance chain: an independent re-implementation of the chain walk
+# (same on-disk format the m3e writer produces and the m3f package re-verifies).
+ACCEPTANCE_REGISTRY_RELPATH = "research/m3e/acceptance_registry.jsonl"
+ACCEPTANCES_ROOT_RELPATH = "research/m3e/acceptances"
+_ACCEPTANCE_RECORD_PREFIX = b"m3d/m3e/proposal_acceptance_record\n"
+_ACCEPTANCE_COMPLETION_PREFIX = b"m3d/m3e/proposal_acceptance_completion\n"
+ACCEPTANCE_TRANSITIONED_PATHS = tuple(
+    sorted((*GROWABLE_APPEND_CHAINS, *GROWABLE_CURRENT_STATE))
+)
+ACCEPTANCE_GENESIS_AUTHORITIES = (
+    "docs/M3C_M3E_STACK_FREEZE_TABLE.json",
+    "research/m3f/freeze_catalog.json",
+    "research/v2ab/stack_freeze_table.json",
+)
 REJECTED_VERDICT = "rejected_for_development_gate_promotion"
 WORKFLOW_DIR = ".github/workflows"
 # Any of these existing means the repository is registered, so the catalog + honest
@@ -205,7 +219,10 @@ def _derive_facts(root: Path) -> dict[str, Any]:
     authorized = base.get("evaluation_authorized")
     _require(isinstance(authorized, bool), "evaluation_authorized not a bool")
 
-    proposals = _count_created_proposals(_read_bytes(root, M3E_REGISTRY))
+    registry_raw = _read_bytes(root, M3E_REGISTRY)
+    proposals = _count_created_proposals(registry_raw)
+    created_ids = _created_proposal_ids(registry_raw)
+    _require(len(created_ids) == proposals, "registry proposal accounting inconsistent")
     return {
         "m3c_verdict": decision.get("outcome"),
         "m3d_row_count": row_count,
@@ -213,6 +230,7 @@ def _derive_facts(root: Path) -> dict[str, Any]:
         "m3d_maturity_state": base.get("maturity_state"),
         "m3d_evaluation_authorized": authorized,
         "m3e_production_proposal_count": proposals,
+        "m3e_created_proposal_ids": created_ids,
     }
 
 
@@ -358,7 +376,160 @@ def verify(repo_root: str | Path) -> dict[str, Any]:
     report.guard("07_freeze_catalog_rehash", check_catalog)
     report.guard("08_honest_state_crosscheck", check_honest_state)
 
+    def check_acceptance() -> None:
+        _check_acceptance_chain(root, facts)
+
+    report.guard("09_acceptance_chain", check_acceptance)
+
     return _payload(report, facts)
+
+
+def _created_proposal_ids(raw: bytes) -> list[str]:
+    ids: list[str] = []
+    for line in raw.decode("utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = _loads(line)
+        if isinstance(record, dict) and record.get("entry_kind") == "proposal":
+            ids.append(str(record.get("proposal_id", "")))
+    return ids
+
+
+def _acceptance_authority_pins(root: Path) -> dict[str, str]:
+    wanted = set(ACCEPTANCE_TRANSITIONED_PATHS)
+    first: dict[str, str] | None = None
+    found = 0
+    for rel in ACCEPTANCE_GENESIS_AUTHORITIES:
+        path = root / rel
+        if not path.exists():
+            continue
+        _require(not path.is_symlink() and path.is_file(), f"{rel} is not a regular file")
+        found += 1
+        doc = _loads(path.read_text(encoding="utf-8"))
+        _require(isinstance(doc, dict), f"{rel}: not a JSON object")
+        rows = None
+        for key in ("files", "artifacts", "entries"):
+            if key in doc:
+                rows = doc[key]
+                break
+        _require(isinstance(rows, list), f"{rel}: unrecognized freeze-table shape")
+        pins: dict[str, str] = {}
+        for row in rows:
+            if isinstance(row, dict) and row.get("path") in wanted:
+                pins[str(row["path"])] = str(row.get("sha256", ""))
+        _require(set(pins) == wanted, f"{rel}: missing pre-acceptance pins")
+        if first is None:
+            first = pins
+        else:
+            _require(pins == first, f"pre-acceptance pins disagree at {rel}")
+    _require(found > 0 and first is not None, "no genesis authority table is present")
+    assert first is not None
+    return first
+
+
+def _acceptance_self_hash_ok(doc: dict[str, Any], field: str, prefix: bytes) -> None:
+    body = {k: v for k, v in doc.items() if k != field}
+    digest = hashlib.sha256(prefix + _canonical_bytes(body)).hexdigest()
+    _require(doc.get(field) == digest, f"{field} self-hash mismatch")
+
+
+def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
+    """Independent chain walk: every created production proposal must be covered
+    by a verified acceptance record and the tree must equal the chain-head state."""
+    created = list(facts.get("m3e_created_proposal_ids", []))
+    registry = root / ACCEPTANCE_REGISTRY_RELPATH
+    if not registry.exists():
+        _require(not created, "production proposal(s) exist without an acceptance registry")
+        return
+    _require(not registry.is_symlink() and registry.is_file(), "acceptance registry irregular")
+    raw = registry.read_text(encoding="utf-8")
+    lines = [line for line in raw.splitlines() if line.strip()]
+    _require(bool(lines), "acceptance registry is empty")
+    prev = hashlib.sha256(b"").hexdigest()
+    records: list[dict[str, Any]] = []
+    for line in lines:
+        record = _loads(line)
+        _require(isinstance(record, dict), "acceptance registry line is not an object")
+        _require(record.get("previous_line_sha256") == prev, "acceptance chain broken")
+        prev = hashlib.sha256(line.encode("utf-8")).hexdigest()
+        records.append(record)
+    genesis = records[0]
+    _require(
+        genesis.get("entry_kind") == "genesis"
+        and genesis.get("kind") == "m3e_acceptance_registry",
+        "acceptance genesis sentinel malformed",
+    )
+    pins = genesis.get("pre_acceptance_state")
+    _require(isinstance(pins, dict), "genesis pre_acceptance_state missing")
+    expected = {str(k): str(v) for k, v in pins.items()}
+    _require(
+        expected == _acceptance_authority_pins(root),
+        "genesis pins do not match the byte-frozen authority tables",
+    )
+    accepted: list[str] = []
+    for position, entry in enumerate(records[1:], start=1):
+        _require(entry.get("entry_kind") == "acceptance", "unknown acceptance entry kind")
+        _require(entry.get("sequence") == position, "acceptance sequence reordered/gapped")
+        proposal_id = str(entry.get("proposal_id", ""))
+        _require(bool(proposal_id) and proposal_id not in accepted, "duplicate acceptance")
+        record_path = root / ACCEPTANCES_ROOT_RELPATH / proposal_id / "acceptance.json"
+        _require(
+            not record_path.is_symlink() and record_path.is_file(),
+            f"acceptance record missing for {proposal_id}",
+        )
+        record = _loads(record_path.read_text(encoding="utf-8"))
+        _require(isinstance(record, dict), "acceptance record is not an object")
+        _acceptance_self_hash_ok(record, "acceptance_sha256", _ACCEPTANCE_RECORD_PREFIX)
+        _require(
+            record.get("acceptance_sha256") == entry.get("acceptance_sha256"),
+            "registry entry does not bind the committed record",
+        )
+        previous = record.get("previous_accepted")
+        _require(isinstance(previous, dict), "previous_accepted missing")
+        prior_state = {str(k): str(v) for k, v in dict(previous.get("state") or {}).items()}
+        _require(prior_state == expected, "acceptance does not chain from prior state")
+        new_accepted = record.get("new_accepted")
+        _require(isinstance(new_accepted, dict), "new_accepted missing")
+        new_state = {str(k): str(v) for k, v in dict(new_accepted.get("state") or {}).items()}
+        _require(
+            set(new_state) == set(ACCEPTANCE_TRANSITIONED_PATHS),
+            "new state does not pin exactly the transitioned paths",
+        )
+        _require(record.get("evaluation_authorized") is False, "record authorizes evaluation")
+        _require(record.get("maturity_state") == "immature", "record claims maturity")
+        flags = record.get("governance_flags")
+        _require(isinstance(flags, dict), "governance_flags missing")
+        for name, value in flags.items():
+            _require(value is False, f"governance flag {name} is set")
+        completion_path = (
+            root / ACCEPTANCES_ROOT_RELPATH / proposal_id / "acceptance_completion.json"
+        )
+        _require(
+            not completion_path.is_symlink() and completion_path.is_file(),
+            f"completion record missing for {proposal_id}",
+        )
+        completion = _loads(completion_path.read_text(encoding="utf-8"))
+        _require(isinstance(completion, dict), "completion is not an object")
+        _acceptance_self_hash_ok(
+            completion, "completion_sha256", _ACCEPTANCE_COMPLETION_PREFIX
+        )
+        _require(
+            completion.get("acceptance_sha256") == record.get("acceptance_sha256")
+            and completion.get("proposal_id") == proposal_id,
+            "completion does not bind its record",
+        )
+        accepted.append(proposal_id)
+        expected = new_state
+    _require(
+        sorted(created) == sorted(accepted),
+        f"created proposals {sorted(created)} != accepted {sorted(accepted)}",
+    )
+    for rel, want in sorted(expected.items()):
+        live = _sha256(_read_bytes(root, rel))
+        _require(
+            live == want,
+            f"{rel}: working tree does not equal the chain-head accepted state",
+        )
 
 
 def _check_catalog(root: Path, facts: dict[str, Any]) -> None:

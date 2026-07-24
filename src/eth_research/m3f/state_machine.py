@@ -27,6 +27,7 @@ VALID_STATES = frozenset(
         "rejected_candidate_terminal",
         "immature_cohort_unauthorized",
         "review_only_ready_inactive",
+        "reviewed_growth_active",
     }
 )
 
@@ -74,14 +75,29 @@ def derive_state(honest_state: dict[str, Any]) -> GovernanceState:
         raise M3FValidationError("impossible: mature label but row_count < threshold")
 
     # review-only ready + inactive: no proposal, no write-capable workflow.
+    # V2D-anchored active growth: every production proposal must be covered by an
+    # acceptance record (an uncovered proposal stays exactly as impossible as it
+    # was pre-acceptance), and no unauthorized workflow may hold a write grant.
+    accepted = require_int(
+        s.get("m3e_accepted_proposal_count", 0), "m3e_accepted_proposal_count"
+    )
     if not active:
         if proposals != 0:
             raise M3FValidationError("impossible: inactive M3E but a production proposal exists")
         if can_write:
             raise M3FValidationError("impossible: inactive M3E but a write-capable workflow exists")
+        if accepted != 0:
+            raise M3FValidationError("impossible: inactive M3E but an acceptance record exists")
         labels.add("review_only_ready_inactive")
-    elif active:
-        raise M3FValidationError("HARD STOP: M3E is reported active")
+    else:
+        if proposals != accepted:
+            raise M3FValidationError(
+                "impossible: active M3E with production proposal(s) not covered by "
+                "acceptance records"
+            )
+        if can_write:
+            raise M3FValidationError("impossible: unauthorized write-capable workflow under V2D")
+        labels.add("reviewed_growth_active")
 
     state = GovernanceState(frozenset(labels))
     if not state.is_legal():
@@ -90,13 +106,20 @@ def derive_state(honest_state: dict[str, Any]) -> GovernanceState:
 
 
 def verify_state(honest_state: dict[str, Any]) -> GovernanceState:
-    """Derive + assert the state is legal; raises on any impossible combination."""
+    """Derive + assert the state is legal; raises on any impossible combination.
+
+    The expected terminal set is exact for each lawful mode: the accepted
+    pre-V2D posture (``review_only_ready_inactive``) or the V2D-anchored,
+    fully-accepted growth posture (``reviewed_growth_active``) — never a
+    mixture, never anything else.
+    """
     state = derive_state(honest_state)
+    active = require_bool(require_mapping(honest_state, "honest_state").get("m3e_active"), "m3e_active")
     expected = {
         "accepted_stack_stable",
         "rejected_candidate_terminal",
         "immature_cohort_unauthorized",
-        "review_only_ready_inactive",
+        "reviewed_growth_active" if active else "review_only_ready_inactive",
     }
     if set(state.labels) != expected:
         raise M3FValidationError(

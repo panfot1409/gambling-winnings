@@ -1,11 +1,15 @@
 {
   "all_failure_drills_detected": true,
-  "capsule_digest": "d59b2592fd570d86e53ab48985f00a3e51dbeb312cd55477cc788ec381c82a7c",
-  "capsule_file_count": 118,
+  "capsule_digest": "14d78c8d1d3a2d8bb8a249f48940e4268389715c52f79a36c112da9613ab1243",
+  "capsule_file_count": 138,
   "failure_drills": [
     {
       "detected": true,
       "name": "broken_registry_chain"
+    },
+    {
+      "detected": true,
+      "name": "dropped_acceptance_record"
     },
     {
       "detected": true,

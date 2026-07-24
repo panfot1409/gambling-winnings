@@ -60,6 +60,14 @@ SEALED_LEDGERS = (
     "research/m3a/development_gate_access.jsonl",
     "research/m3d/prospective_evaluations.jsonl",
 )
+# Tracked governance evidence carried so a materialized capsule can re-prove
+# lawful growth offline (V2D anchor + acceptance-chain genesis authorities).
+GOVERNANCE_EVIDENCE_FILES = (
+    "governance/v2d/prospective_activation.json",
+    "docs/M3C_M3E_STACK_FREEZE_TABLE.json",
+    "research/m3f/freeze_catalog.json",
+    "research/v2ab/stack_freeze_table.json",
+)
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 
@@ -78,10 +86,23 @@ def _git(repo_root: Path, *args: str) -> str:
 
 
 def capsule_files(repo_root: str | Path) -> list[str]:
-    """The sorted set of tracked governed files carried by the capsule."""
+    """The sorted set of tracked governed files carried by the capsule.
+
+    Beyond the accepted M2B-M3E stack, the capsule carries the tracked V2D/V2E
+    governance evidence needed to re-prove that any cohort growth inside it is
+    lawful offline: the V2D activation anchor and the byte-frozen genesis
+    authority tables the acceptance chain is anchored to. Without them, a
+    materialized capsule with a grown cohort could not re-derive its own
+    honest state (growth would look unauthorized) — carrying the proof keeps
+    the drill's verifiers exactly as strict as the in-repo ones.
+    """
     root = Path(repo_root)
     out = _git(root, "ls-files", "-z", "--", GOVERNED_ROOT + "/")
     files = [p for p in out.split("\0") if p and p.startswith(ACCEPTED_STACK_PREFIXES)]
+    evidence = _git(
+        root, "ls-files", "-z", "--", *GOVERNANCE_EVIDENCE_FILES
+    )
+    files.extend(p for p in evidence.split("\0") if p)
     return sorted(set(files))
 
 

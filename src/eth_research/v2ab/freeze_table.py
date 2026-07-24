@@ -342,9 +342,54 @@ def verify_freeze_table(repo_root: str | Path) -> list[str]:
     live_set = set(live_paths)
     committed_set = set(committed_by_path)
 
+    # The V2E acceptance lattice: under a strictly-valid V2D anchor AND a strictly
+    # verified acceptance chain, the enumerated growth surface is lawful — the six
+    # transitioned cohort files must equal the chain-head accepted state EXACTLY,
+    # new evidence files must be growable-new paths (chain-`created` pins re-checked
+    # here when present), and the two rebuildable M3F artifacts are re-verified by
+    # their own reproduce-from-tree builders instead of byte-stasis. Everything
+    # else stays byte-anchored exactly as accepted; without the anchor + chain,
+    # nothing is tolerated (the pre-acceptance behavior, byte for byte).
+    from eth_research.m3f.growable import (
+        is_growable_new_path,
+        read_acceptance_state,
+        v2d_activation_anchor_active,
+    )
+
+    chain_state: dict[str, str] = {}
+    chain_created: dict[str, str] = {}
+    growth_lawful = False
+    try:
+        if v2d_activation_anchor_active(root):
+            view = read_acceptance_state(root)
+            if view is not None:
+                growth_lawful = True
+                chain_state = dict(view.expected_state)
+                chain_created = dict(view.created)
+    except Exception as exc:  # noqa: BLE001 - any chain defect must surface, fail closed
+        problems.append(f"acceptance chain invalid: {exc}")
+
+    _M3F_REBUILDABLE = {
+        "research/m3f/recovery_capsule_manifest.json": "capsule manifest",
+        "research/m3f/recovery_drill.json": "recovery drill record",
+    }
+
     for missing in sorted(committed_set - live_set):
         problems.append(f"committed artifact is missing from the tree: {missing}")
     for extra in sorted(live_set - committed_set):
+        if growth_lawful and is_growable_new_path(extra):
+            pinned = chain_created.get(extra)
+            if pinned is not None:
+                try:
+                    have = _entry_for(root, extra)
+                except V2ValidationError as exc:
+                    problems.append(f"{extra}: could not re-derive entry: {exc}")
+                    continue
+                if have.sha256 != pinned:
+                    problems.append(
+                        f"{extra}: growth evidence does not match its acceptance pin"
+                    )
+            continue
         problems.append(f"unlisted governed artifact present in the tree: {extra}")
 
     for relpath in sorted(committed_set & live_set):
@@ -355,7 +400,27 @@ def verify_freeze_table(repo_root: str | Path) -> list[str]:
             problems.append(f"{relpath}: could not re-derive entry: {exc}")
             continue
         if have.sha256 != want.sha256 or have.byte_count != want.byte_count:
-            problems.append(f"{relpath}: bytes changed (sha/byte-count mismatch)")
+            if growth_lawful and relpath in chain_state:
+                if have.sha256 != chain_state[relpath]:
+                    problems.append(
+                        f"{relpath}: does not equal the chain-head accepted state"
+                    )
+            elif growth_lawful and relpath in _M3F_REBUILDABLE:
+                try:
+                    if relpath.endswith("recovery_capsule_manifest.json"):
+                        from eth_research.m3f.bundle import verify_manifest
+
+                        verify_manifest(root)
+                    else:
+                        from eth_research.m3f.recovery import verify_drill_record
+
+                        verify_drill_record(root)
+                except Exception as exc:  # noqa: BLE001 - delegation must stay fail-closed
+                    problems.append(
+                        f"{relpath}: {_M3F_REBUILDABLE[relpath]} does not re-verify: {exc}"
+                    )
+            else:
+                problems.append(f"{relpath}: bytes changed (sha/byte-count mismatch)")
         if have.role != want.role:
             problems.append(f"{relpath}: role changed ({want.role} -> {have.role})")
         if have.milestone != want.milestone:

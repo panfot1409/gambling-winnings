@@ -1,6 +1,6 @@
 {
   "capsule_algorithm": "sha256-over-sorted-path-sha256-length-lines-v1",
-  "capsule_digest": "d59b2592fd570d86e53ab48985f00a3e51dbeb312cd55477cc788ec381c82a7c",
+  "capsule_digest": "14d78c8d1d3a2d8bb8a249f48940e4268389715c52f79a36c112da9613ab1243",
   "contains_sealed_partition_contents": false,
   "contains_secrets_or_credentials": false,
   "excludes": [
@@ -9,8 +9,18 @@
     "reports/",
     ".github/"
   ],
-  "file_count": 118,
+  "file_count": 138,
   "files": [
+    {
+      "byte_length": 51198,
+      "path": "docs/M3C_M3E_STACK_FREEZE_TABLE.json",
+      "sha256": "d6805af08c7f68bcbf5a50038dc9eac5b7be389ac205e43c0eaab6cc5f3d5e53"
+    },
+    {
+      "byte_length": 2271,
+      "path": "governance/v2d/prospective_activation.json",
+      "sha256": "6f6d7410a05bd21515fb398e73b99aca7ef6dc1574f8b2aa88899827b809d746"
+    },
     {
       "byte_length": 2027,
       "path": "research/m2b/EARLIEST_CONTINUOUS_DECISION.md",
@@ -497,9 +507,9 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "byte_length": 3723,
+      "byte_length": 4483,
       "path": "research/m3d/prospective_manifest.json",
-      "sha256": "24457fb92a300b28cf5343283be9d39772cd599ec16e641235fd9cc0bc1be4b4"
+      "sha256": "a3b9b522ed60b597a38c821e15ea8b5c776edc0d128381b854ac4c39ef3c14ac"
     },
     {
       "byte_length": 2060,
@@ -507,19 +517,19 @@
       "sha256": "cb08396babb1d8c8c454b5eae12210ff0a0edf17ebafb55688de341d280094a5"
     },
     {
-      "byte_length": 1616,
+      "byte_length": 1725,
       "path": "research/m3d/prospective_quality.json",
-      "sha256": "f39929484784db99af4ec314f25cfc7cf6e5eef73d9cc43834b47e2f32e7c0eb"
+      "sha256": "8db517b0820b730784d734e873a4964cfe19b99dbdd52abdb13aed2f560c2728"
     },
     {
-      "byte_length": 1101,
+      "byte_length": 1969,
       "path": "research/m3d/prospective_segments.jsonl",
-      "sha256": "05cd7b84c06aac9b02f2843dd3ae04d6a9a03f87e23ed432ed0e3497e53aef20"
+      "sha256": "7d338720562382d2c1fe74c42baa029f9a6237659ad6d7390937f8aab45534bf"
     },
     {
       "byte_length": 850,
       "path": "research/m3d/publication_manifest.json",
-      "sha256": "aea4c96b9d6e90e2faf96d0bea52f8775306816a1ec18d5f0158b7d703ad1f65"
+      "sha256": "88a3fea7366fce2351382a22ac8f06dd1eefd1acd015ed101996110f76552004"
     },
     {
       "byte_length": 1214,
@@ -552,6 +562,21 @@
       "sha256": "866e7b5d77ecd2ec5baf05493e7048b869a88b202bbc6185c70d5af8702355ae"
     },
     {
+      "byte_length": 1244,
+      "path": "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4/acquisition_plan.json",
+      "sha256": "b61905d3f5cc2278ede75decffd2808f80a5250baeaae31d3788219490f27022"
+    },
+    {
+      "byte_length": 1137,
+      "path": "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4/acquisition_receipt.json",
+      "sha256": "769146ce202f5fe9cd2bfbdbfaca472231146211bcb049ac104956205b21c66b"
+    },
+    {
+      "byte_length": 533,
+      "path": "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4/coinbase-eth-usd-1d-update_0000_20260715_20260724.json",
+      "sha256": "43cfa2eadecbb322379e2f5edeaf5a5de512a6e19312a20aa419c258a2c6cc02"
+    },
+    {
       "byte_length": 1185,
       "path": "research/m3d/reacquisition_audit.json",
       "sha256": "d4ff04a86d755c1c6dcd132ce26265169d232e22d962c22bb162ed7ec7fb4d42"
@@ -582,6 +607,11 @@
       "sha256": "693800379aed38067d4732ebd6c89557b3dcee2cbbc67d28dda5b9be435a7db5"
     },
     {
+      "byte_length": 841,
+      "path": "research/m3d/update_attempts.jsonl",
+      "sha256": "754493bcbc2f3cd2a976d2310e398c6a222c9d2f835da36f7926eb41745be97e"
+    },
+    {
       "byte_length": 2774,
       "path": "research/m3e/AUDIT_MODE_EVIDENCE.md",
       "sha256": "53b783a4d0a56bdc7593702ca6a224e1eea135603ba2b4a7b6a2bbf0531084f5"
@@ -592,14 +622,84 @@
       "sha256": "8d1703570d1156b07d8258f864a317b5cc46df35100744a41846c47abb2045b9"
     },
     {
-      "byte_length": 1769,
-      "path": "research/m3e/accepted_base.json",
-      "sha256": "ff6c382ffd9b823c7ff0feff33ca6c56828f5aeaeb43336cfe2b2459bba28990"
+      "byte_length": 1334,
+      "path": "research/m3e/acceptance_registry.jsonl",
+      "sha256": "9148276af145123a6b47003d0a1a2126492a3c61957e546123d7a07202df5003"
     },
     {
-      "byte_length": 529,
+      "byte_length": 8496,
+      "path": "research/m3e/acceptances/20260715-20260724-315846f9ec5196b4/acceptance.json",
+      "sha256": "a4c4d1ad8f074f3dc50161129a5db88ac9434d82d31b0870888c638a4f964b00"
+    },
+    {
+      "byte_length": 410,
+      "path": "research/m3e/acceptances/20260715-20260724-315846f9ec5196b4/acceptance_completion.json",
+      "sha256": "f3a742994a9659f73bd96737c73b5671c97809a0efac8fbd91c535ec949c26c8"
+    },
+    {
+      "byte_length": 1875,
+      "path": "research/m3e/accepted_base.json",
+      "sha256": "0fbae5f7abbccb93fcb21575745151f68e8b8c194e10c644654d266a3aec6925"
+    },
+    {
+      "byte_length": 1017,
       "path": "research/m3e/proposal_registry.jsonl",
-      "sha256": "18ab31d0b3534189ad8c9687040612b8c7cb42c873a44656c20e77f672584181"
+      "sha256": "067df0cb58e179d6c7750fb837dacd2b3ec5cabf2e6e4550e4abcc10f95324aa"
+    },
+    {
+      "byte_length": 850,
+      "path": "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/acquisition_comparison.json",
+      "sha256": "3c8d483bfda0aa6ebad41652035a33c72c089bb2357f6a81ad1b0d5f26b52e9f"
+    },
+    {
+      "byte_length": 2203,
+      "path": "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/proposal_manifest.json",
+      "sha256": "b276334cc1b8a6391cf87f55d070d3bd9351935bf690174d469520bf1f468b8e"
+    },
+    {
+      "byte_length": 1137,
+      "path": "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_a/acquisition_receipt.json",
+      "sha256": "769146ce202f5fe9cd2bfbdbfaca472231146211bcb049ac104956205b21c66b"
+    },
+    {
+      "byte_length": 533,
+      "path": "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_a/coinbase-eth-usd-1d-update_0000_20260715_20260724.json",
+      "sha256": "43cfa2eadecbb322379e2f5edeaf5a5de512a6e19312a20aa419c258a2c6cc02"
+    },
+    {
+      "byte_length": 1244,
+      "path": "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_a/update_plan.json",
+      "sha256": "b61905d3f5cc2278ede75decffd2808f80a5250baeaae31d3788219490f27022"
+    },
+    {
+      "byte_length": 1137,
+      "path": "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_b/acquisition_receipt.json",
+      "sha256": "12d6f113f85c6a544203a21a152ac49853f3ef18e173d6cb420a8f68e15eb2b0"
+    },
+    {
+      "byte_length": 533,
+      "path": "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_b/coinbase-eth-usd-1d-update_0000_20260715_20260724.json",
+      "sha256": "43cfa2eadecbb322379e2f5edeaf5a5de512a6e19312a20aa419c258a2c6cc02"
+    },
+    {
+      "byte_length": 1244,
+      "path": "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/runner_b/update_plan.json",
+      "sha256": "b61905d3f5cc2278ede75decffd2808f80a5250baeaae31d3788219490f27022"
+    },
+    {
+      "byte_length": 770,
+      "path": "research/m3e/proposals/20260715-20260724-315846f9ec5196b4/update_transition.json",
+      "sha256": "ae04e8ef3743d7a57379a40eee72fb6a6b6d90eab0a2249025e3c69b92e370bf"
+    },
+    {
+      "byte_length": 39635,
+      "path": "research/m3f/freeze_catalog.json",
+      "sha256": "f57fdd99aa482fee6ba6e26b6d9f373ccb08fe51fea66f6f28b39dc6f3760fe6"
+    },
+    {
+      "byte_length": 61067,
+      "path": "research/v2ab/stack_freeze_table.json",
+      "sha256": "f0c6899b822c864a15914fce75a6e20b3d9aa7adccd6030750313b9a6dc82f69"
     }
   ],
   "governed_root": "research",

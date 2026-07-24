@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from eth_research.m3f.growable import v2d_activation_anchor_active
+from eth_research.m3f.growable import read_acceptance_state, v2d_activation_anchor_active
 from eth_research.m3f.validation import (
     M3FValidationError,
     canonical_json_bytes,
@@ -61,6 +61,9 @@ def derive_honest_state(repo_root: str | Path) -> dict[str, Any]:
     workflows_write = _any_workflow_writes(root)
     rows = require_int(base["row_count"], "m3d_cohort_rows")
     authorized = require_bool(base["evaluation_authorized"], "m3d_evaluation_authorized")
+    anchor_active = v2d_activation_anchor_active(root)
+    acceptance = read_acceptance_state(root)
+    accepted_proposals = acceptance.count if acceptance is not None else 0
 
     state = {
         "schema_version": 1,
@@ -74,8 +77,9 @@ def derive_honest_state(repo_root: str | Path) -> dict[str, Any]:
         "m3d_maturity_state": require_str(base["maturity_state"], "m3d_maturity_state"),
         "m3d_evaluation_authorized": authorized,
         "m3e_readiness": "ready",
-        "m3e_active": False,
+        "m3e_active": anchor_active,
         "m3e_production_proposal_count": proposals,
+        "m3e_accepted_proposal_count": accepted_proposals,
         "standing_workflow_can_write_contents": workflows_write,
         "ledgers": ledgers,
         "any_gate_or_holdout_evaluated": False,
@@ -92,9 +96,16 @@ def derive_honest_state(repo_root: str | Path) -> dict[str, Any]:
     # V2D activation anchor (data-only growth); without it they hard-stop as before.
     if authorized:
         raise M3FValidationError("HARD STOP: m3d evaluation_authorized is true")
-    if proposals != 0 and not v2d_activation_anchor_active(root):
+    if proposals != 0 and not anchor_active:
         raise M3FValidationError(
             "HARD STOP: a production proposal exists without the V2D activation anchor"
+        )
+    if proposals != accepted_proposals:
+        # An unaccepted proposal in the tree is exactly as illegal as it was before
+        # the acceptance chain existed; a dangling acceptance is equally impossible.
+        raise M3FValidationError(
+            "HARD STOP: production proposal count "
+            f"({proposals}) does not equal the accepted count ({accepted_proposals})"
         )
     if workflows_write:
         raise M3FValidationError("HARD STOP: an unauthorized workflow can write contents")
@@ -195,7 +206,8 @@ def verify_honest_state(repo_root: str | Path) -> None:
     committed_raw = (root / HONEST_STATE_RELPATH).read_bytes()
     committed_md = (root / HONEST_STATE_MD_RELPATH).read_bytes()
     proposals = require_int(live["m3e_production_proposal_count"], "m3e_production_proposal_count")
-    if proposals == 0:
+    if proposals == 0 and not require_bool(live["m3e_active"], "m3e_active"):
+        # Pristine pre-V2D world: no anchor, no proposal — byte-exact reproduction.
         if committed_raw != render_honest_state_bytes(live):
             raise M3FValidationError("committed honest_state.json does not reproduce from bytes")
         if committed_md != render_honest_state_md(live):

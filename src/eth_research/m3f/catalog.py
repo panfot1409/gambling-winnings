@@ -619,6 +619,22 @@ def _verify_expected_state(root: Path, catalog: dict[str, Any], acc: _Accum) -> 
         expected.get("m3d_evaluation_authorized")
     ):
         acc.fail("14_m3d_auth_bound", "evaluation_authorized drifted")
-    if expected.get("m3e_production_proposal_count") != 0:
-        acc.fail("15_m3e_zero_proposals", "catalog records a nonzero proposal count")
+    recorded_proposals = expected.get("m3e_production_proposal_count")
+    if recorded_proposals != 0:
+        # A catalog built at a post-acceptance commit lawfully records the covered
+        # count; anything not covered by the verified acceptance chain fails
+        # exactly as before.
+        from eth_research.m3f.growable import read_acceptance_state
+
+        try:
+            view = read_acceptance_state(root)
+        except M3FValidationError as exc:
+            acc.fail("15_m3e_zero_proposals", f"acceptance chain invalid: {exc}")
+        else:
+            covered = view.count if view is not None else 0
+            if not growth_active or recorded_proposals != covered:
+                acc.fail(
+                    "15_m3e_zero_proposals",
+                    "catalog records a proposal count not covered by the acceptance chain",
+                )
     acc.ok("11_expected_governance_state_bound")

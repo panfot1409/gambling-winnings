@@ -27,6 +27,7 @@ it verifies.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,7 @@ from eth_research.m3f.validation import (
     load_canonical_json,
     require_mapping,
     require_str,
+    strict_jsonl_records,
 )
 
 V2D_ANCHOR_RELPATH = "governance/v2d/prospective_activation.json"
@@ -59,9 +61,16 @@ GROWABLE_CURRENT_STATE: tuple[str, ...] = (
     "research/m3e/accepted_base.json",
 )
 #: New evidence the reviewed update path creates (absent at M3F acceptance).
-GROWABLE_NEW_FILES: tuple[str, ...] = ("research/m3d/update_attempts.jsonl",)
+#: The acceptance chain (registry + per-proposal acceptance/completion records)
+#: is itself part of the lawful growth surface: it is what makes a landed
+#: proposal legal, and it is verified strictly by :func:`read_acceptance_state`.
+GROWABLE_NEW_FILES: tuple[str, ...] = (
+    "research/m3d/update_attempts.jsonl",
+    "research/m3e/acceptance_registry.jsonl",
+)
 GROWABLE_NEW_PATH_PREFIXES: tuple[str, ...] = (
     "research/m3e/proposals/",
+    "research/m3e/acceptances/",
     "research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-",
 )
 
@@ -113,3 +122,249 @@ def require_exact_prefix(baseline: bytes, live: bytes, label: str) -> None:
             f"{label}: accepted baseline bytes are not an exact prefix of the live file "
             "(append-only growth violated)"
         )
+
+
+# ---------------------------------------------------------------------------
+# The V2E acceptance chain — M3F's own strict, import-isolated reader.
+#
+# The M3E layer WRITES the acceptance evidence (``eth_research.m3e.acceptance``);
+# this verifier re-implements the read side from scratch (chain walk, self-hash,
+# genesis triple-check) so the layer under audit never verifies itself. A grown
+# tree is lawful only when a valid V2D anchor exists AND every committed
+# production proposal is covered by a verified acceptance record; the exact
+# expected bytes of the transitioned cohort files are the genesis pins overlaid
+# by the ordered chain — never "whatever is newer".
+# ---------------------------------------------------------------------------
+
+ACCEPTANCE_REGISTRY_RELPATH = "research/m3e/acceptance_registry.jsonl"
+ACCEPTANCES_ROOT_RELPATH = "research/m3e/acceptances"
+_ACCEPTANCE_RECORD_PREFIX = b"m3d/m3e/proposal_acceptance_record\n"
+_ACCEPTANCE_COMPLETION_PREFIX = b"m3d/m3e/proposal_acceptance_completion\n"
+
+#: Pre-existing cohort files every acceptance transitions (old -> new byte pins).
+ACCEPTANCE_TRANSITIONED_PATHS: tuple[str, ...] = (
+    "research/m3d/prospective_manifest.json",
+    "research/m3d/prospective_quality.json",
+    "research/m3d/prospective_segments.jsonl",
+    "research/m3d/publication_manifest.json",
+    "research/m3e/accepted_base.json",
+    "research/m3e/proposal_registry.jsonl",
+)
+
+#: Independently byte-frozen tables that pin the pre-acceptance state; the chain
+#: genesis must agree with every one that is present, and at least one must be
+#: present (all three exist in a full checkout; the recovery capsule carries them
+#: as governance evidence).
+ACCEPTANCE_GENESIS_AUTHORITIES: tuple[str, ...] = (
+    "docs/M3C_M3E_STACK_FREEZE_TABLE.json",
+    "research/m3f/freeze_catalog.json",
+    "research/v2ab/stack_freeze_table.json",
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class AcceptanceView:
+    """The verified acceptance chain, reduced to what M3F verifiers consume."""
+
+    accepted_ids: tuple[str, ...]
+    expected_state: dict[str, str]
+    created: dict[str, str]
+
+    @property
+    def count(self) -> int:
+        return len(self.accepted_ids)
+
+
+def _authority_pins(root: Path, relpath: str) -> dict[str, str]:
+    doc = require_mapping(
+        load_canonical_json((root / relpath).read_bytes(), relpath), relpath
+    )
+    rows: list[Any] | None = None
+    for key in ("files", "artifacts", "entries"):
+        if key in doc:
+            rows = list(doc[key])  # type: ignore[arg-type]
+            break
+    if rows is None:
+        raise M3FValidationError(f"{relpath}: unrecognized freeze-table shape")
+    wanted = set(ACCEPTANCE_TRANSITIONED_PATHS)
+    pins: dict[str, str] = {}
+    for raw in rows:
+        row = require_mapping(raw, f"{relpath} row")
+        path = require_str(row.get("path"), "path")
+        if path in wanted:
+            pins[path] = require_str(row.get("sha256"), "sha256")
+    if set(pins) != wanted:
+        raise M3FValidationError(f"{relpath}: missing pre-acceptance pins")
+    return pins
+
+
+def _genesis_pins(root: Path) -> dict[str, str]:
+    first: dict[str, str] | None = None
+    found = 0
+    for relpath in ACCEPTANCE_GENESIS_AUTHORITIES:
+        path = root / relpath
+        if not path.exists():
+            continue
+        if path.is_symlink() or not path.is_file():
+            raise M3FValidationError(f"{relpath} is not a regular file")
+        found += 1
+        pins = _authority_pins(root, relpath)
+        if first is None:
+            first = pins
+        elif pins != first:
+            raise M3FValidationError(
+                f"pre-acceptance pins disagree between authorities (at {relpath})"
+            )
+    if first is None or found == 0:
+        raise M3FValidationError(
+            "no genesis authority table is present; cannot anchor the acceptance chain"
+        )
+    return first
+
+
+def _self_hashed_body(
+    doc: dict[str, Any], *, field: str, prefix: bytes, label: str
+) -> dict[str, Any]:
+    body = {k: v for k, v in doc.items() if k != field}
+    expected = hashlib.sha256(prefix + canonical_json_bytes(body)).hexdigest()
+    if require_str(doc.get(field), field) != expected:
+        raise M3FValidationError(f"{label}: self-hash does not match its content")
+    return body
+
+
+def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
+    """Strictly verify and reduce the acceptance chain (``None`` if absent).
+
+    Absence is only lawful for a tree with zero production proposals — that
+    cross-check belongs to the callers (honest state, oracles), which hard-stop
+    on any uncovered proposal exactly as they did before acceptances existed.
+    """
+    root = Path(repo_root)
+    registry = root / ACCEPTANCE_REGISTRY_RELPATH
+    if not registry.exists():
+        return None
+    if registry.is_symlink() or not registry.is_file():
+        raise M3FValidationError(f"{ACCEPTANCE_REGISTRY_RELPATH} is not a regular file")
+    raw = registry.read_bytes()
+    records = strict_jsonl_records(raw, "acceptance_registry")
+    lines = raw.decode("utf-8").splitlines()
+    if len(lines) != len(records) or not records:
+        raise M3FValidationError("acceptance registry line/record mismatch or empty")
+    prev = hashlib.sha256(b"").hexdigest()
+    for line, record in zip(lines, records, strict=True):
+        mapping = require_mapping(record, "acceptance registry record")
+        if require_str(mapping.get("previous_line_sha256"), "previous_line_sha256") != prev:
+            raise M3FValidationError("acceptance registry hash chain is broken")
+        prev = hashlib.sha256(line.encode("utf-8")).hexdigest()
+
+    genesis = require_mapping(records[0], "acceptance genesis")
+    if genesis.get("entry_kind") != "genesis" or genesis.get("kind") != "m3e_acceptance_registry":
+        raise M3FValidationError("acceptance registry genesis sentinel is malformed")
+    pins = {
+        str(k): str(v)
+        for k, v in require_mapping(
+            genesis.get("pre_acceptance_state"), "pre_acceptance_state"
+        ).items()
+    }
+    if pins != _genesis_pins(root):
+        raise M3FValidationError(
+            "acceptance genesis pins do not match the byte-frozen authority tables"
+        )
+
+    accepted: list[str] = []
+    expected = dict(pins)
+    created: dict[str, str] = {}
+    for position, raw_entry in enumerate(records[1:], start=1):
+        entry = require_mapping(raw_entry, "acceptance entry")
+        if entry.get("entry_kind") != "acceptance":
+            raise M3FValidationError("acceptance registry carries an unknown entry kind")
+        if entry.get("sequence") != position:
+            raise M3FValidationError(
+                "acceptance registry sequence is reordered, duplicated, or gapped"
+            )
+        proposal_id = require_str(entry.get("proposal_id"), "proposal_id")
+        if proposal_id in accepted:
+            raise M3FValidationError(f"proposal {proposal_id} accepted twice")
+        record_dir = root / ACCEPTANCES_ROOT_RELPATH / proposal_id
+        record_path = record_dir / "acceptance.json"
+        if record_path.is_symlink() or not record_path.is_file():
+            raise M3FValidationError(f"acceptance record for {proposal_id} is missing")
+        record = require_mapping(
+            load_canonical_json(record_path.read_bytes(), "acceptance record"),
+            "acceptance record",
+        )
+        _self_hashed_body(
+            record,
+            field="acceptance_sha256",
+            prefix=_ACCEPTANCE_RECORD_PREFIX,
+            label=f"acceptance record {proposal_id}",
+        )
+        if record.get("acceptance_sha256") != entry.get("acceptance_sha256"):
+            raise M3FValidationError(
+                f"registry entry does not bind the committed record for {proposal_id}"
+            )
+        if record.get("proposal_id") != proposal_id or record.get("sequence") != position:
+            raise M3FValidationError(f"acceptance record {proposal_id}: identity mismatch")
+        previous = require_mapping(record.get("previous_accepted"), "previous_accepted")
+        prior_state = {
+            str(k): str(v)
+            for k, v in require_mapping(previous.get("state"), "previous state").items()
+        }
+        if prior_state != expected:
+            raise M3FValidationError(
+                f"acceptance {proposal_id} does not chain from the prior accepted state"
+            )
+        new_accepted = require_mapping(record.get("new_accepted"), "new_accepted")
+        new_state = {
+            str(k): str(v)
+            for k, v in require_mapping(new_accepted.get("state"), "new state").items()
+        }
+        if set(new_state) != set(ACCEPTANCE_TRANSITIONED_PATHS):
+            raise M3FValidationError(
+                f"acceptance {proposal_id}: new state must pin exactly the transitioned paths"
+            )
+        if record.get("evaluation_authorized") is not False:
+            raise M3FValidationError(f"acceptance {proposal_id} claims evaluation authority")
+        if record.get("maturity_state") != "immature":
+            raise M3FValidationError(f"acceptance {proposal_id} claims a non-immature cohort")
+        for name, value in require_mapping(
+            record.get("governance_flags"), "governance_flags"
+        ).items():
+            if value is not False:
+                raise M3FValidationError(
+                    f"acceptance {proposal_id}: governance flag {name} is set"
+                )
+        completion_path = record_dir / "acceptance_completion.json"
+        if completion_path.is_symlink() or not completion_path.is_file():
+            raise M3FValidationError(
+                f"acceptance {proposal_id} has no completion record (two-phase binding)"
+            )
+        completion = require_mapping(
+            load_canonical_json(completion_path.read_bytes(), "acceptance completion"),
+            "acceptance completion",
+        )
+        _self_hashed_body(
+            completion,
+            field="completion_sha256",
+            prefix=_ACCEPTANCE_COMPLETION_PREFIX,
+            label=f"completion {proposal_id}",
+        )
+        if completion.get("acceptance_sha256") != record.get(
+            "acceptance_sha256"
+        ) or completion.get("proposal_id") != proposal_id:
+            raise M3FValidationError(f"completion {proposal_id} does not bind its record")
+        accepted.append(proposal_id)
+        expected = new_state
+        for path, sha in require_mapping(new_accepted.get("created"), "created").items():
+            created[str(path)] = str(sha)
+
+    acceptances_dir = root / ACCEPTANCES_ROOT_RELPATH
+    if acceptances_dir.exists():
+        on_disk = {p.name for p in acceptances_dir.iterdir() if p.is_dir()}
+        if on_disk - set(accepted):
+            raise M3FValidationError(
+                "acceptance directories exist outside the registry chain"
+            )
+    return AcceptanceView(
+        accepted_ids=tuple(accepted), expected_state=expected, created=created
+    )
