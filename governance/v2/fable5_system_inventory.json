@@ -40,6 +40,7 @@
     "src/eth_research/m3d/acquire_runner.py",
     "src/eth_research/m3d/replay.py",
     "src/eth_research/m3d/status.py",
+    "src/eth_research/m3e/acceptance.py",
     "src/eth_research/m3e/acquire_runner.py",
     "src/eth_research/m3e/replay.py",
     "src/eth_research/m3e/status.py",
@@ -266,6 +267,7 @@
     "src/eth_research/m3d/validation.py",
     "src/eth_research/m3d/verify_m3d_program.py",
     "src/eth_research/m3e/__init__.py",
+    "src/eth_research/m3e/acceptance.py",
     "src/eth_research/m3e/accepted_base.py",
     "src/eth_research/m3e/acquire_runner.py",
     "src/eth_research/m3e/acquisition.py",
@@ -563,8 +565,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "fcbc8aa09a43ae4c7a5add6bbe5fc2260aa6881073fda05b6469a98ef5fb75c2",
-  "tracked_file_count": 1042,
+  "surface_digest": "5131c6fb0e5cab61d8e41117cd8cefaf7027db06f1b4944d8a0bf7388fd920e1",
+  "tracked_file_count": 1061,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,

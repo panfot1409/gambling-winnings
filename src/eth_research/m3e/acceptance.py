@@ -9,8 +9,9 @@ module adds that event as committed evidence, forward-only (V2F §2.2):
 
 * ``research/m3e/acceptance_registry.jsonl`` — an append-only, hash-chained ledger:
   a genesis line pinning the exact pre-acceptance cohort state (cross-checked against
-  three independent byte-frozen tables), then one ``acceptance`` line per accepted
-  proposal, in sequence order.
+  every independently byte-frozen authority table in :data:`_GENESIS_AUTHORITIES`,
+  currently two), then one ``acceptance`` line per accepted proposal, in sequence
+  order.
 * ``research/m3e/acceptances/<proposal-id>/acceptance.json`` — the self-hashed
   acceptance record binding the proposal identity, its evidence hashes, the prior and
   new accepted state, the exact append interval, append-only proof outcomes, quality,
@@ -277,7 +278,10 @@ def _require_semantics_hold(record: dict[str, Any], proposal_id: str) -> None:
             raise AcceptanceError(
                 f"acceptance {proposal_id}: {counter} is non-zero — prior rows were disturbed"
             )
-    if "prior_rows_are_exact_prefix" in proof and proof.get("prior_rows_are_exact_prefix") is not True:
+    if (
+        "prior_rows_are_exact_prefix" in proof
+        and proof.get("prior_rows_are_exact_prefix") is not True
+    ):
         raise AcceptanceError(f"acceptance {proposal_id}: prior rows are not an exact prefix")
     if require_int("prior_row_count", proof.get("prior_row_count", old_rows)) != old_rows:
         raise AcceptanceError(f"acceptance {proposal_id}: measured prior row count disagrees")
@@ -287,9 +291,7 @@ def _require_semantics_hold(record: dict[str, Any], proposal_id: str) -> None:
     if not created:
         raise AcceptanceError(f"acceptance {proposal_id}: pins no created evidence")
     # Sealed-ledger facts inside the record must state emptiness, not any byte count.
-    for logical, facts in require_mapping(
-        "sealed_ledgers", record.get("sealed_ledgers")
-    ).items():
+    for logical, facts in require_mapping("sealed_ledgers", record.get("sealed_ledgers")).items():
         entry = require_mapping(f"sealed_ledgers.{logical}", facts)
         if require_int(f"{logical}.byte_count", entry.get("byte_count")) != 0:
             raise AcceptanceError(f"acceptance {proposal_id}: sealed ledger {logical} not empty")
@@ -1009,9 +1011,7 @@ def verify_acceptance_program(repo_root: str | Path, *, deep: bool = True) -> li
         # The build-time invariant "both runners produced byte-identical payloads"
         # is re-asserted here from the pinned hashes, so a record that pinned
         # different A/B payloads could never pass verification.
-        runner_evidence = require_mapping(
-            "runner_evidence", newest.record.get("runner_evidence")
-        )
+        runner_evidence = require_mapping("runner_evidence", newest.record.get("runner_evidence"))
         raw_by_runner = {
             name: require_mapping(f"{name}.raw_response_sha256", body.get("raw_response_sha256"))
             for name, body in (
