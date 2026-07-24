@@ -233,6 +233,13 @@ def test_rehearsal_clone_is_pinned_to_a_named_branch(m3a_checkout: Path) -> None
     already-grown base and crashes on a spurious no-op. Regression for the V2D
     activation-PR CI failure — the ``make_m3a_checkout`` fixture pins a named branch so
     the accepted cohort is modelled the way production holds it (never a detached HEAD).
+
+    It must equally not carry a *stray* local accepted-cohort branch. A ``--local`` clone
+    of a source checked out on ``main`` (the push-to-``main`` checkout of post-merge main
+    CI) inherits a local ``main``; a production runner checks out a detached HEAD at
+    ``main``'s SHA with no local accepted branch. The fixture drops the inherited ``main``
+    so the seam's "the accepted branch is never materialised/advanced" assertion holds in
+    every CI event — regression for the post-merge-main CI failure.
     """
     git = _SubprocessGitPort(m3a_checkout)
     branch = git.current_branch()
@@ -240,3 +247,5 @@ def test_rehearsal_clone_is_pinned_to_a_named_branch(m3a_checkout: Path) -> None
     assert git.branch_exists(branch)
     # The round-trip the seam rehearsal depends on is a real branch switch, not a no-op.
     assert not branch.startswith("bot/m3e-prospective-update/")
+    # No stray local accepted-cohort branch inherited from a main-checked-out source.
+    assert not git.branch_exists(ACCEPTED_COHORT_BRANCH)
