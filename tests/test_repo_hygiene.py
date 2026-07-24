@@ -92,18 +92,56 @@ def _import_roots(path: Path) -> set[str]:
     return roots
 
 
+# The single, narrow V2E exception to the networking ban: the private, read-only,
+# loopback-first operations dashboard (stdlib ``http.server``) and its loopback test
+# client. It serves committed governance state on 127.0.0.1 by default, has no mutation
+# endpoints, and performs no outbound requests; the only authorized market-data egress
+# remains the m3e update workflow. Nothing else may import a forbidden root, and these
+# files may import only ``http`` (test_v2e_hygiene_exemption_is_exactly_this_narrow).
+DASHBOARD_SERVER_EXEMPT: dict[str, frozenset[str]] = {
+    "src/eth_research/v2e/server.py": frozenset({"http"}),
+    "tests/test_v2e_server_security.py": frozenset({"http"}),
+}
+
+
 def test_no_network_exchange_or_wallet_imports_anywhere() -> None:
     """src, tests, and examples must never import networking or exchange code.
 
     The scan is AST-based (real import statements, not string matches), so
-    this test file's own forbidden-name list does not trip it.
+    this test file's own forbidden-name list does not trip it. The sole
+    exception is the V2E loopback dashboard server (see
+    ``DASHBOARD_SERVER_EXEMPT``), which may import ``http`` and nothing else
+    from the forbidden list.
     """
     offenders: dict[str, set[str]] = {}
     for path in _python_files():
+        rel = str(path.relative_to(REPO_ROOT))
         forbidden = _import_roots(path) & FORBIDDEN_IMPORT_ROOTS
+        forbidden -= DASHBOARD_SERVER_EXEMPT.get(rel, frozenset())
         if forbidden:
-            offenders[str(path.relative_to(REPO_ROOT))] = forbidden
+            offenders[rel] = forbidden
     assert offenders == {}, f"forbidden imports found: {offenders}"
+
+
+def test_v2e_hygiene_exemption_is_exactly_this_narrow() -> None:
+    """The dashboard exemption stays pinned: two files, the ``http`` root only."""
+    assert set(DASHBOARD_SERVER_EXEMPT) == {
+        "src/eth_research/v2e/server.py",
+        "tests/test_v2e_server_security.py",
+    }
+    for rel, allowed in DASHBOARD_SERVER_EXEMPT.items():
+        assert allowed == frozenset({"http"})
+        path = REPO_ROOT / rel
+        assert path.is_file(), f"exempt file vanished: {rel}"
+        # The exempt files must not smuggle any other forbidden root.
+        others = (_import_roots(path) & FORBIDDEN_IMPORT_ROOTS) - allowed
+        assert others == set(), f"{rel} imports beyond its exemption: {others}"
+    # The exemption is server-side only: every other v2e module stays network-free.
+    for path in sorted((REPO_ROOT / "src/eth_research/v2e").glob("*.py")):
+        rel = str(path.relative_to(REPO_ROOT))
+        if rel in DASHBOARD_SERVER_EXEMPT:
+            continue
+        assert not (_import_roots(path) & FORBIDDEN_IMPORT_ROOTS), rel
 
 
 def _walk_repo() -> list[Path]:
