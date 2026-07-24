@@ -556,13 +556,13 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "65f479e693ffc8d653bae48de9841569cbaad16555b922ccf3b5106ae6c2d910",
+  "surface_digest": "1bcc0c0ef82e0d434ece95edb1bb42c6f39b35c03ce4ce84b025aff5da8f347a",
   "tracked_file_count": 1028,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
       "has_unpinned_uses": false,
-      "sha256": "90f9e8fc172e1b2591bab157387539653c63350d1c18166e7d60e97a0a356106",
+      "sha256": "4161e4585679294ba8ce71dbeb074bd13e305bc956d997266534b21622f32719",
       "uses_secrets": false
     },
     "m2b-replay.yml": {
