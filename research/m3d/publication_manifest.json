@@ -3,15 +3,15 @@
   "artifacts": [
     {
       "path": "research/m3d/prospective_manifest.json",
-      "sha256": "24457fb92a300b28cf5343283be9d39772cd599ec16e641235fd9cc0bc1be4b4"
+      "sha256": "a3b9b522ed60b597a38c821e15ea8b5c776edc0d128381b854ac4c39ef3c14ac"
     },
     {
       "path": "research/m3d/prospective_quality.json",
-      "sha256": "f39929484784db99af4ec314f25cfc7cf6e5eef73d9cc43834b47e2f32e7c0eb"
+      "sha256": "8db517b0820b730784d734e873a4964cfe19b99dbdd52abdb13aed2f560c2728"
     },
     {
       "path": "research/m3d/prospective_segments.jsonl",
-      "sha256": "05cd7b84c06aac9b02f2843dd3ae04d6a9a03f87e23ed432ed0e3497e53aef20"
+      "sha256": "7d338720562382d2c1fe74c42baa029f9a6237659ad6d7390937f8aab45534bf"
     },
     {
       "path": "research/m3d/reacquisition_audit.json",
@@ -20,6 +20,6 @@
   ],
   "kind": "prospective_publication_manifest",
   "package_version": "0.7.0",
-  "publication_root_sha256": "357cbb84852875c1bc59058b63ca0f30690bb6731c7912be68303680f54b8d1e",
+  "publication_root_sha256": "5a20946a00fee09f92d9fcf932e5b0af5764378bd42086e6598f8a83feba367e",
   "schema_version": 1
 }

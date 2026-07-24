@@ -1,0 +1,28 @@
+{
+  "accepted_last_open": "2026-07-14T00:00:00Z",
+  "base_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+  "completed_day_exclusive_end": "2026-07-24T00:00:00Z",
+  "documentation_url": "https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles",
+  "endpoint": "https://api.exchange.coinbase.com/products/ETH-USD/candles",
+  "expected_total_buckets": 9,
+  "first_missing_open": "2026-07-15T00:00:00Z",
+  "granularity_seconds": 86400,
+  "idempotency_key": "315846f9ec5196b4d37675f50842753996c73aa1466688879669e57d97736647",
+  "kind": "prospective_update_plan",
+  "max_buckets_per_request": 299,
+  "package_version": "0.8.0",
+  "plan_sha256": "3a4cd5af0f4ab83170b9444823bc3c2d1686c589965eefc4038d71cad0318f18",
+  "schema_version": 1,
+  "user_agent": "eth-research-m3d-prospective-acquisition/1 (offline research; public candles)",
+  "windows": [
+    {
+      "end_param": "2026-07-23T00:00:00Z",
+      "expected_bucket_count": 9,
+      "ordinal": 0,
+      "raw_filename": "coinbase-eth-usd-1d-update_0000_20260715_20260724.json",
+      "start_param": "2026-07-15T00:00:00Z",
+      "window_end": "2026-07-24T00:00:00Z",
+      "window_start": "2026-07-15T00:00:00Z"
+    }
+  ]
+}

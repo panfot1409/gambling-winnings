@@ -1,6 +1,6 @@
 {
   "candidate_declared": false,
-  "canonical_content_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+  "canonical_content_fingerprint": "ab22a0861d25781358404a4165a9b839e81871ff28e4785749c6c1207a6588f3",
   "cohort_start": "2026-07-12T00:00:00Z",
   "evaluation_authorized": false,
   "evaluation_ledger": {
@@ -16,7 +16,7 @@
     "venue": "coinbase-exchange"
   },
   "kind": "prospective_cohort_manifest",
-  "last_open": "2026-07-14T00:00:00Z",
+  "last_open": "2026-07-23T00:00:00Z",
   "m2b_final_open": "2026-07-11T00:00:00+00:00",
   "maturity_conditions": {
     "canonical_reacquisition_match": true,
@@ -40,7 +40,7 @@
       "raw_sha256": "866e7b5d77ecd2ec5baf05493e7048b869a88b202bbc6185c70d5af8702355ae",
       "receipt_sha256": "22ac66312a74a8ccb3cfd5312bf821d7c1dc2351135caf1df18479f2cbdf8cc0"
     },
-    "canonical_content_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+    "canonical_content_fingerprint": "ab22a0861d25781358404a4165a9b839e81871ff28e4785749c6c1207a6588f3",
     "data_use_ledger_sha256": "0f061a11c832a369f226ea8d3845652ed7c67b7878cfca908db0da54b7ab62e4",
     "exhaustion_decision_sha256": "693800379aed38067d4732ebd6c89557b3dcee2cbbc67d28dda5b9be435a7db5",
     "genesis_acquisition": {
@@ -53,13 +53,27 @@
     "multiplicity_ledger_sha256": "29c39c7898fb9d430ed9bce7841fc26f67352d2dbe17decb3b72943b2283890f",
     "program_snapshot_sha256": "b2f8d978a3d9e15d612231beb39db114bef13688c75332f5670873680b39feb4",
     "protocol_sha256": "cb08396babb1d8c8c454b5eae12210ff0a0edf17ebafb55688de341d280094a5",
-    "quality_report_sha256": "f39929484784db99af4ec314f25cfc7cf6e5eef73d9cc43834b47e2f32e7c0eb",
+    "quality_report_sha256": "8db517b0820b730784d734e873a4964cfe19b99dbdd52abdb13aed2f560c2728",
     "reacquisition_audit_sha256": "d4ff04a86d755c1c6dcd132ce26265169d232e22d962c22bb162ed7ec7fb4d42",
-    "segment_chain_sha256": "05cd7b84c06aac9b02f2843dd3ae04d6a9a03f87e23ed432ed0e3497e53aef20",
-    "specification_catalog_sha256": "e7c9cacb181857180c0e6005e596f1b72be7b2df2de9fd86039010d189d69d72"
+    "segment_chain_sha256": "7d338720562382d2c1fe74c42baa029f9a6237659ad6d7390937f8aab45534bf",
+    "specification_catalog_sha256": "e7c9cacb181857180c0e6005e596f1b72be7b2df2de9fd86039010d189d69d72",
+    "update_acquisitions": [
+      {
+        "attempt_canonical_fingerprint": "e943f47bfb822e5a50e7526ca4fe1cac17db7f5f72ba20ad9a9de5a7e2d55b94",
+        "attempt_id": "coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4",
+        "plan_sha256": "b61905d3f5cc2278ede75decffd2808f80a5250baeaae31d3788219490f27022",
+        "proposal_id": "20260715-20260724-315846f9ec5196b4",
+        "raw_bundle_fingerprints": [
+          "807c632bfec93bf7b78d1e0ef3f11dcf94b64a6cb13e1d9f77d9316bb6231078"
+        ],
+        "receipt_sha256": "769146ce202f5fe9cd2bfbdbfaca472231146211bcb049ac104956205b21c66b",
+        "window_count": 1
+      }
+    ],
+    "update_attempts_ledger_sha256": "754493bcbc2f3cd2a976d2310e398c6a222c9d2f835da36f7926eb41745be97e"
   },
-  "remaining_rows": 362,
-  "row_count": 3,
+  "remaining_rows": 353,
+  "row_count": 12,
   "schema_version": 1,
   "sealed_ledgers": {
     "development_gate": {
