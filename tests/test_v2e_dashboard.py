@@ -159,7 +159,7 @@ class TestProposalCheckout:
             + "\n",
             "utf-8",
         )
-        with pytest.raises(DashboardStateError, match="proposal_manifest|stale or wrong-parent"):
+        with pytest.raises(DashboardStateError, match=r"proposal_manifest|stale or wrong-parent"):
             build_dashboard_state(m3a_checkout, proposal_checkout=checkout)
 
     def test_tampered_runner_comparison_refuses(self, tmp_path: Path) -> None:
