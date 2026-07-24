@@ -187,11 +187,12 @@ def _pins_from_table(root: Path, table_relpath: str) -> dict[str, str]:
 
 
 def derive_genesis_pins(repo_root: str | Path) -> dict[str, str]:
-    """The exact pre-acceptance sha256 of every transitioned path, triple-sourced.
+    """The exact pre-acceptance sha256 of every transitioned path, multi-sourced.
 
-    All three committed freeze authorities must agree byte-for-byte; any
-    disagreement is a hard stop (it would mean the historical tables themselves
-    were tampered with, which no acceptance may paper over).
+    Every committed freeze authority in :data:`_GENESIS_AUTHORITIES` (currently
+    two) must agree byte-for-byte; any disagreement is a hard stop (it would mean
+    the historical tables themselves were tampered with, which no acceptance may
+    paper over).
     """
     root = Path(repo_root)
     first: dict[str, str] | None = None
@@ -227,9 +228,10 @@ def build_genesis_record(repo_root: str | Path) -> dict[str, Any]:
         "package_version": M3E_PACKAGE_VERSION,
         "pre_acceptance_state": derive_genesis_pins(repo_root),
         "pre_acceptance_proposal_count": 0,
+        "genesis_authorities": list(_GENESIS_AUTHORITIES),
         "note": (
-            "pins the exact pre-acceptance bytes of every transitioned cohort path, "
-            "triple-sourced from the byte-frozen stack tables"
+            "pins the exact pre-acceptance bytes of every transitioned cohort path; "
+            "every authority table listed in genesis_authorities must agree exactly"
         ),
     }
 
@@ -298,6 +300,48 @@ def _created_evidence_paths(root: Path, proposal_id: str) -> list[str]:
 ACCEPTANCES_PROPOSALS_ROOT = "research/m3e/proposals"
 
 
+def _measure_prior_rows(root: Path, proposal_dir: Path) -> dict[str, Any]:
+    """Recompute how many prior canonical rows changed or were deleted.
+
+    Rebuilds the whole cohort from the committed raw bundles, splits it at the
+    attested append boundary, and compares the surviving prefix element-by-element
+    against the pre-update rows rebuilt from the prior bundles alone. Nothing here
+    trusts a document: the counts written into the acceptance record are the
+    measured result of this comparison, and a non-zero count aborts the build.
+    """
+    from eth_research.m3d.raw_bundle import combined_canonical_rows
+    from eth_research.m3d.update_attempts import build_accepted_raw_bundles
+    from eth_research.m3e.acquisition import load_and_verify_runner
+    from eth_research.m3e.proposal import RUNNER_A_DIR
+
+    bundles, _entries = build_accepted_raw_bundles(root)
+    runner_a = load_and_verify_runner(proposal_dir / RUNNER_A_DIR, runner_label="a")
+    grown_rows = combined_canonical_rows(bundles)
+    appended = runner_a.canonical_rows
+    prior_bundles = bundles[: len(bundles) - len(runner_a.bundles)]
+    prior_rows = combined_canonical_rows(prior_bundles)
+    surviving = grown_rows[: len(grown_rows) - len(appended)]
+
+    deleted = max(0, len(prior_rows) - len(surviving))
+    changed = sum(
+        1
+        for index in range(min(len(prior_rows), len(surviving)))
+        if prior_rows[index] != surviving[index]
+    )
+    exact_prefix = deleted == 0 and changed == 0 and len(surviving) == len(prior_rows)
+    if not exact_prefix:
+        raise AcceptanceError(
+            f"prior rows are not an exact prefix of the grown cohort "
+            f"(changed={changed}, deleted={deleted}); acceptance refused"
+        )
+    return {
+        "prior_row_count": len(prior_rows),
+        "changed": changed,
+        "deleted": deleted,
+        "exact_prefix": exact_prefix,
+    }
+
+
 def build_acceptance_record(
     repo_root: str | Path,
     proposal_id: str,
@@ -329,6 +373,7 @@ def build_acceptance_record(
 
     proposal_dir = root / ACCEPTANCES_PROPOSALS_ROOT / proposal_id
     landed_checks = verify_landed_update(root, proposal_dir)
+    prior_row_audit = _measure_prior_rows(root, proposal_dir)
 
     manifest = load_proposal_manifest(proposal_dir / PROPOSAL_MANIFEST_NAME)
     transition = require_mapping("manifest.transition", manifest["transition"])
@@ -450,8 +495,12 @@ def build_acceptance_record(
             "is_append_only": require_exact(
                 "transition.is_append_only", transition["is_append_only"], True
             ),
-            "prior_rows_changed": 0,
-            "prior_rows_deleted": 0,
+            # MEASURED, not asserted: the prior canonical rows are recomputed from the
+            # raw bundles and compared element-by-element against the grown prefix.
+            "prior_row_count": prior_row_audit["prior_row_count"],
+            "prior_rows_changed": prior_row_audit["changed"],
+            "prior_rows_deleted": prior_row_audit["deleted"],
+            "prior_rows_are_exact_prefix": prior_row_audit["exact_prefix"],
             "landed_verification_checks": [name for name, _ in landed_checks],
         },
         "quality": {
@@ -842,7 +891,42 @@ def verify_acceptance_program(repo_root: str | Path, *, deep: bool = True) -> li
             actual = _sha256_file(root / str(path), str(path))
             if actual != require_sha256_hex(f"created {path}", sha):
                 raise AcceptanceError(f"created evidence {path} drifted from its acceptance pin")
+        # Closed set, not just a checklist: a file smuggled into an accepted proposal
+        # directory after the fact must fail, so the live directory contents must
+        # equal exactly the pinned set.
+        live_evidence = {
+            p.relative_to(root).as_posix()
+            for p in (root / ACCEPTANCES_PROPOSALS_ROOT / newest.proposal_id).rglob("*")
+            if p.is_file() or p.is_symlink()
+        }
+        pinned_evidence = {p for p in created if p.startswith(ACCEPTANCES_PROPOSALS_ROOT + "/")}
+        if live_evidence != pinned_evidence:
+            raise AcceptanceError(
+                "accepted proposal directory is not a closed set: "
+                f"unpinned={sorted(live_evidence - pinned_evidence)}, "
+                f"missing={sorted(pinned_evidence - live_evidence)}"
+            )
         record("A04_created_evidence_pinned", f"files={len(created)}")
+
+        # The build-time invariant "both runners produced byte-identical payloads"
+        # is re-asserted here from the pinned hashes, so a record that pinned
+        # different A/B payloads could never pass verification.
+        runner_evidence = require_mapping(
+            "runner_evidence", newest.record.get("runner_evidence")
+        )
+        raw_by_runner = {
+            name: require_mapping(f"{name}.raw_response_sha256", body.get("raw_response_sha256"))
+            for name, body in (
+                (str(k), require_mapping(f"runner_evidence.{k}", v))
+                for k, v in runner_evidence.items()
+            )
+        }
+        distinct = {tuple(sorted(mapping.items())) for mapping in raw_by_runner.values()}
+        if len(raw_by_runner) < 2 or len(distinct) != 1:
+            raise AcceptanceError(
+                "acceptance record does not attest two runners with byte-identical payloads"
+            )
+        record("A04b_runner_payloads_identical", f"runners={len(raw_by_runner)}")
 
         if deep:
             from eth_research.m3e.verify_m3e_program import verify_landed_update
