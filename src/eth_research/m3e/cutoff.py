@@ -37,6 +37,12 @@ from eth_research.m3e.validation import (
 
 _DAY = pd.Timedelta(days=1)
 _INTERVAL_SECONDS = 86400
+# A just-closed daily candle counts as due only after settling this long past its UTC
+# close, so a run fired moments after midnight never fetches a candle the venue may still
+# be revising. The scheduled cadence (Mondays 02:17 UTC) clears this by 1h17m; a
+# workflow_dispatch fired at 00:00:30 is deferred to the next run. Append-only rows are
+# never re-checked against the venue, so this floor is the only settling guarantee.
+_SETTLE_DELAY = pd.Timedelta(hours=1)
 
 
 def _z(ts: pd.Timestamp) -> str:
@@ -107,31 +113,38 @@ def plan_update_window(
             f"{_z(last_open)} (clock anomaly; HARD STOP)"
         )
 
-    if first_missing >= end:
+    # Exclude the most-recently completed day (closing at ``end``) until it has settled
+    # for at least ``_SETTLE_DELAY`` past its close; an unsettled boundary drops the
+    # effective cutoff to the prior midnight, so a just-after-midnight run NO-OPs rather
+    # than fetching a candle the venue may still revise.
+    settled_end = end if (as_of - end) >= _SETTLE_DELAY else end - _DAY
+
+    if first_missing >= settled_end:
         return UpdateWindowDecision(
             is_noop=True,
             reason=(
-                "no new completed day is due: first missing open "
-                f"{_z(first_missing)} is not before the completed-day cutoff {_z(end)}"
+                "no new settled completed day is due: first missing open "
+                f"{_z(first_missing)} is not before the settled completed-day cutoff "
+                f"{_z(settled_end)}"
             ),
             as_of_utc=_z(as_of),
             accepted_last_open=_z(last_open),
             first_missing_open=_z(first_missing),
-            completed_day_exclusive_end=_z(end),
+            completed_day_exclusive_end=_z(settled_end),
             expected_new_buckets=0,
             window_start=None,
             window_end=None,
         )
 
-    buckets = int((end - first_missing) / _DAY)
+    buckets = int((settled_end - first_missing) / _DAY)
     return UpdateWindowDecision(
         is_noop=False,
         reason=f"{buckets} newly-completed daily candle(s) due for proposal",
         as_of_utc=_z(as_of),
         accepted_last_open=_z(last_open),
         first_missing_open=_z(first_missing),
-        completed_day_exclusive_end=_z(end),
+        completed_day_exclusive_end=_z(settled_end),
         expected_new_buckets=buckets,
         window_start=_z(first_missing),
-        window_end=_z(end),
+        window_end=_z(settled_end),
     )

@@ -74,6 +74,9 @@ jobs:
           path: ${{ runner.temp }}/plan/
           retention-days: 3
           if-no-files-found: error
+          # Re-run-all of a due run re-executes this job; v4 artifacts are immutable per run,
+          # so without overwrite the re-upload 409-conflicts and the whole re-run dies here.
+          overwrite: true
 
   runner_a:
     needs: gate_and_plan
@@ -102,6 +105,7 @@ jobs:
           path: ${{ runner.temp }}/staging/
           retention-days: 3
           if-no-files-found: error
+          overwrite: true
 
   runner_b:
     needs: gate_and_plan
@@ -130,6 +134,7 @@ jobs:
           path: ${{ runner.temp }}/staging/
           retention-days: 3
           if-no-files-found: error
+          overwrite: true
 
   assemble_and_publish:
     needs: [gate_and_plan, runner_a, runner_b]
@@ -200,6 +205,7 @@ jobs:
           path: ${{ runner.temp }}/pr_body.md
           retention-days: 3
           if-no-files-found: error
+          overwrite: true
 
   open_draft_pr:
     needs: [gate_and_plan, assemble_and_publish]

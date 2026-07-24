@@ -38,6 +38,7 @@ from eth_research._atomic import write_atomic
 from eth_research.m3d.cohort import build_prospective_publication_blobs
 from eth_research.m3d.publication import publish_bundle
 from eth_research.m3d.quality import QUALITY_PATH, build_prospective_quality_bytes
+from eth_research.m3d.reacquisition_audit import REACQUISITION_AUDIT_PATH
 from eth_research.m3d.segment import SEGMENTS_PATH, build_prospective_segments_bytes
 from eth_research.m3d.update_attempts import (
     UPDATE_ATTEMPTS_PATH,
@@ -57,6 +58,22 @@ from eth_research.m3e.verify_m3e_program import verify_landed_update
 
 class StagingError(M3EValidationError):
     """Staging the cohort extension failed and was fully rolled back."""
+
+
+#: Every derived artifact one staged extension rewrites — snapshotted before staging and
+#: restored on rollback. MUST list every path ``publish_bundle`` emits
+#: (``cohort.build_prospective_publication_blobs``) plus the accepted base, registry, and
+#: ledger; ``tests/test_v2d_redteam_fixes.py`` pins the publish-bundle coverage invariant.
+DERIVED_RELPATHS: tuple[str, ...] = (
+    SEGMENTS_PATH,
+    REACQUISITION_AUDIT_PATH,
+    QUALITY_PATH,
+    "research/m3d/prospective_manifest.json",
+    "research/m3d/publication_manifest.json",
+    ACCEPTED_BASE_PATH,
+    REGISTRY_PATH,
+    UPDATE_ATTEMPTS_PATH,
+)
 
 
 @dataclass(frozen=True)
@@ -119,15 +136,7 @@ def stage_cohort_extension(repo_root: str | Path, assembled: AssembledProposal) 
     }
 
     # Remember the exact previous bytes of every derived artifact we will rewrite.
-    derived_rels = (
-        SEGMENTS_PATH,
-        QUALITY_PATH,
-        "research/m3d/prospective_manifest.json",
-        "research/m3d/publication_manifest.json",
-        ACCEPTED_BASE_PATH,
-        REGISTRY_PATH,
-        UPDATE_ATTEMPTS_PATH,
-    )
+    derived_rels = DERIVED_RELPATHS
     previous: dict[Path, bytes | None] = {
         root / rel: ((root / rel).read_bytes() if (root / rel).exists() else None)
         for rel in derived_rels

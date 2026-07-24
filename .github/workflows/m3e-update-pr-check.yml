@@ -14,6 +14,10 @@ name: M3E Update PR Check
 
 on:
   pull_request:
+    # Include ready_for_review so marking a draft proposal "Ready for review" (which does
+    # not change the head SHA and so fires no synchronize event) re-runs the draft-required
+    # gate below instead of leaving a stale draft-time success on a now-non-draft PR.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "research/m3e/proposals/**"
 

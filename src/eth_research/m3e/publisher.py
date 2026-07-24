@@ -91,8 +91,9 @@ def assert_draft_only(descriptor: dict[str, Any]) -> None:
     base = require_str("base_branch", descriptor["base_branch"])
     if base == head:
         raise M3EValidationError("proposal base and head must differ")
-    # The base is pinned to the accepted cohort branch — never the default branch,
-    # another milestone branch, a bot branch, or the empty string.
+    # The base is pinned to the accepted cohort branch (``main``, the default branch since
+    # the stack was true-merged) — never a different milestone branch, a bot branch, or the
+    # empty string. A proposal is a draft PR onto that branch; a human merge lands it.
     if base != ACCEPTED_COHORT_BRANCH:
         raise M3EValidationError(
             "proposal base must be an accepted branch (the accepted cohort branch)"

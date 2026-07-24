@@ -556,8 +556,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "db10b173e47d8db3cdba2156688e7a13f277f79a2e46e17504121678f4f9f300",
-  "tracked_file_count": 1027,
+  "surface_digest": "65f479e693ffc8d653bae48de9841569cbaad16555b922ccf3b5106ae6c2d910",
+  "tracked_file_count": 1028,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
@@ -598,7 +598,7 @@
     "m3e-prospective-update.yml": {
       "declares_write_permission": true,
       "has_unpinned_uses": false,
-      "sha256": "6387000465fb727c656c3c43277de58163d6929d5b32259224baedbd9b2c9b57",
+      "sha256": "d1bfbf3d224a11b211a3a1d61298a7888ceacf44b578cbf765d091c377716eea",
       "uses_secrets": false
     },
     "m3e-replay.yml": {
@@ -610,7 +610,7 @@
     "m3e-update-pr-check.yml": {
       "declares_write_permission": false,
       "has_unpinned_uses": false,
-      "sha256": "dbb978a089f2edadf29366a54be1adcf1c4715f90e409d089023af33274cff5d",
+      "sha256": "9a619337069d109c5b23b3647efb158b6c101d3795c369358b513df2485193bf",
       "uses_secrets": false
     },
     "m3f-replay.yml": {

@@ -86,7 +86,11 @@ def main(argv: list[str] | None = None) -> int:
     proposal_rel = f"research/m3e/proposals/{proposal_id}"
     proposal_dir = root / proposal_rel
     if proposal_dir.exists():
-        print(f"proposal directory already committed: {proposal_rel}; idempotent skip")
+        # This driver runs only in the assemble job, whose checkout is fresh (fetch-depth 0,
+        # no prior-run debris), so an existing directory is a committed proposal for this
+        # window — an idempotent skip. The wording is deliberately existence-based (not a
+        # git-tracked assertion) because that is the exact condition tested.
+        print(f"proposal directory already present: {proposal_rel}; idempotent skip")
         with Path(args.output).open("a", encoding="utf-8") as out:
             out.write("branch=\ntitle=\n")
         return 0

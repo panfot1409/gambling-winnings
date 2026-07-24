@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 import eth_research
 from eth_research.m3e.accepted_base import AcceptedProspectiveBase, verify_accepted_base
-from eth_research.m3e.cutoff import plan_update_window
+from eth_research.m3e.cutoff import completed_day_exclusive_end, plan_update_window
 from eth_research.m3e.validation import M3EValidationError
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
@@ -40,12 +41,27 @@ def test_just_before_first_candle_completes_is_a_noop(base: AcceptedProspectiveB
     assert decision.is_noop is True
 
 
-def test_one_completed_day_becomes_due_at_next_midnight(base: AcceptedProspectiveBase) -> None:
-    decision = plan_update_window(base, "2026-07-16T00:00:01Z")
+def test_one_completed_day_becomes_due_after_it_settles(base: AcceptedProspectiveBase) -> None:
+    # 07-15 closes at 07-16T00:00; it becomes due only once it has settled past the
+    # _SETTLE_DELAY (1h) floor — here 2h after close.
+    decision = plan_update_window(base, "2026-07-16T02:00:00Z")
     assert decision.is_noop is False
     assert decision.expected_new_buckets == 1
     assert decision.window_start == "2026-07-15T00:00:00Z"
     assert decision.window_end == "2026-07-16T00:00:00Z"
+
+
+def test_a_just_closed_candle_is_deferred_until_it_settles(base: AcceptedProspectiveBase) -> None:
+    # A run fired seconds after 07-15's close (07-16T00:00) must NOT fetch it — the venue
+    # may still revise it. It stays a NO-OP until _SETTLE_DELAY (1h) has elapsed.
+    just_after = plan_update_window(base, "2026-07-16T00:00:30Z")
+    assert just_after.is_noop is True
+    assert just_after.expected_new_buckets == 0
+    within_delay = plan_update_window(base, "2026-07-16T00:59:59Z")
+    assert within_delay.is_noop is True
+    at_delay = plan_update_window(base, "2026-07-16T01:00:00Z")
+    assert at_delay.is_noop is False
+    assert at_delay.window_end == "2026-07-16T00:00:00Z"
 
 
 def test_multiple_completed_days_are_bound_contiguously(base: AcceptedProspectiveBase) -> None:
@@ -76,9 +92,11 @@ def test_the_window_end_never_includes_the_forming_candle(base: AcceptedProspect
 # --------------------------------------------------------------------------- #
 # audit §12 — clock/cutoff boundary adversarial matrix                        #
 # --------------------------------------------------------------------------- #
-def test_cutoff_is_exact_floor_to_utc_midnight_at_boundaries(base: AcceptedProspectiveBase) -> None:
-    # The completed-day exclusive end is floor_to_utc_midnight(as_of) exactly — the
-    # forming candle (the as_of day, whenever after its own midnight) is always excluded.
+def test_cutoff_is_exact_floor_to_utc_midnight_at_boundaries() -> None:
+    # The raw completed-day boundary is floor_to_utc_midnight(as_of) exactly — the forming
+    # candle (the as_of day, whenever after its own midnight) is always excluded. This is the
+    # pure floor; the settle-delay adjustment is applied only inside plan_update_window (which
+    # may drop the effective window cutoff to the prior day for an unsettled boundary).
     cases = {
         "2026-07-16T00:00:00Z": "2026-07-16T00:00:00Z",  # exact midnight
         "2026-07-16T00:00:00.000001Z": "2026-07-16T00:00:00Z",  # 1us after midnight
@@ -87,8 +105,7 @@ def test_cutoff_is_exact_floor_to_utc_midnight_at_boundaries(base: AcceptedProsp
         "2028-02-29T12:00:00Z": "2028-02-29T00:00:00Z",  # leap day
     }
     for as_of, expected_end in cases.items():
-        decision = plan_update_window(base, as_of)
-        assert decision.completed_day_exclusive_end == expected_end, as_of
+        assert completed_day_exclusive_end(as_of) == pd.Timestamp(expected_end), as_of
 
 
 def test_one_microsecond_before_the_first_due_midnight_is_a_noop(
@@ -99,12 +116,14 @@ def test_one_microsecond_before_the_first_due_midnight_is_a_noop(
     assert decision.is_noop is True
 
 
-def test_one_microsecond_after_the_first_due_midnight_is_due(
+def test_one_microsecond_after_the_first_due_midnight_is_still_unsettled(
     base: AcceptedProspectiveBase,
 ) -> None:
+    # One microsecond after 07-15's close the candle has not settled past _SETTLE_DELAY,
+    # so it is a NO-OP; the effective settled cutoff drops to the prior midnight.
     decision = plan_update_window(base, "2026-07-16T00:00:00.000001Z")
-    assert decision.is_noop is False
-    assert decision.completed_day_exclusive_end == "2026-07-16T00:00:00Z"
+    assert decision.is_noop is True
+    assert decision.completed_day_exclusive_end == "2026-07-15T00:00:00Z"
 
 
 def test_a_malformed_as_of_is_rejected(base: AcceptedProspectiveBase) -> None:

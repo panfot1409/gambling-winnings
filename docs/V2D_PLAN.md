@@ -338,3 +338,37 @@ weakens a decision above.
   gate plus the OQ replay on every push) can never verify again without regenerating accepted
   V2C artifacts or editing frozen V2C qualification source, both of which §4 forbids. The bump
   was reverted; V2D runs at the unchanged `2.0.0.dev2`, per the Fable 5 no-bump precedent.
+
+## 10. Pre-activation red team (five independent auditors)
+
+Phase C ran five independent read-only auditors (Agent tool; Ultracode off) over the committed
+activation surface at `c502c8a`, one per lens. Result: **2 Class-B + 12 Class-C findings, zero
+Class A/D, and none of the four hard-stop conditions** (actual strategy access, sealed-value
+access, public exposure, uncontrolled write). Auditor 4's runtime poison/spy harness proved a
+sealed closure: zero forbidden imports and zero network attempts across the whole poisoned
+end-to-end drive, three sealed ledgers byte-empty on every path, `evaluation_authorized` false
+everywhere, and zero candle-value leakage across all log/PR/status surfaces. Every finding was
+reproduced, classified, and fixed forward failing-test-first (regressions in
+`tests/test_v2d_redteam_fixes.py` + updated `tests/test_m3e_cutoff.py`); no accepted `research/`
+artifact changed.
+
+| ID | Class | Lens | Fix |
+|---|---|---|---|
+| A4-B1 | B (latent) | firewall | m3d runtime import scanner now resolves relative imports (mirrors the m3e twin); a relatively-spelled forbidden import into m3d is refused at every runtime layer, not only in pytest. |
+| A5-B1 | B (recovery) | ops honesty | docs corrected (the "retry idempotency makes it safe" claim was false); the true recovery model (re-run-failed-jobs within artifact retention; next-window superset) is documented in the runbook. |
+| A1-C1 | C | acquisition | `response_byte_length` is cross-checked against the raw bytes on both the m3e runner-boundary and m3d replay paths. |
+| A1-C2 | C | acquisition | content-type is an exact media token (`application/json` + optional params), not a prefix, on both the runner gate and the receipt schema. |
+| A1-C3 | C | acquisition | the m3d raw-bundle replay refuses an unknown ordinal with a typed `M3DValidationError` and requires the receipt to cover exactly the plan windows. |
+| A1-C4 | C | acquisition | a 1-hour settle-delay floor defers a just-closed candle (`cutoff._SETTLE_DELAY`), so a run fired seconds after UTC midnight NO-OPs instead of fetching a possibly-unsettled candle. |
+| A2-C1 | C | workflow | the PR-check trigger adds `ready_for_review`, so an undraft-without-push re-runs the draft-required gate. |
+| A3-C1 | C | provenance | `_upstream.resolve` rejects a symlink at any path component (the prior `is_symlink()` guard ran on the already-resolved path and was dead). |
+| A4-C2 | C | firewall | documented: the 365-row maturity floor is a deliberate fail-closed stop; crossing into `mature`/evaluable is reserved for a separate future authorization, not V2D. |
+| A4-C3 | C | honesty | `m3e.status` `active` derives from the committed anchor's presence; the `publisher` base-branch comment is corrected; `honest_state.json` is documented as a frozen M3F at-acceptance record (live posture = `v2d verify`). |
+| A5-C2 | C | ops | the three workflow artifact uploads set `overwrite: true`, so "Re-run all jobs" of a due run no longer 409-conflicts. |
+| A5-C3 | C | ops | the staging rollback snapshot (`staging.DERIVED_RELPATHS`) now lists every path `publish_bundle` writes, incl. `reacquisition_audit.json`; a coverage test pins the invariant. |
+| A5-C4 | C | ops | documented: unmerged weekly drafts + bot branches accumulate with no janitor (a stale draft cannot merge after a superset lands); manual cleanup per the rollback runbook. |
+| A5-C5 | C | ops | the assemble driver's early-skip message is accurate (existence-based) and its fresh-checkout assumption is documented. |
+
+Byte-neutrality is preserved: the fixes touch only source, tests, workflow YAML, docs, and the
+mechanically-rebuilt `governance/v2/fable5_*` inventory/freeze — nothing under `research/`, and
+the M3F freeze artifacts and package versions are unchanged.

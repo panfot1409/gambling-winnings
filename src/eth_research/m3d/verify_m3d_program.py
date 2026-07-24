@@ -91,18 +91,39 @@ _FORBIDDEN_FIELD_SUBSTRINGS = (
 _COINBASE_HOST_RE = re.compile(r"https?://[^\s\"']*coinbase", re.IGNORECASE)
 
 
+def _module_targets(path: Path, src_root: Path) -> list[str]:
+    """Absolute dotted module names imported by ``path`` (relative imports resolved).
+
+    Relative imports (``from .. import metrics``) must be resolved to their absolute
+    dotted target, or a relatively-spelled forbidden dependency would slip past this
+    runtime firewall (the m3e twin ``verify_m3e_program._module_targets`` does the same).
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    self_pkg = ".".join(path.relative_to(src_root).with_suffix("").parts[:-1])
+    modules: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:  # relative import — resolve against the module's package
+                base_parts = self_pkg.split(".")
+                if node.level > 1:
+                    base_parts = base_parts[: -(node.level - 1)]
+                base = ".".join(base_parts)
+                module = f"{base}.{node.module}" if node.module else base
+            else:
+                module = node.module or ""
+            if module:
+                modules.append(module)
+    return modules
+
+
 def _scan_prohibited_imports(repo_root: str | Path) -> None:
-    package = Path(repo_root) / "src/eth_research/m3d"
+    src_root = Path(repo_root) / "src"
+    package = src_root / "eth_research/m3d"
     offenders: list[str] = []
     for path in sorted(package.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        modules: list[str] = []
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                modules.extend(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-                modules.append(node.module)
-        for module in modules:
+        for module in _module_targets(path, src_root):
             if not module.startswith("eth_research"):
                 continue  # stdlib / third-party
             if module == "eth_research.m3d" or module.startswith("eth_research.m3d."):
