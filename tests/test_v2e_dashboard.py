@@ -159,7 +159,7 @@ class TestProposalCheckout:
             + "\n",
             "utf-8",
         )
-        with pytest.raises(DashboardStateError, match="stale or wrong-parent"):
+        with pytest.raises(DashboardStateError, match="proposal_manifest|stale or wrong-parent"):
             build_dashboard_state(m3a_checkout, proposal_checkout=checkout)
 
     def test_tampered_runner_comparison_refuses(self, tmp_path: Path) -> None:
@@ -239,3 +239,103 @@ class TestRendering:
         assert "UNAVAILABLE" in page  # P&L never a fake number
         assert "ENGAGED BY POLICY" in page
         assert "none — paper trading has never started" in page
+
+
+class TestProposalBundleIntegrity:
+    """Auditor-1 HIGH-1/MED-4/MED-5: the self-hashed manifest is the sole authority."""
+
+    _REAL = Path("/tmp/claude-0/v2e-proposal-checkout")
+
+    def _copy_real(self, tmp_path: Path) -> Path:
+        import shutil
+
+        if not self._REAL.is_dir():
+            pytest.skip("real proposal checkout not present in this environment")
+        checkout = tmp_path / "checkout"
+        shutil.copytree(self._REAL / "research", checkout / "research")
+        return checkout
+
+    def test_skeleton_manifest_without_valid_self_hash_refuses(self, tmp_path: Path) -> None:
+        pdir = tmp_path / "c/research/m3e/proposals/20990101-20990102-deadbeefdeadbeef"
+        pdir.mkdir(parents=True)
+        (pdir / "proposal_manifest.json").write_text(
+            json.dumps(
+                {
+                    "kind": "prospective_update_proposal",
+                    "proposal_branch": "bot/m3e-prospective-update/x",
+                    "accepted_base_sha256": "0" * 64,
+                    "accepted_base_fingerprint": "0" * 64,
+                    "manifest_sha256": "0" * 64,
+                }
+            )
+            + "\n",
+            "utf-8",
+        )
+        (pdir / "update_transition.json").write_text("{}\n", "utf-8")
+        (pdir / "acquisition_comparison.json").write_text("{}\n", "utf-8")
+        with pytest.raises(DashboardStateError, match="proposal_manifest"):
+            build_dashboard_state(REPO_ROOT, proposal_checkout=tmp_path / "c")
+
+    def test_side_file_diverging_from_manifest_refuses(self, tmp_path: Path) -> None:
+        checkout = self._copy_real(tmp_path)
+        pdir = next((checkout / "research/m3e/proposals").iterdir())
+        transition = pdir / "update_transition.json"
+        doc = json.loads(transition.read_text("utf-8"))
+        doc["proposed_row_count"] = 999
+        transition.write_text(json.dumps(doc, sort_keys=True) + "\n", "utf-8")
+        with pytest.raises(DashboardStateError, match="disagrees with the self-hashed"):
+            build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
+
+    def test_symlinked_proposals_dir_refuses(self, tmp_path: Path) -> None:
+        checkout = self._copy_real(tmp_path)
+        proposals = checkout / "research/m3e/proposals"
+        real = checkout / "research/m3e/proposals_real"
+        proposals.rename(real)
+        proposals.symlink_to(real.name)
+        with pytest.raises(DashboardStateError, match="symlink"):
+            build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
+
+    def test_symlinked_proposal_entry_refuses(self, tmp_path: Path) -> None:
+        checkout = self._copy_real(tmp_path)
+        proposals = checkout / "research/m3e/proposals"
+        entry = next(proposals.iterdir())
+        (proposals / "evil-twin").symlink_to(entry.name)
+        with pytest.raises(DashboardStateError, match="symlinked proposal entry"):
+            build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
+
+    def test_real_bundle_still_verifies(self) -> None:
+        if not self._REAL.is_dir():
+            pytest.skip("real proposal checkout not present in this environment")
+        state = build_dashboard_state(REPO_ROOT, proposal_checkout=self._REAL)
+        assert state.proposal.proposed_row_count == 12
+        assert state.proposal.new_completed_days == 9
+        assert state.proposal.ancestry_verified is True
+
+
+class TestGovernanceConflicts:
+    def test_eligible_candidate_conflicts_with_this_surface(self) -> None:
+        # auditor-1 HIGH-2: a readiness snapshot recording an eligible candidate must
+        # refuse to render a page whose copy asserts none exist.
+        from eth_research.v2.fable5.paper_readiness import PaperReadinessState
+        from eth_research.v2e.state import _candidate_panel
+
+        forged = PaperReadinessState(
+            schema_version=1,
+            gates={},
+            eligible_paper_candidate_present=True,
+            paper_activation_authorized=False,
+            paper_trading_active=False,
+            sell_ready=False,
+            blocking_gates=(),
+        )
+        with pytest.raises(DashboardStateError, match="asserts none exist"):
+            _candidate_panel(forged)
+
+    def test_duplicate_keys_in_committed_readiness_refuse(self, m3a_checkout: Path) -> None:
+        # auditor-1 MED-3: the committed readiness doc goes through the strict loader.
+        path = m3a_checkout / "governance/v2/paper_readiness_state.json"
+        text = path.read_text("utf-8").rstrip()
+        assert text.startswith("{")
+        path.write_text('{"schema_version": 1, "schema_version": 1,' + text[1:] + "\n", "utf-8")
+        with pytest.raises(DashboardStateError):
+            build_dashboard_state(m3a_checkout)

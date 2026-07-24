@@ -564,7 +564,7 @@
     }
   },
   "surface_digest": "fcbc8aa09a43ae4c7a5add6bbe5fc2260aa6881073fda05b6469a98ef5fb75c2",
-  "tracked_file_count": 1041,
+  "tracked_file_count": 1042,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,

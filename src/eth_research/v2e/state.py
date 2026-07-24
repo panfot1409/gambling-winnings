@@ -22,7 +22,6 @@ filesystem paths, and no source text.
 
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +30,7 @@ from typing import Any
 from eth_research._json import StrictJSONError
 from eth_research.m3e.accepted_base import AcceptedProspectiveBase, verify_accepted_base
 from eth_research.m3e.cutoff import plan_update_window
+from eth_research.m3e.proposal import load_proposal_manifest
 from eth_research.m3e.status import build_status
 from eth_research.m3e.validation import M3EValidationError
 from eth_research.m3f.validation import (
@@ -254,8 +254,8 @@ def _sealed_ledger_facts(root: Path) -> dict[str, str]:
 def _verified_paper_readiness(root: Path) -> PaperReadinessState:
     committed_path = _require_regular_file(root, PAPER_READINESS_RELPATH)
     try:
-        committed = json.loads(committed_path.read_text(encoding="utf-8"))
-    except ValueError as exc:
+        committed = load_canonical_json(committed_path.read_bytes(), PAPER_READINESS_RELPATH)
+    except (M3FValidationError, StrictJSONError, ValueError) as exc:
         raise _fail(PAPER_READINESS_RELPATH, exc) from exc
     if not isinstance(committed, dict):
         raise DashboardStateError(f"{PAPER_READINESS_RELPATH} is not a JSON object")
@@ -276,6 +276,21 @@ def _load_strict_object(root: Path, rel: str) -> dict[str, Any]:
     return doc
 
 
+def _require_strict_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise DashboardStateError(f"{label} must be a JSON integer")
+    return value
+
+
+def _require_subset(embedded: dict[str, Any], on_disk: dict[str, Any], label: str) -> None:
+    """Every field the self-hashed manifest embeds must match the side file byte-for-byte."""
+    for key, value in embedded.items():
+        if on_disk.get(key) != value:
+            raise DashboardStateError(
+                f"proposal {label} file disagrees with the self-hashed manifest at {key!r}"
+            )
+
+
 def _proposal_panel(
     root: Path, accepted: AcceptedProspectiveBase, checkout: Path | None
 ) -> ProposalPanel:
@@ -292,47 +307,87 @@ def _proposal_panel(
     if checkout.is_symlink() or not checkout.is_dir():
         raise DashboardStateError("proposal checkout must be a real local directory")
     proposals_dir = checkout / "research/m3e/proposals"
+    if (
+        proposals_dir.is_symlink()
+        or (checkout / "research").is_symlink()
+        or (checkout / "research/m3e").is_symlink()
+    ):
+        raise DashboardStateError("proposal checkout path contains a symlink; refusing")
     if not proposals_dir.is_dir():
         raise DashboardStateError("proposal checkout has no research/m3e/proposals directory")
-    entries = sorted(p for p in proposals_dir.iterdir() if p.is_dir() and not p.is_symlink())
+    entries = sorted(proposals_dir.iterdir())
+    if any(entry.is_symlink() for entry in entries):
+        raise DashboardStateError("proposal checkout contains a symlinked proposal entry")
+    entries = [entry for entry in entries if entry.is_dir()]
     if len(entries) != 1:
         raise DashboardStateError(
             f"expected exactly one proposal in the checkout, found {len(entries)}"
         )
     pdir = entries[0]
     rel = f"research/m3e/proposals/{pdir.name}"
-    manifest = _load_strict_object(checkout, f"{rel}/proposal_manifest.json")
+    try:
+        manifest = dict(load_proposal_manifest(pdir / "proposal_manifest.json"))
+    except (M3EValidationError, StrictJSONError, OSError, ValueError) as exc:
+        raise _fail(f"{rel}/proposal_manifest.json", exc) from exc
     transition = _load_strict_object(checkout, f"{rel}/update_transition.json")
-
-    if manifest.get("accepted_base_sha256") != accepted.base_sha256:
-        raise DashboardStateError(
-            "stale or wrong-parent proposal: its accepted_base_sha256 does not match the "
-            "accepted base committed in this repository"
-        )
-    if manifest.get("accepted_base_fingerprint") != accepted.canonical_content_fingerprint:
-        raise DashboardStateError("proposal ancestry fingerprint mismatch; refusing")
-    if transition.get("is_append_only") is not True:
-        raise DashboardStateError("proposal transition is not append-only; refusing")
-    old_rows = int(str(transition["old_row_count"]))
-    new_rows = int(str(transition["new_window_row_count"]))
-    proposed_rows = int(str(transition["proposed_row_count"]))
-    if old_rows != accepted.row_count or old_rows + new_rows != proposed_rows:
-        raise DashboardStateError("proposal row arithmetic conflates accepted and proposed state")
-    # auditor-4 F3: the two-runner agreement shown on the dashboard must be read from
-    # the bundle's comparison record, never asserted from the panel's mere existence.
     comparison = _load_strict_object(checkout, f"{rel}/acquisition_comparison.json")
-    if comparison.get("canonical_content_match") is not True:
-        raise DashboardStateError("proposal runner comparison does not record a byte match")
-    if comparison.get("runners_isolated") is not True:
-        raise DashboardStateError("proposal runner comparison does not record isolated runners")
+
+    try:
+        if manifest.get("kind") != "prospective_update_proposal":
+            raise DashboardStateError("proposal manifest kind is not a prospective update")
+        flags = manifest["governance_flags"]
+        if not isinstance(flags, dict) or any(value is not False for value in flags.values()):
+            raise DashboardStateError("proposal manifest governance flags are not all false")
+        review = manifest["review_policy"]
+        if not isinstance(review, dict) or review.get("draft_required") is not True:
+            raise DashboardStateError("proposal review policy does not require a draft")
+        if review.get("auto_merge_forbidden") is not True:
+            raise DashboardStateError("proposal review policy does not forbid auto-merge")
+        if manifest.get("accepted_base_sha256") != accepted.base_sha256:
+            raise DashboardStateError(
+                "stale or wrong-parent proposal: its accepted_base_sha256 does not match the "
+                "accepted base committed in this repository"
+            )
+        if manifest.get("accepted_base_fingerprint") != accepted.canonical_content_fingerprint:
+            raise DashboardStateError("proposal ancestry fingerprint mismatch; refusing")
+        embedded_transition = manifest["transition"]
+        embedded_comparison = manifest["comparison"]
+        if not isinstance(embedded_transition, dict) or not isinstance(embedded_comparison, dict):
+            raise DashboardStateError("proposal manifest transition/comparison blocks malformed")
+        # The side files are display sources; the self-hashed manifest is the authority.
+        _require_subset(embedded_transition, transition, "transition")
+        _require_subset(embedded_comparison, comparison, "comparison")
+        if transition.get("is_append_only") is not True:
+            raise DashboardStateError("proposal transition is not append-only; refusing")
+        if comparison.get("canonical_content_match") is not True:
+            raise DashboardStateError("proposal runner comparison does not record a byte match")
+        if comparison.get("runners_isolated") is not True:
+            raise DashboardStateError("proposal runner comparison does not record isolated runners")
+        old_rows = _require_strict_int(transition["old_row_count"], "old_row_count")
+        new_rows = _require_strict_int(transition["new_window_row_count"], "new_window_row_count")
+        proposed_rows = _require_strict_int(transition["proposed_row_count"], "proposed_row_count")
+        proposed_last_open = str(transition["proposed_last_open"])
+        if transition.get("old_fingerprint") != accepted.canonical_content_fingerprint:
+            raise DashboardStateError("proposal transition old fingerprint mismatch; refusing")
+        if transition.get("old_last_open") != accepted.last_open:
+            raise DashboardStateError("proposal transition old last-open mismatch; refusing")
+        if new_rows < 1 or old_rows != accepted.row_count or old_rows + new_rows != proposed_rows:
+            raise DashboardStateError(
+                "proposal row arithmetic conflates accepted and proposed state"
+            )
+        if proposed_last_open <= accepted.last_open:
+            raise DashboardStateError("proposal does not extend the cohort forward in time")
+        branch = str(manifest["proposal_branch"])
+    except KeyError as exc:
+        raise DashboardStateError(f"proposal bundle is missing required field {exc}") from exc
     return ProposalPanel(
         configured=True,
         detail="pending draft proposal verified against the accepted base (unmerged)",
         proposal_id=pdir.name,
-        proposal_branch=str(manifest["proposal_branch"]),
+        proposal_branch=branch,
         proposed_row_count=proposed_rows,
         new_completed_days=new_rows,
-        proposed_last_open=str(transition["proposed_last_open"]),
+        proposed_last_open=proposed_last_open,
         append_only=True,
         ancestry_verified=True,
     )
@@ -418,6 +473,11 @@ def _integrity_panel(
 
 
 def _candidate_panel(readiness: PaperReadinessState) -> CandidatePanel:
+    if readiness.eligible_paper_candidate_present:
+        raise DashboardStateError(
+            "an eligible candidate is recorded but this dashboard release asserts none exist; "
+            "refusing to render a stale surface (update V2E deliberately)"
+        )
     if readiness.paper_activation_authorized or readiness.paper_trading_active:
         raise DashboardStateError("paper state conflicts with paper-readiness derivation")
     if readiness.sell_ready:

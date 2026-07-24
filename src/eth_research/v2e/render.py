@@ -157,7 +157,10 @@ def render_html(state: DashboardState, *, rehearsal: bool = False) -> str:
 {
         _rows(
             [
-                ("Schedule", '<span class="ok">enabled (weekly + manual dispatch)</span>'),
+                (
+                    "Schedule",
+                    '<span class="ok">enabled (committed schedule + manual dispatch)</span>',
+                ),
                 ("Standing workflow", f"<code>{_e(s.acquisition.standing_workflow)}</code>"),
                 ("Last registry entry", _e(s.acquisition.last_registry_entry_kind)),
                 ("Last live run", _e(s.acquisition.last_live_run)),
