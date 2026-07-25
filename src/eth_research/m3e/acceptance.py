@@ -975,9 +975,7 @@ def _git_head_contains(root: Path, commit: str) -> bool:
         return False
 
 
-def _require_commit_carries_proposal(
-    root: Path, commit: str, entry: AcceptanceEntry
-) -> None:
+def _require_commit_carries_proposal(root: Path, commit: str, entry: AcceptanceEntry) -> None:
     """The recorded proposal head must actually contain this proposal's manifest.
 
     ``git merge-base --is-ancestor`` is satisfied by *any* real ancestor commit,

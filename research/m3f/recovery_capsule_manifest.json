@@ -1,6 +1,6 @@
 {
   "capsule_algorithm": "sha256-over-sorted-path-sha256-length-lines-v1",
-  "capsule_digest": "a1d87bf392514b7860503da08ec9cd5a9ab6a328748ef78e02f5c1c2e3f8c23f",
+  "capsule_digest": "2f1fe44922f52d411766ab96fcba7c2c3b45db85f7123364801b672db5b313ca",
   "contains_sealed_partition_contents": false,
   "contains_secrets_or_credentials": false,
   "excludes": [
@@ -634,7 +634,7 @@
     {
       "byte_length": 410,
       "path": "research/m3e/acceptances/20260715-20260724-315846f9ec5196b4/acceptance_completion.json",
-      "sha256": "3f31d5f25b84d105b9af38e76ae79d223fd93053266b0cb5694385d7291089fa"
+      "sha256": "15a3534217c0207073ada59b86eab83cede0d24aa25ebd77c93475ef880c9bf9"
     },
     {
       "byte_length": 1875,

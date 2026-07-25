@@ -274,6 +274,8 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
         raise M3FValidationError(
             "acceptance genesis authority list does not match the enforced set"
         )
+    if genesis.get("pre_acceptance_proposal_count") != 0:
+        raise M3FValidationError("acceptance genesis claims a non-zero pre-acceptance count")
 
     accepted: list[str] = []
     expected = dict(pins)
@@ -368,7 +370,9 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
             body = require_mapping(rbody, f"runner_evidence.{rname}")
             raws = require_mapping(body.get("raw_response_sha256"), "raw_response_sha256")
             if not raws:
-                raise M3FValidationError(f"acceptance {proposal_id}: runner {rname} pins no payload")
+                raise M3FValidationError(
+                    f"acceptance {proposal_id}: runner {rname} pins no payload"
+                )
             raw_sets.add(tuple(sorted((str(k), str(v)) for k, v in raws.items())))
         if len(runners) < 2 or len(raw_sets) != 1:
             raise M3FValidationError(
@@ -425,6 +429,17 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
         expected = new_state
         for path, sha in require_mapping(new_accepted.get("created"), "created").items():
             created[str(path)] = str(sha)
+            # Every pinned created-evidence file must exist with exactly that hash;
+            # a record pinning a file that is absent or altered fails closed here.
+            live_path = root / str(path)
+            if live_path.is_symlink() or not live_path.is_file():
+                raise M3FValidationError(
+                    f"acceptance {proposal_id}: created evidence {path} is missing"
+                )
+            if hashlib.sha256(live_path.read_bytes()).hexdigest() != str(sha):
+                raise M3FValidationError(
+                    f"acceptance {proposal_id}: created evidence {path} drifted from its pin"
+                )
 
     acceptances_dir = root / ACCEPTANCES_ROOT_RELPATH
     if acceptances_dir.exists():

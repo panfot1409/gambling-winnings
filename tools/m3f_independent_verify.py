@@ -566,6 +566,31 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
             and completion.get("proposal_id") == proposal_id,
             "completion does not bind its record",
         )
+        # Created evidence must exist with exactly the pinned hash, and the accepted
+        # proposal directory must be a CLOSED set (no file smuggled in afterwards).
+        created_pins = new_accepted.get("created")
+        _require(isinstance(created_pins, dict) and bool(created_pins), "no created evidence")
+        for rel, want in created_pins.items():
+            live = root / str(rel)
+            _require(
+                not live.is_symlink() and live.is_file(),
+                f"created evidence {rel} is missing or irregular",
+            )
+            _require(_sha256(live.read_bytes()) == str(want), f"created evidence {rel} drifted")
+        pdir = root / "research/m3e/proposals" / proposal_id
+        if pdir.is_dir():
+            live_set = {
+                p.relative_to(root).as_posix()
+                for p in pdir.rglob("*")
+                if p.is_file() or p.is_symlink()
+            }
+            pinned_set = {
+                str(r) for r in created_pins if str(r).startswith("research/m3e/proposals/")
+            }
+            _require(
+                live_set == pinned_set,
+                f"accepted proposal directory {proposal_id} is not a closed set",
+            )
         accepted.append(proposal_id)
         expected = new_state
     _require(
