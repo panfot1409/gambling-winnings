@@ -315,3 +315,40 @@ in the same mutable tree as the evidence it anchors, no in-repository verifier i
 sound against an actor who can rewrite both; the remediation raises the cost from
 editing data to editing committed source and history, which are covered by
 different controls, and states the residual limit rather than closing it.
+
+### 3.4 Disclosure: commit `0d77cf1` under-describes its own contents
+
+Recorded forward rather than by amending, per the append-only Git discipline.
+
+`0d77cf1`'s message describes two things: relocating the root-authority module
+into M3E, and adding the policy-derived closed file set. The commit actually
+contains more. Three parallel work-streams were writing the tree concurrently,
+and the commit was staged with `git add -A`, which swept in whichever files
+happened to be on disk at that instant:
+
+| File | Lines | Described by `0d77cf1`'s message? |
+|---|---|---|
+| `src/eth_research/m3e/proposal_authority.py` (moved) | 8 | yes |
+| `src/eth_research/m3e/acceptance.py` | 14 | yes |
+| `src/eth_research/m3e/proposal_file_policy.py` | 988 | yes |
+| `tests/test_m3e_file_policy.py` | 611 | yes |
+| governance / research derived artifacts | 20 | yes |
+| `src/eth_research/v2e/status.py` | 377 | **no** |
+| `src/eth_research/v2e/state.py` | 264 | **no** |
+| `src/eth_research/v2e/render.py` | 81 | **no** |
+| `tests/test_v2e_status.py` | 548 | **no** |
+| `tests/test_v2e_dashboard.py` | 16 | **no** |
+| `tests/test_m3e_proposal.py` | 145 | **no** |
+
+The undescribed 1,431 lines are the in-progress remediation of auditor C findings
+B-3 (one canonical acceptance status) and B-2 (vacuous assertions). That work is
+not yet reviewed or reported, and must not be counted as closing those findings
+merely because it is committed. It is re-verified before any such claim is made:
+at the time of this entry `tests/test_v2e_status.py` + `tests/test_v2e_dashboard.py`
+pass (71 tests) and `tests/test_m3e_proposal.py` does **not** — it raises
+`NameError` at line 383 inside the meta-test still being written.
+
+Root cause and correction: `git add -A` while other processes hold the tree. This
+is the same class of error that invalidated two full-suite runs earlier in this
+session (a dirty tree, then a mid-run HEAD move). Staging now uses explicit paths,
+and no commit is taken while a concurrent writer has unfinished work in flight.
