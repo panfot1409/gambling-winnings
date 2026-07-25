@@ -57,6 +57,31 @@ from eth_research.v2e.paper import (
     derive_requirements,
     derive_resting_state,
 )
+from eth_research.v2e.status import (
+    NON_ADDITIVE_MARKERS,
+    TIMELINE_LABEL,
+    DashboardStateError,
+    ProposalStatus,
+    labels_for,
+    row_count_statement,
+    status_from_badge,
+    status_from_claim,
+    status_from_detail,
+    status_from_heading,
+    status_from_timeline_detail,
+)
+
+__all__ = [
+    "REHEARSAL_BANNER",
+    "SCHEMA_VERSION",
+    "TARGET_ROWS",
+    "DashboardState",
+    "DashboardStateError",
+    "ProposalStatus",
+    "build_dashboard_state",
+    "enforce_display_invariants",
+    "to_status_document",
+]
 
 SCHEMA_VERSION = 1
 TARGET_ROWS = 365
@@ -79,10 +104,6 @@ _LIMITATIONS: tuple[str, ...] = (
     "No profitability claim is made anywhere on this surface.",
     "V2 is not sell-ready (sell_ready derives false).",
 )
-
-
-class DashboardStateError(RuntimeError):
-    """The dashboard state could not be derived honestly; nothing was repaired."""
 
 
 def _fail(label: str, exc: Exception) -> DashboardStateError:
@@ -181,9 +202,16 @@ class ProposalPanel:
     proposed_last_open: str | None = None
     append_only: bool | None = None
     ancestry_verified: bool | None = None
-    # True once governance has recorded an acceptance for this proposal, False while it
-    # is still an unmerged draft. ``None`` when no checkout is configured.
-    accepted: bool | None = None
+    #: THE canonical status. Derived exactly once (in :func:`_proposal_panel`) from
+    #: verified evidence; every surface reads this value and none computes its own.
+    #: ``None`` only when no proposal checkout is configured — there is then no local
+    #: proposal to have a status, which is not the same as "pending".
+    status: ProposalStatus | None = None
+    #: Identity of the bundle actually on disk (its self-hashed manifest).
+    manifest_sha256: str | None = None
+    #: Identity the verified acceptance record pins. Present if and only if the status
+    #: is :attr:`ProposalStatus.ACCEPTED`; equal to :attr:`manifest_sha256` when so.
+    accepted_manifest_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,14 +386,7 @@ def _proposal_panel(
     root: Path, accepted: AcceptedProspectiveBase, checkout: Path | None
 ) -> ProposalPanel:
     if checkout is None:
-        return ProposalPanel(
-            configured=False,
-            detail=(
-                "no proposal checkout configured (pass --proposal-checkout with a local "
-                "read-only checkout of the bot proposal branch to display pending-proposal "
-                "facts); the pending draft PR remains visible on GitHub"
-            ),
-        )
+        return ProposalPanel(configured=False, detail=labels_for(None).detail, status=None)
     checkout = Path(checkout)
     if checkout.is_symlink() or not checkout.is_dir():
         raise DashboardStateError("proposal checkout must be a real local directory")
@@ -503,15 +524,21 @@ def _proposal_panel(
                     "acceptance record's resulting fingerprint does not match the accepted base"
                 )
         branch = str(manifest["proposal_branch"])
+        bundle_identity = _require_digest(manifest.get("manifest_sha256"), "proposal manifest hash")
     except KeyError as exc:
         raise DashboardStateError(f"proposal bundle is missing required field {exc}") from exc
+
+    # THE SINGLE DERIVATION of proposal status in the whole program. Every surface —
+    # headline, badge, acceptance claim, row labels, timeline, integrity and acquisition
+    # prose — reads this one value through eth_research.v2e.status.LABELS. A verified
+    # acceptance record (checked above, identity-bound) is the only thing that can
+    # produce ACCEPTED; its absence is exactly what PROPOSED means. Rejection and
+    # supersession have no committed evidence source today, so they are never derived
+    # here: an unrecognised ancestry fails closed above rather than being guessed at.
+    status = ProposalStatus.PROPOSED if prior is None else ProposalStatus.ACCEPTED
     return ProposalPanel(
         configured=True,
-        detail=(
-            "pending draft proposal verified against the accepted base (unmerged)"
-            if prior is None
-            else "accepted proposal: its rows ARE the accepted cohort (acceptance chain verified)"
-        ),
+        detail=labels_for(status).detail,
         proposal_id=pdir.name,
         proposal_branch=branch,
         proposed_row_count=proposed_rows,
@@ -519,7 +546,9 @@ def _proposal_panel(
         proposed_last_open=proposed_last_open,
         append_only=True,
         ancestry_verified=True,
-        accepted=prior is not None,
+        status=status,
+        manifest_sha256=bundle_identity,
+        accepted_manifest_sha256=None if prior is None else prior["proposal_manifest_sha256"],
     )
 
 
@@ -547,16 +576,10 @@ def _acquisition_panel(
             f"update due now: {window.expected_new_buckets} completed day(s) through "
             f"{window.window_end}"
         )
-    if proposal.configured:
-        agreement = "two isolated runners agreed byte-for-byte (canonical_content_match)"
-        append_result = (
-            "append-only extension accepted into the cohort"
-            if proposal.accepted
-            else "append-only extension verified against the accepted base"
-        )
-    else:
-        agreement = "recorded in the proposal bundle (no local checkout configured)"
-        append_result = "recorded in the proposal bundle (no local checkout configured)"
+    # Read from the canonical status; never re-decide acceptance on this surface.
+    labels = labels_for(proposal.status)
+    agreement = labels.two_runner_agreement
+    append_result = labels.acquisition_append_result
     return AcquisitionPanel(
         schedule_enabled=True,
         standing_workflow=str(posture.get("standing_update_workflow", "")),
@@ -589,14 +612,8 @@ def _integrity_panel(
     except V2DActivationError as exc:
         raise _fail(ANCHOR_RELPATH, exc) from exc
     _require_regular_file(root, "governance/v2/fable5_source_freeze.json")
-    if not proposal.configured:
-        proposal_verification = "no local proposal checkout configured"
-    elif proposal.accepted:
-        proposal_verification = (
-            "accepted proposal verified (append-only, ancestry-checked, acceptance chain verified)"
-        )
-    else:
-        proposal_verification = "pending proposal verified (append-only, ancestry-checked)"
+    # Read from the canonical status; never re-decide acceptance on this surface.
+    proposal_verification = labels_for(proposal.status).integrity_verification
     return IntegrityPanel(
         sealed_ledgers=sealed,
         accepted_base_verified=True,
@@ -674,22 +691,160 @@ def _timeline(
             f"anchor authorized on {anchor.get('authorized_on', 'unknown')}; "
             f"accepted cohort {accepted.row_count} rows through {accepted.last_open}",
         ),
-        (
-            "Pending proposal",
-            (
-                "check GitHub for any pending draft proposal (not locally verified)"
-                if not proposal.configured
-                else (
-                    "the local DATA-ONLY proposal has been ACCEPTED into the cohort; "
-                    "no proposal is pending locally"
-                    if proposal.accepted
-                    else "one DATA-ONLY draft update proposal verified locally; awaiting review"
-                )
-            ),
-        ),
+        # The timeline's terminal state for the proposal, read from the canonical
+        # status. enforce_display_invariants maps this string back to a status and
+        # requires it to equal the headline's and the badge's.
+        (TIMELINE_LABEL, labels_for(proposal.status).timeline_detail),
         ("Strategy events", "none — no strategy has ever been evaluated"),
         ("Paper events", "none — paper trading has never started"),
     )
+
+
+def _require_int(value: int | None, label: str) -> int:
+    if value is None:
+        raise DashboardStateError(f"{label} is absent on a configured proposal panel")
+    return value
+
+
+def enforce_display_invariants(state: DashboardState) -> None:
+    """Fail closed unless every surface agrees about acceptance (Auditor C, B-3).
+
+    Called at the end of :func:`build_dashboard_state` *and* again by
+    :func:`eth_research.v2e.render.render_html`, so a state that was assembled or
+    replaced field-by-field outside the builder cannot reach a page either. Each block
+    below is one of the invariants the finding requires:
+
+    1. headline status == badge status == timeline terminal state (and the panel detail,
+       integrity prose and acquisition prose, which are the other places the old page
+       disagreed with itself);
+    2. ACCEPTED requires a verified, identity-bound acceptance record; every other status
+       requires the absence of one;
+    3. a stale proposal (ancestry unverified) can never display accepted, and only the
+       PROPOSED status may display as pending — so a superseded or rejected one cannot;
+    4. accepted and proposed row counts are never interchanged, and never rendered as two
+       bare adjacent figures that a reader could sum;
+    5. the accepted identity displayed is the accepted manifest identity, and a proposed
+       identity is a separate, separately labelled field.
+    """
+    proposal = state.proposal
+    status = proposal.status
+    labels = labels_for(status)
+
+    # (1) One status, everywhere it is visible.
+    for text, reverse, what in (
+        (labels.heading, status_from_heading, "headline"),
+        (labels.badge, status_from_badge, "badge"),
+        (proposal.detail, status_from_detail, "panel detail"),
+    ):
+        if reverse(text) is not status:
+            raise DashboardStateError(f"proposal {what} disagrees with the canonical status")
+    timeline_details = [detail for label, detail in state.timeline if label == TIMELINE_LABEL]
+    if len(timeline_details) != 1:
+        raise DashboardStateError(
+            f"the timeline must carry exactly one {TIMELINE_LABEL!r} row, found "
+            f"{len(timeline_details)}"
+        )
+    if status_from_timeline_detail(timeline_details[0]) is not status:
+        raise DashboardStateError("timeline terminal state disagrees with the canonical status")
+    if (status_from_claim(labels.claim) is ProposalStatus.ACCEPTED) is not (
+        status is ProposalStatus.ACCEPTED
+    ):
+        raise DashboardStateError("the acceptance claim disagrees with the canonical status")
+    if state.integrity.proposal_verification != labels.integrity_verification:
+        raise DashboardStateError("integrity proposal verification disagrees with the status")
+    if state.acquisition.append_only_result != labels.acquisition_append_result:
+        raise DashboardStateError("acquisition append-only result disagrees with the status")
+    if state.acquisition.two_runner_agreement != labels.two_runner_agreement:
+        raise DashboardStateError("acquisition runner agreement disagrees with the status")
+
+    if proposal.configured is not (status is not None):
+        raise DashboardStateError(
+            "a configured proposal panel must carry a status and an unconfigured one must not"
+        )
+    if status is None:
+        stale_facts = (
+            proposal.proposal_id,
+            proposal.proposal_branch,
+            proposal.proposed_row_count,
+            proposal.new_completed_days,
+            proposal.proposed_last_open,
+            proposal.manifest_sha256,
+            proposal.accepted_manifest_sha256,
+        )
+        if any(fact is not None for fact in stale_facts):
+            raise DashboardStateError(
+                "no proposal checkout is configured, so no proposal fact may be displayed"
+            )
+        return
+
+    # (2) Acceptance requires the record; everything else requires its absence.
+    has_record = proposal.accepted_manifest_sha256 is not None
+    if has_record is not (status is ProposalStatus.ACCEPTED):
+        raise DashboardStateError(
+            "status 'accepted' requires a verified acceptance record and no other status may "
+            f"have one (status={status}, acceptance record present={has_record})"
+        )
+
+    # (3) Stale can never read accepted; only PROPOSED may read pending.
+    if proposal.ancestry_verified is not True and status is ProposalStatus.ACCEPTED:
+        raise DashboardStateError(
+            "a proposal whose ancestry is not verified can never be displayed as accepted"
+        )
+    if labels.pending is not (status is ProposalStatus.PROPOSED):
+        raise DashboardStateError(
+            f"status {status} may not be displayed as pending; only a proposed one is pending"
+        )
+
+    # (4) Row counts are never interchanged and never additive on the page.
+    accepted_rows = state.cohort.accepted_row_count
+    proposed_rows = _require_int(proposal.proposed_row_count, "proposed row count")
+    appended_rows = _require_int(proposal.new_completed_days, "appended day count")
+    if appended_rows < 1 or proposed_rows < 1:
+        raise DashboardStateError("proposal row counts must be positive")
+    if status is ProposalStatus.ACCEPTED:
+        if proposed_rows != accepted_rows:
+            raise DashboardStateError(
+                "an accepted proposal's rows ARE the accepted cohort; a different proposed "
+                "count means the two are being displayed as separate quantities"
+            )
+        if appended_rows >= proposed_rows:
+            raise DashboardStateError("appended days cannot equal or exceed the accepted cohort")
+        if proposal.proposed_last_open != state.cohort.accepted_last_open:
+            raise DashboardStateError("accepted proposal last-open is not the accepted last-open")
+    elif status is ProposalStatus.PROPOSED:
+        if proposed_rows != accepted_rows + appended_rows:
+            raise DashboardStateError("pending proposal row arithmetic does not close")
+        if proposed_rows == accepted_rows:
+            raise DashboardStateError("accepted and proposed row counts must not be interchanged")
+        if not (proposal.proposed_last_open or "") > state.cohort.accepted_last_open:
+            raise DashboardStateError("a pending proposal must extend the cohort forward in time")
+    statement = row_count_statement(
+        status,
+        accepted_rows=accepted_rows,
+        proposed_rows=proposed_rows,
+        appended_rows=appended_rows,
+    )
+    if not any(marker in statement for marker in NON_ADDITIVE_MARKERS):
+        raise DashboardStateError(
+            "the row-count statement does not state that the two counts are not additive"
+        )
+
+    # (5) Accepted identity is the accepted manifest identity; proposed identity is separate.
+    bundle_identity = proposal.manifest_sha256
+    if bundle_identity is None or not proposal.proposal_id or not proposal.proposal_branch:
+        raise DashboardStateError(
+            "a configured proposal panel must display its identity (proposal id, branch and "
+            "self-hashed manifest digest)"
+        )
+    if bundle_identity == state.cohort.accepted_fingerprint:
+        raise DashboardStateError(
+            "the proposal manifest identity and the accepted cohort fingerprint are distinct "
+            "identities; displaying one as the other conflates accepted and proposed state"
+        )
+    if status is ProposalStatus.ACCEPTED and proposal.accepted_manifest_sha256 != bundle_identity:
+        raise DashboardStateError(
+            "the accepted identity displayed must be the identity the acceptance record pins"
+        )
 
 
 def build_dashboard_state(
@@ -757,7 +912,7 @@ def build_dashboard_state(
         accepted_fingerprint=accepted.canonical_content_fingerprint,
     )
 
-    return DashboardState(
+    built = DashboardState(
         schema_version=SCHEMA_VERSION,
         generated_at=generated_at,
         identity=RepoIdentity(
@@ -774,6 +929,9 @@ def build_dashboard_state(
         paper_engine=_paper_engine_panel(requirements, readiness),
         timeline=_timeline(anchor, accepted, proposal),
     )
+    # Nothing leaves the builder that any surface could render as a contradiction.
+    enforce_display_invariants(built)
+    return built
 
 
 def _package_version() -> str:

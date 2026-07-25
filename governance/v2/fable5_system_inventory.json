@@ -277,6 +277,8 @@
     "src/eth_research/m3e/lease.py",
     "src/eth_research/m3e/orchestrator.py",
     "src/eth_research/m3e/proposal.py",
+    "src/eth_research/m3e/proposal_authority.py",
+    "src/eth_research/m3e/proposal_file_policy.py",
     "src/eth_research/m3e/publisher.py",
     "src/eth_research/m3e/registry.py",
     "src/eth_research/m3e/replay.py",
@@ -474,10 +476,10 @@
     "src/eth_research/v2e/__init__.py",
     "src/eth_research/v2e/dashboard.py",
     "src/eth_research/v2e/paper.py",
-    "src/eth_research/v2e/proposal_authority.py",
     "src/eth_research/v2e/render.py",
     "src/eth_research/v2e/server.py",
     "src/eth_research/v2e/state.py",
+    "src/eth_research/v2e/status.py",
     "src/eth_research/walkforward.py"
   ],
   "public_api": [
@@ -566,8 +568,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "43530533be0153bb7948515b8dcf59ae028d81fd2caaffd4faf1e6b453a29058",
-  "tracked_file_count": 1062,
+  "surface_digest": "39c6658cd4286f791c5f766c6a6b2e6a26367ded54e85741e45642d83615bf6e",
+  "tracked_file_count": 1066,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,

@@ -37,8 +37,10 @@ outside the in-repository trust boundary, and nothing inside the repository can
 detect them. That limit is stated here rather than papered over, and the word
 "tamper-proof" is deliberately not used anywhere in this package.
 
-This module is a LEAF: it imports only the standard library and the shared strict
-JSON reader, so any layer may depend on it without creating a cycle.
+This module is a LEAF: it imports only the standard library, so any layer may
+depend on it without creating a cycle. It lives in ``m3e`` because that package
+owns the acceptance chain, and the M3E architecture guard forbids M3E importing
+upward into V2E.
 """
 
 from __future__ import annotations
@@ -54,7 +56,7 @@ AUTHORITY_SCHEMA_VERSION = 1
 
 #: Domain separator for the genesis root. Domain separation keeps this digest from
 #: ever colliding with a record/completion/ledger hash computed over similar bytes.
-GENESIS_ROOT_DOMAIN = b"v2e/proposal_authority/genesis_root\n"
+GENESIS_ROOT_DOMAIN = b"m3e/proposal_authority/genesis_root\n"
 
 #: The trusted pre-proposal baseline. This commit is the sole parent of the bot
 #: proposal head and the last state in which the cohort was 3 accepted rows.

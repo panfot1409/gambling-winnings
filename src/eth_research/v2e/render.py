@@ -5,13 +5,28 @@ reaches the page, so hostile text inside a committed JSON document cannot inject
 or script. The page carries a restrictive ``Content-Security-Policy`` meta (the HTTP
 layer sends the same header), inline CSS only, no external resources, no JavaScript, no
 analytics, and no telemetry.
+
+Auditor C finding B-3: this module used to carry its own hard-coded acceptance copy
+(``Pending proposal (unmerged — NOT accepted)``, ``Proposed rows (unmerged)``) and never
+consumed the accepted/pending split the state model had learned, so the accepted state
+rendered a page that contradicted itself. It now writes NO status copy of its own: every
+visible status string is read from :data:`eth_research.v2e.status.LABELS`, keyed by the
+one canonical :class:`~eth_research.v2e.status.ProposalStatus`, and
+:func:`~eth_research.v2e.state.enforce_display_invariants` runs before a single byte is
+emitted — so a hand-assembled or field-replaced state that disagrees with itself raises
+:class:`~eth_research.v2e.status.DashboardStateError` instead of being rendered.
 """
 
 from __future__ import annotations
 
 import html
 
-from eth_research.v2e.state import REHEARSAL_BANNER, DashboardState
+from eth_research.v2e.state import (
+    REHEARSAL_BANNER,
+    DashboardState,
+    enforce_display_invariants,
+)
+from eth_research.v2e.status import labels_for, row_count_statement
 
 _CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
 
@@ -36,6 +51,8 @@ dt { color: #93a4b5; } dd { margin: 0; }
 .rehearsal { background: #332b16; border: 1px dashed #f0b35e; color: #f0b35e;
              padding: 0.5rem 0.75rem; border-radius: 0.6rem; margin: 0.75rem 0;
              font-weight: 600; text-align: center; }
+p.claim { margin: 0.1rem 0 0.4rem; font-size: 0.9rem; }
+p.detail { margin: 0 0 0.6rem; font-size: 0.85rem; color: #93a4b5; }
 ul { margin: 0.25rem 0 0; padding-left: 1.1rem; font-size: 0.88rem; }
 footer { color: #8d9aa8; font-size: 0.8rem; padding: 0.5rem 0.75rem 1.5rem; }
 @media (min-width: 700px) { dl { font-size: 0.95rem; } }
@@ -57,22 +74,59 @@ def _flag(value: bool, *, good_when: bool) -> str:
 
 
 def render_html(state: DashboardState, *, rehearsal: bool = False) -> str:
-    """Render the full dashboard page for one immutable state snapshot."""
+    """Render the full dashboard page for one immutable state snapshot.
+
+    Raises :class:`~eth_research.v2e.status.DashboardStateError` rather than emitting a
+    page whose surfaces disagree about acceptance.
+    """
+    enforce_display_invariants(state)
     s = state
     banner = f'<div class="rehearsal">{_e(REHEARSAL_BANNER)}</div>' if rehearsal else ""
+    # Every status string below is a lookup, never a computation: this renderer has no
+    # opinion about whether the proposal is accepted.
+    labels = labels_for(s.proposal.status)
     proposal_rows: list[tuple[str, str]]
     if s.proposal.configured:
+        accepted_identity = (
+            f"<code>{_e(s.proposal.accepted_manifest_sha256)}</code>"
+            if s.proposal.accepted_manifest_sha256 is not None
+            else _e(labels.accepted_manifest_absent)
+        )
         proposal_rows = [
-            ("Pending proposal", _e(s.proposal.proposal_id)),
+            (labels.identity_label, _e(s.proposal.proposal_id)),
             ("Branch", f"<code>{_e(s.proposal.proposal_branch)}</code>"),
-            ("Proposed rows (unmerged)", _e(s.proposal.proposed_row_count)),
-            ("New completed days", _e(s.proposal.new_completed_days)),
-            ("Proposed last open (unmerged)", _e(s.proposal.proposed_last_open)),
+            # Invariant 5: the accepted identity is the one the acceptance record pins;
+            # the identity of the bundle on disk is a separate, separately labelled row.
+            (labels.accepted_manifest_label, accepted_identity),
+            (labels.manifest_label, f"<code>{_e(s.proposal.manifest_sha256)}</code>"),
+            # Invariant 4: the two row counts only ever appear inside one statement that
+            # names their relationship, never as bare adjacent figures.
+            (
+                labels.rows_label,
+                _e(
+                    row_count_statement(
+                        s.proposal.status,
+                        accepted_rows=s.cohort.accepted_row_count,
+                        proposed_rows=int(s.proposal.proposed_row_count or 0),
+                        appended_rows=int(s.proposal.new_completed_days or 0),
+                    )
+                ),
+            ),
+            (labels.last_open_label, _e(s.proposal.proposed_last_open)),
             ("Append-only", _flag(bool(s.proposal.append_only), good_when=True)),
             ("Ancestry verified", _flag(bool(s.proposal.ancestry_verified), good_when=True)),
         ]
     else:
-        proposal_rows = [("Pending proposal", _e(s.proposal.detail))]
+        proposal_rows = []
+    # The one acceptance claim on the page, plus the one status detail sentence. Both
+    # come from the canonical table; enforce_display_invariants has already required
+    # them to agree with the heading, the badge and the timeline's terminal state.
+    proposal_banner = (
+        f'<p class="claim"><span class="badge {labels.badge_class}">{_e(labels.badge)}</span> '
+        f"{_e(labels.claim)}</p>"
+        f'<p class="detail">{_e(s.proposal.detail)}</p>'
+    )
+    proposal_table = _rows(proposal_rows) if proposal_rows else ""
 
     sealed_items = "".join(
         f"<li><code>{_e(name)}</code>: <span class='ok'>{_e(status)}</span></li>"
@@ -131,7 +185,7 @@ def render_html(state: DashboardState, *, rehearsal: bool = False) -> str:
         )
     }
 </section>
-<section>
+<section id="cohort">
 <h2>Prospective cohort (accepted on main)</h2>
 {
         _rows(
@@ -146,11 +200,18 @@ def render_html(state: DashboardState, *, rehearsal: bool = False) -> str:
                 ("Remaining observations", _e(s.cohort.remaining_rows)),
                 ("Maturity", f'<span class="blocked">{_e(s.cohort.maturity_state)}</span>'),
                 ("Evaluation authorized", _flag(s.cohort.evaluation_authorized, good_when=True)),
+                (
+                    "Accepted cohort fingerprint",
+                    f"<code>{_e(s.cohort.accepted_fingerprint)}</code>",
+                ),
             ]
         )
     }
-<h2 style="margin-top:0.8rem">Pending proposal (unmerged — NOT accepted)</h2>
-{_rows(proposal_rows)}
+</section>
+<section id="proposal">
+<h2>{_e(labels.heading)}</h2>
+{proposal_banner}
+{proposal_table}
 </section>
 <section>
 <h2>Acquisition health</h2>

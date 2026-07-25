@@ -55,6 +55,12 @@ from typing import Any
 
 from eth_research.m3d.chain import chained_line_bytes, load_and_verify_chain, render_ledger_bytes
 from eth_research.m3e import M3E_PACKAGE_VERSION
+from eth_research.m3e.proposal_authority import (
+    AUTHORITY_SCHEMA_VERSION,
+    AUTHORITY_TABLES,
+    derive_genesis_root,
+    require_derived_cache_matches,
+)
 from eth_research.m3e.validation import (
     M3EValidationError,
     canonical_json_bytes,
@@ -67,12 +73,6 @@ from eth_research.m3e.validation import (
     require_nonempty_str,
     require_sha256_hex,
     require_str,
-)
-from eth_research.v2e.proposal_authority import (
-    AUTHORITY_SCHEMA_VERSION,
-    AUTHORITY_TABLES,
-    derive_genesis_root,
-    require_derived_cache_matches,
 )
 
 ACCEPTANCE_REGISTRY_PATH = "research/m3e/acceptance_registry.jsonl"
@@ -297,7 +297,7 @@ def build_genesis_record(repo_root: str | Path) -> dict[str, Any]:
         "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
         "genesis_root": derive_genesis_root(Path(repo_root)),
         "note": (
-            "rooted in eth_research.v2e.proposal_authority: source-pinned constants "
+            "rooted in eth_research.m3e.proposal_authority: source-pinned constants "
             "plus authority-table bytes read from the trusted baseline commit, not "
             "from the mutable working tree"
         ),

@@ -27,6 +27,7 @@ from eth_research.v2e.state import (
     build_dashboard_state,
     to_status_document,
 )
+from eth_research.v2e.status import TIMELINE_LABEL, ProposalStatus, labels_for
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -206,9 +207,15 @@ class TestRendering:
     def test_accepted_and_proposed_states_are_distinguished(
         self, real_state: DashboardState
     ) -> None:
+        # Auditor C B-3: the proposal heading is no longer hard-coded copy — it is the
+        # canonical label for the canonical status, which without a checkout is "no
+        # local proposal", not "pending". tests/test_v2e_status.py covers the full
+        # status/label agreement over the rendered page.
         page = render_html(real_state)
         assert "accepted on main" in page
-        assert "unmerged — NOT accepted" in page
+        assert real_state.proposal.status is None
+        assert labels_for(None).heading in page
+        assert labels_for(ProposalStatus.PROPOSED).heading not in page
 
     def test_artifact_text_cannot_inject_markup(self, real_state: DashboardState) -> None:
         hostile = dataclasses.replace(
@@ -243,8 +250,8 @@ class TestRendering:
     ) -> None:
         # auditor-4 F5: without a checkout the timeline must not assert unverified
         # external PR state as fact.
-        labels = dict(real_state.timeline)
-        assert "not locally verified" in labels["Pending proposal"]
+        rows = dict(real_state.timeline)
+        assert "not locally verified" in rows[TIMELINE_LABEL]
 
     def test_no_fabricated_activity(self, real_state: DashboardState) -> None:
         page = render_html(real_state)
@@ -321,7 +328,8 @@ class TestProposalBundleIntegrity:
         state = build_dashboard_state(REPO_ROOT, proposal_checkout=self._REAL)
         accepted = verify_accepted_base(REPO_ROOT)
         # This proposal has been accepted, so its proposed state IS the accepted cohort.
-        assert state.proposal.accepted is True
+        assert state.proposal.status is ProposalStatus.ACCEPTED
+        assert state.proposal.accepted_manifest_sha256 == state.proposal.manifest_sha256
         assert state.proposal.proposed_row_count == accepted.row_count
         assert state.proposal.proposed_last_open == accepted.last_open
         assert state.proposal.new_completed_days == _ACCEPTED_APPEND_ROWS
