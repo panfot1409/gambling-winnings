@@ -55,6 +55,7 @@ from typing import Any
 
 from eth_research.m3d.chain import chained_line_bytes, load_and_verify_chain, render_ledger_bytes
 from eth_research.m3e import M3E_PACKAGE_VERSION
+from eth_research.m3e.commit_genealogy import verify_commit_genealogy
 from eth_research.m3e.proposal_authority import (
     AUTHORITY_SCHEMA_VERSION,
     AUTHORITY_TABLES,
@@ -1337,6 +1338,16 @@ def verify_acceptance_program(repo_root: str | Path, *, deep: bool = True) -> li
                 f"acceptance {entry.proposal_id}: file-set binding does not re-derive: {exc}"
             ) from exc
     record("A08_file_set_binding_rederives", f"proposals={len(chain)}")
+
+    # A09: the pinned commits' genealogy, stated as fifteen coded checks rather
+    # than the near-vacuous "is an ancestor of HEAD" (auditor B A-4: every commit
+    # is). Needs git, and says so loudly rather than skipping when it is absent —
+    # a shallow clone must fetch the objects, not shrug the check off.
+    if (root / ".git").exists():
+        genealogy = verify_commit_genealogy(root)
+        record("A09_commit_genealogy", f"checks={len(genealogy)}")
+    else:
+        record("A09_commit_genealogy", "no git repository: genealogy NOT verified")
     return checks
 
 

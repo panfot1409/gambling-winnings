@@ -272,6 +272,7 @@
     "src/eth_research/m3e/acquire_runner.py",
     "src/eth_research/m3e/acquisition.py",
     "src/eth_research/m3e/assembly.py",
+    "src/eth_research/m3e/commit_genealogy.py",
     "src/eth_research/m3e/comparison.py",
     "src/eth_research/m3e/cutoff.py",
     "src/eth_research/m3e/lease.py",
@@ -569,8 +570,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "21e55c12caadbe8586e58c649fcf7caf318aa58eee58f9eee39e56f439cce653",
-  "tracked_file_count": 1067,
+  "surface_digest": "ad7de59ee29397e82145da972c13347f32a72b6349667334279828cd82ee74be",
+  "tracked_file_count": 1070,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
