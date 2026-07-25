@@ -1,0 +1,2682 @@
+{
+  "head_under_test": "ecfa8e7607c9fd093ce9da2c4e78a82f9c9d41c0",
+  "kind": "m3e_acceptance_probe_truth_table",
+  "method": {
+    "attacker_strength": "the mutation is COMMITTED first (so the file-set policy's clean-tree precheck cannot shadow the invariant under test), then every seal the attacker can reach is regenerated with the project's own primitives \u2014 record pins, the file-set binding, both self-hashes, the registry chain, the recovery capsule and drill, and the Fable 5 governed surface \u2014 and the reseal is committed too",
+    "caught_definition": "the mutation is confirmed by git; a valid control passes; a reader refuses; and the refusal text contains the expected wording for the intended guard. A refusal by some other guard is recorded as REFUSED_BY_ANOTHER_GUARD, not as a catch.",
+    "isolation": "one disposable git clone per probe; the real worktree is never mutated",
+    "not_resealed": "the M3F freeze-catalog pins are the append-only historical baseline, not a seal; refreshing them is itself an attack and is probed as GOV-01. The M3F registration builder cannot run at this state at all: it reads blobs from source-freeze commit b7d24e82, which predates the growable cohort update.",
+    "readers": {
+      "m3f": "python -m eth_research.m3f.audit (compatibility path)",
+      "production": "eth_research.m3e.acceptance.verify_acceptance_program (library call)",
+      "public_entry": "python -m eth_research.m3e.acceptance --repo-root . check",
+      "stdlib": "tools/m3f_independent_verify.py (imports no eth_research)"
+    }
+  },
+  "parity": {
+    "accepted_by_m3f_refused_by_production": [
+      "DATA-01",
+      "GOV-02",
+      "PROV-04",
+      "ROOT-02"
+    ],
+    "accepted_by_production_refused_by_a_shadow_path": [
+      "GOV-01"
+    ],
+    "accepted_by_stdlib_refused_by_production": [
+      "DATA-01",
+      "DATA-02",
+      "DATA-03",
+      "GOV-02",
+      "PROV-04",
+      "ROOT-02"
+    ],
+    "note": "These are enforcement paths, not independent trust anchors: all four read the same repository. A row where one path accepts what another refuses is an implementation-coverage gap, recorded here as measured."
+  },
+  "provenance": "The earlier Auditor B 41-probe matrix was never persisted as machine-readable evidence. This table does not cite it; every row here was re-measured against the head named above. It supersedes any earlier probe count.",
+  "rows": [
+    {
+      "changed_bytes": {
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "",
+      "family": "control",
+      "governance_resealed": [],
+      "guard_deletion": [],
+      "intended_invariant": "n/a (valid state)",
+      "mutation": "no mutation at all",
+      "mutation_confirmed": false,
+      "notes": "the baseline every attack row is measured against",
+      "outcome": "CONTROL_PASSED",
+      "probe_id": "CTRL-01",
+      "reached_intended_guard": false,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "production": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "public_entry": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "files_changed": 2,
+        "lines_added": 2,
+        "lines_deleted": 2
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "",
+      "family": "control",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "n/a (valid state)",
+      "mutation": "lawful identity reseal: recompute every pin, the file-set binding, both self-hashes and the registry chain",
+      "mutation_confirmed": true,
+      "notes": "must be a byte-for-byte no-op, else the reseal machinery itself is what the attack rows would be measuring",
+      "outcome": "CONTROL_PASSED",
+      "probe_id": "CTRL-02",
+      "reached_intended_guard": false,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "production": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "public_entry": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "",
+      "family": "control",
+      "governance_resealed": [],
+      "guard_deletion": [],
+      "intended_invariant": "n/a (valid state)",
+      "mutation": "lawful accepted-growth fixture (M3F growable suite)",
+      "mutation_confirmed": false,
+      "notes": "",
+      "outcome": "CONTROL_PASSED",
+      "probe_id": "CTRL-03",
+      "reached_intended_guard": false,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "production": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "public_entry": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "",
+      "family": "control",
+      "governance_resealed": [],
+      "guard_deletion": [],
+      "intended_invariant": "n/a (valid state)",
+      "mutation": "lawful current proposal re-proves end to end",
+      "mutation_confirmed": false,
+      "notes": "",
+      "outcome": "CONTROL_PASSED",
+      "probe_id": "CTRL-04",
+      "reached_intended_guard": false,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "production": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "public_entry": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "",
+      "family": "control",
+      "governance_resealed": [],
+      "guard_deletion": [],
+      "intended_invariant": "n/a (valid state)",
+      "mutation": "lawful current accepted state loads and reconciles",
+      "mutation_confirmed": false,
+      "notes": "",
+      "outcome": "CONTROL_PASSED",
+      "probe_id": "CTRL-05",
+      "reached_intended_guard": false,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "production": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "public_entry": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 8,
+        "committed_deleted": 8,
+        "committed_files": 6,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "trusted baseline tree",
+      "family": "root",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [
+        {
+          "caught_instead_by": "",
+          "deletion_id": "D-M3F-ROOT",
+          "file": "src/eth_research/m3f/growable.py",
+          "guard_is_load_bearing": true,
+          "lines_removed": 1,
+          "owner_exit_after_deletion": 0,
+          "owning_reader": "m3f"
+        },
+        {
+          "caught_instead_by": "",
+          "deletion_id": "D-STD-ROOT",
+          "file": "tools/m3f_independent_verify.py",
+          "guard_is_load_bearing": true,
+          "lines_removed": 1,
+          "owner_exit_after_deletion": 0,
+          "owning_reader": "stdlib"
+        }
+      ],
+      "intended_invariant": "ROOT-01",
+      "mutation": "repoint TRUSTED_BASELINE_TREE at the proposal's own tree",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "ROOT-01",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: trusted baseline tree 35ed0d5b1570\u2026 != the pinned ef26510e41ac\u2026",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.commit_genealogy.CommitGenealogyError: GEN-07: trusted baseline has tree 35ed0d5b1570\u2026, source pins ef26510e41ac\u2026 (right commit id, wrong content)",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research.m3e.commit_genealogy.CommitGenealogyError: GEN-07: trusted baseline has tree 35ed0d5b1570\u2026, source pins ef26510e41ac\u2026 (right commit id, wrong content)",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: trusted baseline tree does not equal the pinned tree",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 10,
+        "committed_deleted": 8,
+        "committed_files": 6,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "trusted history says",
+      "family": "root",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "ROOT-03",
+      "mutation": "maximal re-root: rewrite BOTH authority tables, the registry genesis root, and every downstream seal",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "ROOT-02",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.proposal_authority.ProposalAuthorityError: genesis authority cache: working-tree docs/M3C_M3E_STACK_FREEZE_TABLE.json hashes d7da6be645a3aa58\u2026, but trusted history says d6805af08c7f68bc\u2026 (the derived cache disagrees with authority)",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research.m3e.proposal_authority.ProposalAuthorityError: genesis authority cache: working-tree docs/M3C_M3E_STACK_FREEZE_TABLE.json hashes d7da6be645a3aa58\u2026, but trusted history says d6805af08c7f68bc\u2026 (the derived cache disagrees with authority)",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 8,
+        "committed_deleted": 7,
+        "committed_files": 6,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "authority table",
+      "family": "root",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "ROOT-02",
+      "mutation": "rewrite an authority table and repoint its pinned digest in committed source",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "ROOT-03",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: authority table 'docs/M3C_M3E_STACK_FREEZE_TABLE.json' at ba2dcc1d63f2\u2026 hashes d6805af08c7f68bc\u2026, committed source pins 12054d0fcd5415ad\u2026",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.proposal_authority.ProposalAuthorityError: authority table 'docs/M3C_M3E_STACK_FREEZE_TABLE.json' at trusted commit ba2dcc1d63f2\u2026 hashes d6805af08c7f68bcbf5a50038dc9eac5b7be389ac205e43c0eaab6cc5f3d5e53, but source pins 12054d0fcd5415ad7f8514a0a71d5df0943c6acf3994b432c1b8d3c7185f3964 (trusted history and committed source disagree)",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research.m3e.proposal_authority.ProposalAuthorityError: authority table 'docs/M3C_M3E_STACK_FREEZE_TABLE.json' at trusted commit ba2dcc1d63f2\u2026 hashes d6805af08c7f68bcbf5a50038dc9eac5b7be389ac205e43c0eaab6cc5f3d5e53, but source pins 12054d0fcd5415ad7f8514a0a71d5df0943c6acf3994b432c1b8d3c7185f3964 (trusted history and committed source disagree)",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: authority table 'docs/M3C_M3E_STACK_FREEZE_TABLE.json' at the trusted commit does not hash to the digest committed source pins",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": true,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 3,
+        "committed_deleted": 3,
+        "committed_files": 3,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "baseline",
+      "family": "root",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "ROOT-01",
+      "mutation": "swap TRUSTED_BASELINE_COMMIT for the proposal head",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "ROOT-04",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: trusted baseline tree ef26510e41ac\u2026 != the pinned 35ed0d5b1570\u2026",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.proposal_authority.ProposalAuthorityError: accepted manifest at trusted commit hashes a3b9b522ed60b597a38c821e15ea8b5c776edc0d128381b854ac4c39ef3c14ac, source pins 24457fb92a300b28cf5343283be9d39772cd599ec16e641235fd9cc0bc1be4b4",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research.m3e.proposal_authority.ProposalAuthorityError: accepted manifest at trusted commit hashes a3b9b522ed60b597a38c821e15ea8b5c776edc0d128381b854ac4c39ef3c14ac, source pins 24457fb92a300b28cf5343283be9d39772cd599ec16e641235fd9cc0bc1be4b4",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: trusted baseline tree does not equal the pinned tree",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": true,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 12,
+        "committed_deleted": 12,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "certifies",
+      "family": "git",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [
+        {
+          "caught_instead_by": "",
+          "deletion_id": "D-BIND",
+          "file": "src/eth_research/m3e/acceptance.py",
+          "guard_is_load_bearing": true,
+          "lines_removed": 11,
+          "owner_exit_after_deletion": 0,
+          "owning_reader": "production"
+        }
+      ],
+      "intended_invariant": "BIND-01",
+      "mutation": "repoint proposal_head_commit at an unrelated real commit",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "GIT-01",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding certifies a different commit than the record's proposal_head_commit",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding certifies proposal_commit=779df6bb6c7a\u2026 but the record names proposal_head_commit=ced292cfcd6b\u2026",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding certifies proposal_commit=779df6bb6c7a\u2026 but the record names proposal_head_commit=ced292cfcd6b\u2026",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: binding certifies different commits than the record",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 12,
+        "committed_deleted": 12,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "not a 40-hex commit id",
+      "family": "git",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "GIT-01",
+      "mutation": "uppercase the pinned commit id",
+      "mutation_confirmed": true,
+      "notes": "GEN-08 states the same rule inside the genealogy checks, but the record loader's format check runs first and is what fires here; GEN-08 itself is probed directly in tests/test_m3e_commit_genealogy.py",
+      "outcome": "CAUGHT",
+      "probe_id": "GIT-02",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding certifies a different commit than the record's proposal_head_commit",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: proposal_head_commit is not a 40-hex commit id",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: proposal_head_commit is not a 40-hex commit id",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: binding certifies different commits than the record",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 13,
+        "committed_deleted": 13,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "not a 40-hex commit id",
+      "family": "git",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "GIT-01",
+      "mutation": "abbreviate the pinned commit id to 8 hex",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "GIT-03",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding certifies a different commit than the record's proposal_head_commit",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: proposal_head_commit is not a 40-hex commit id",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: proposal_head_commit is not a 40-hex commit id",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: binding certifies different commits than the record",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 13,
+        "committed_deleted": 13,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "not a 40-hex commit id",
+      "family": "git",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "GIT-01",
+      "mutation": "append revision syntax (^0) to the pinned commit id",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "GIT-04",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding certifies a different commit than the record's proposal_head_commit",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: proposal_head_commit is not a 40-hex commit id",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: proposal_head_commit is not a 40-hex commit id",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: binding certifies different commits than the record",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "shallow clone",
+      "family": "git",
+      "governance_resealed": [],
+      "guard_deletion": [],
+      "intended_invariant": "GIT-05",
+      "mutation": "truncate history with a .git/shallow marker",
+      "mutation_confirmed": false,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "GIT-05",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: shallow clone \u2014 ancestry answers are computed over truncated history; fetch --unshallow before verifying",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: proposal_head_commit 779df6bb6c7a\u2026 is not an ancestor of HEAD",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: proposal_head_commit 779df6bb6c7a\u2026 is not an ancestor of HEAD",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: shallow clone \u2014 ancestry is computed over truncated history",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "graft file fabricates parentage",
+      "family": "git",
+      "governance_resealed": [],
+      "guard_deletion": [
+        {
+          "caught_instead_by": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding does not re-derive: parent_commit ba2dcc1d63f2 is not an ancestor of head_commit 779df6bb6c7a",
+          "deletion_id": "D-A09",
+          "file": "src/eth_research/m3e/acceptance.py",
+          "guard_is_load_bearing": false,
+          "lines_removed": 5,
+          "owner_exit_after_deletion": 1,
+          "owning_reader": "production"
+        }
+      ],
+      "intended_invariant": "GIT-05",
+      "mutation": "fabricate parentage with .git/info/grafts",
+      "mutation_confirmed": false,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "GIT-06",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: a graft file fabricates parentage",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding does not re-derive: parent_commit ba2dcc1d63f2 is not an ancestor of head_commit 779df6bb6c7a",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding does not re-derive: parent_commit ba2dcc1d63f2 is not an ancestor of head_commit 779df6bb6c7a",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: a graft file fabricates parentage",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "GEN-04",
+      "family": "git",
+      "governance_resealed": [],
+      "guard_deletion": [],
+      "intended_invariant": "GIT-05",
+      "mutation": "substitute the pinned commit via refs/replace",
+      "mutation_confirmed": false,
+      "notes": "",
+      "outcome": "REFUSED_BY_ANOTHER_GUARD",
+      "probe_id": "GIT-07",
+      "reached_intended_guard": false,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: path outside the allowed roots: CONTRIBUTING.md",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: proposal_head_commit 779df6bb6c7a\u2026 is not an ancestor of HEAD",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: proposal_head_commit 779df6bb6c7a\u2026 is not an ancestor of HEAD",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: path outside allowed roots: CONTRIBUTING.md",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 13,
+        "committed_deleted": 13,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "does not carry",
+      "family": "git",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "GIT-04/PROV-01",
+      "mutation": "swap parent and child so the proposal precedes its baseline",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "GIT-08",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding certifies a different commit than the record's proposal_head_commit",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: proposal head ba2dcc1d63f2\u2026 does not carry research/m3e/proposals/20260715-20260724-315846f9ec5196b4/proposal_manifest.json (the recorded commit did not introduce this proposal)",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: proposal head ba2dcc1d63f2\u2026 does not carry research/m3e/proposals/20260715-20260724-315846f9ec5196b4/proposal_manifest.json (the recorded commit did not introduce this proposal)",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: binding certifies different commits than the record",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 18,
+        "committed_deleted": 12,
+        "committed_files": 6,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "names paths out",
+      "family": "file",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [
+        {
+          "caught_instead_by": "eth_research.m3e.acceptance.AcceptanceError: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "deletion_id": "D-A08b",
+          "file": "src/eth_research/m3e/acceptance.py",
+          "guard_is_load_bearing": false,
+          "lines_removed": 6,
+          "owner_exit_after_deletion": 1,
+          "owning_reader": "production"
+        }
+      ],
+      "intended_invariant": "FILE-01/FILE-03",
+      "mutation": "commit a smuggled member into the m3d bundle and pin it",
+      "mutation_confirmed": true,
+      "notes": "the policy refuses to MINT a binding for an illegal member set, so the attacker cannot even construct the seal; all four readers then refuse the unresealed record",
+      "outcome": "CAUGHT",
+      "probe_id": "FILE-01",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance_sha256 self-hash mismatch",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": true,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 9,
+        "committed_deleted": 11,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "undeclared members",
+      "family": "file",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "FILE-01/FILE-03",
+      "mutation": "omit a legal member from the pinned set",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "FILE-02",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance_sha256 self-hash mismatch",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": true,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 13,
+        "committed_deleted": 13,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "file-set binding",
+      "family": "file",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "FILE-02",
+      "mutation": "swap the raw and governance role digests in the binding",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "FILE-03",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding disagrees with git at 'governance_member_paths_sha256' (record='2e3c52ec72a3eba9525d4e52aeb1cf387d6f5d48e743eae82c3a662ad57a5d3f', derived='a2d38d17932f3cc8384c73716352487f796e6de3b7875bf0297347f8e49d92c0')",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding does not re-derive: acceptance record file-set binding disagrees with git at 'governance_member_paths_sha256': record='2e3c52ec72a3eba9525d4e52aeb1cf387d6f5d48e743eae82c3a662ad57a5d3f' derived='a2d38d17932f3cc8384c73716352487f796e6de3b7875bf0297347f8e49d92c0'",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding does not re-derive: acceptance record file-set binding disagrees with git at 'governance_member_paths_sha256': record='2e3c52ec72a3eba9525d4e52aeb1cf387d6f5d48e743eae82c3a662ad57a5d3f' derived='a2d38d17932f3cc8384c73716352487f796e6de3b7875bf0297347f8e49d92c0'",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding disagrees with git at 'governance_member_paths_sha256' (record='2e3c52ec72a3eba9525d4e52aeb1cf387d6f5d48e743eae82c3a662ad57a5d3f', derived='a2d38d17932f3cc8384c73716352487f796e6de3b7875bf0297347f8e49d92c0')",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 12,
+        "committed_deleted": 12,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "file-set binding",
+      "family": "file",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [
+        {
+          "caught_instead_by": "",
+          "deletion_id": "D-A08",
+          "file": "src/eth_research/m3e/acceptance.py",
+          "guard_is_load_bearing": true,
+          "lines_removed": 6,
+          "owner_exit_after_deletion": 0,
+          "owning_reader": "production"
+        },
+        {
+          "caught_instead_by": "",
+          "deletion_id": "D-M3F-FILESET",
+          "file": "src/eth_research/m3f/growable.py",
+          "guard_is_load_bearing": true,
+          "lines_removed": 1,
+          "owner_exit_after_deletion": 0,
+          "owning_reader": "m3f"
+        },
+        {
+          "caught_instead_by": "",
+          "deletion_id": "D-STD-FILESET",
+          "file": "tools/m3f_independent_verify.py",
+          "guard_is_load_bearing": true,
+          "lines_removed": 1,
+          "owner_exit_after_deletion": 0,
+          "owning_reader": "stdlib"
+        }
+      ],
+      "intended_invariant": "FILE-03",
+      "mutation": "widen allowed_member_count from 19 to 25",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "FILE-04",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding disagrees with git at 'allowed_member_count' (record=25, derived=19)",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding does not re-derive: acceptance record file-set binding disagrees with git at 'allowed_member_count': record=25 derived=19",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding does not re-derive: acceptance record file-set binding disagrees with git at 'allowed_member_count': record=25 derived=19",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding disagrees with git at 'allowed_member_count' (record=25, derived=19)",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 13,
+        "committed_deleted": 12,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "file-set binding",
+      "family": "file",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "FILE-03",
+      "mutation": "add an unknown field to the file-set binding",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "FILE-05",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding carries unknown field(s): ['attacker_escape_hatch']",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding does not re-derive: acceptance record file-set binding carries unknown field(s): ['attacker_escape_hatch']",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: file-set binding does not re-derive: acceptance record file-set binding carries unknown field(s): ['attacker_escape_hatch']",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: binding carries unknown field(s): ['attacker_escape_hatch']",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 15,
+        "committed_deleted": 9,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "closed set",
+      "family": "file",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "FILE-04",
+      "mutation": "smuggle an unpinned file into the accepted proposal directory",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "FILE-06",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: proposal directory is not a closed set",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: accepted proposal directory is not a closed set: unpinned=['research/m3e/proposals/20260715-20260724-315846f9ec5196b4/attacker_note.json'], missing=[]",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: accepted proposal directory is not a closed set: unpinned=['research/m3e/proposals/20260715-20260724-315846f9ec5196b4/attacker_note.json'], missing=[]",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: accepted proposal directory 20260715-20260724-315846f9ec5196b4 is not a closed set",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 9,
+        "committed_deleted": 10,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "hash chain",
+      "family": "chain",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "CHAIN-01",
+      "mutation": "delete the registry genesis line",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "CHAIN-01",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance registry hash chain is broken",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: ledger line 0 breaks the hash chain",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: ledger line 0 breaks the hash chain",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance chain broken",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 9,
+        "committed_deleted": 9,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "hash chain",
+      "family": "chain",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "CHAIN-01/CHAIN-03",
+      "mutation": "reverse the registry line order",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "CHAIN-02",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance registry hash chain is broken",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: ledger line 0 breaks the hash chain",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: ledger line 0 breaks the hash chain",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance chain broken",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 10,
+        "committed_deleted": 9,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "hash chain",
+      "family": "chain",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "CHAIN-03",
+      "mutation": "duplicate the final registry line",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "CHAIN-03",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance registry hash chain is broken",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: ledger line 2 breaks the hash chain",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: ledger line 2 breaks the hash chain",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance chain broken",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 10,
+        "committed_deleted": 9,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "twice",
+      "family": "chain",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "CHAIN-03",
+      "mutation": "append a correctly re-chained SECOND acceptance of the same proposal",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "CHAIN-04",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: proposal 20260715-20260724-315846f9ec5196b4 accepted twice",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: proposal 20260715-20260724-315846f9ec5196b4 accepted twice",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: proposal 20260715-20260724-315846f9ec5196b4 accepted twice",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: duplicate acceptance",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 9,
+        "committed_deleted": 9,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": false,
+      "expected_error_text": "hash chain",
+      "family": "chain",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "CHAIN-01",
+      "mutation": "re-chain the registry from an attacker-chosen seed",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "CHAIN-05",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance registry hash chain is broken",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: ledger line 0 breaks the hash chain",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: ledger line 0 breaks the hash chain",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance chain broken",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 14,
+        "committed_deleted": 14,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "row",
+      "family": "data",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "DATA-03",
+      "mutation": "relabel prior 3->1 and new 12->10, keeping both the row arithmetic and the day span consistent",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "DATA-01",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance chain head disagrees with the committed accepted base on 'row_count' (record=10, base=12)",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance chain head disagrees with the committed accepted base on 'row_count' (record=10, base=12)",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 18,
+        "committed_deleted": 18,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "span",
+      "family": "data",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [
+        {
+          "caught_instead_by": "",
+          "deletion_id": "D-M3F-SPAN",
+          "file": "src/eth_research/m3f/growable.py",
+          "guard_is_load_bearing": true,
+          "lines_removed": 1,
+          "owner_exit_after_deletion": 0,
+          "owning_reader": "m3f"
+        }
+      ],
+      "intended_invariant": "DATA-02",
+      "mutation": "the louder relabel: prior 3->1 AND appended 9->11",
+      "mutation_confirmed": true,
+      "notes": "recorded by the earlier audit as accepted by all three readers",
+      "outcome": "CAUGHT",
+      "probe_id": "DATA-01b",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: append window spans 9 day(s) but claims 11 appended row(s)",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: append window [2026-07-15T00:00:00Z, 2026-07-23T00:00:00Z] spans 9 day(s) but claims 11 appended row(s)",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: append window [2026-07-15T00:00:00Z, 2026-07-23T00:00:00Z] spans 9 day(s) but claims 11 appended row(s)",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: append window spans 9 day(s) but claims 11 appended row(s)",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 16,
+        "committed_deleted": 17,
+        "committed_files": 8,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "rebuilt manifest",
+      "family": "data",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "DATA-03",
+      "mutation": "delete a settled row from the cohort and reseal",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "DATA-02",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "08_semantic_oracles: m3e_base_binds_upstream: M3FValidationError: m3e base provenance segment_chain_sha256 does not match committed research/m3d/prospective_segments.jsonl | 10_recovery_drill: committed recovery drill record does not report full success",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: committed cohort manifest does not match the rebuilt manifest",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: committed cohort manifest does not match the rebuilt manifest",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 16,
+        "committed_deleted": 16,
+        "committed_files": 8,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "rebuilt manifest",
+      "family": "data",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "DATA-03",
+      "mutation": "change a prior row while claiming prior_rows_changed == 0",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "DATA-03",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "08_semantic_oracles: m3e_base_binds_upstream: M3FValidationError: m3e base provenance manifest_sha256 does not match committed research/m3d/prospective_manifest.json | 10_recovery_drill: committed recovery drill record does not report full success",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: committed cohort manifest does not match the rebuilt manifest",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: committed cohort manifest does not match the rebuilt manifest",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 16,
+        "committed_deleted": 16,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "row arithmetic",
+      "family": "data",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "DATA-01",
+      "mutation": "claim 40 rows in a 9-day append window",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "DATA-04",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: row arithmetic is false or claims maturity",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: row arithmetic is false (3 + 40 != 12)",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: row arithmetic is false (3 + 40 != 12)",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: row arithmetic false or claims maturity",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 15,
+        "committed_deleted": 15,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "byte-identical",
+      "family": "data",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "DATA-04",
+      "mutation": "attest two runners with divergent raw payload digests",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "DATA-05",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: runners are missing or not byte-identical",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance record does not attest two runners with byte-identical payloads",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance record does not attest two runners with byte-identical payloads",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: attested runner payloads are not byte-identical",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 7,
+        "committed_deleted": 13,
+        "committed_files": 3,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "created evidence",
+      "family": "data",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "DATA-05/STATE-02",
+      "mutation": "delete pinned created evidence and drop its pin",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "DATA-06",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: created evidence research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4/coinbase-eth-usd-1d-update_0000_20260715_20260724.json is missing",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4/coinbase-eth-usd-1d-update_0000_20260715_20260724.json: not a regular committed file",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4/coinbase-eth-usd-1d-update_0000_20260715_20260724.json: not a regular committed file",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: created evidence research/m3d/raw/coinbase/coinbase-eth-usd-prospective-update-20260715-20260723-315846f9ec5196b4/coinbase-eth-usd-1d-update_0000_20260715_20260724.json is missing or irregular",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": true,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 10,
+        "committed_deleted": 18,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "state",
+      "family": "state",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "STATE-01",
+      "mutation": "empty the new_accepted.state map so it asserts nothing",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "STATE-01",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance_sha256 self-hash mismatch",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": true,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 9,
+        "committed_deleted": 11,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "state",
+      "family": "state",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "STATE-01",
+      "mutation": "drop one of the six transitioned state paths",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "STATE-02",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance record 20260715-20260724-315846f9ec5196b4: self-hash does not match its content",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance_sha256 self-hash mismatch",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": true,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 5,
+        "committed_deleted": 4,
+        "committed_files": 2,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "sealed ledger",
+      "family": "safe",
+      "governance_resealed": [
+        "fable5_build_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "SAFE-01",
+      "mutation": "write a line into a sealed evaluation ledger",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "SAFE-01",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: HARD STOP: sealed ledger research/m3d/prospective_evaluations.jsonl is non-empty",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: prospective evaluation ledger must be byte-empty (HARD STOP)",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: prospective evaluation ledger must be byte-empty (HARD STOP)",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "02_sealed_ledgers_byte_empty: research/m3d/prospective_evaluations.jsonl: expected byte-empty, got 20 bytes | 07_freeze_catalog_rehash: research/m3d/prospective_evaluations.jsonl: working-tree bytes do not match the catalogued SHA-256",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 16,
+        "committed_deleted": 16,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "flag",
+      "family": "safe",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "SAFE-02",
+      "mutation": "flip governance flag strategy_evaluated to true",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "SAFE-02",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: governance flag strategy_evaluated is not exactly False",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: governance flag strategy_evaluated set",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: governance flag strategy_evaluated set",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: governance flag strategy_evaluated is set",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 15,
+        "committed_deleted": 16,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "flag",
+      "family": "safe",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [
+        {
+          "caught_instead_by": "",
+          "deletion_id": "D-M3F-FLAGKEYS",
+          "file": "src/eth_research/m3f/growable.py",
+          "guard_is_load_bearing": true,
+          "lines_removed": 1,
+          "owner_exit_after_deletion": 0,
+          "owning_reader": "m3f"
+        }
+      ],
+      "intended_invariant": "SAFE-02",
+      "mutation": "delete the money_moved governance flag key",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "SAFE-03",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: governance_flags keys ['candidate_declared', 'performance_metrics_computed', 'promotion_decision_exists', 'strategy_evaluated'] != required ['candidate_declared', 'money_moved', 'performance_metrics_computed', 'promotion_decision_exists', 'strategy_evaluated']",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: governance_flags keys ['candidate_declared', 'performance_metrics_computed', 'promotion_decision_exists', 'strategy_evaluated'] != required ['candidate_declared', 'money_moved', 'performance_metrics_computed', 'promotion_decision_exists', 'strategy_evaluated']",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: governance_flags keys ['candidate_declared', 'performance_metrics_computed', 'promotion_decision_exists', 'strategy_evaluated'] != required ['candidate_declared', 'money_moved', 'performance_metrics_computed', 'promotion_decision_exists', 'strategy_evaluated']",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: governance_flags keys ['candidate_declared', 'performance_metrics_computed', 'promotion_decision_exists', 'strategy_evaluated'] != required ['candidate_declared', 'money_moved', 'performance_metrics_computed', 'promotion_decision_exists', 'strategy_evaluated']",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 16,
+        "committed_deleted": 16,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "evaluation",
+      "family": "safe",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "SAFE-03",
+      "mutation": "set evaluation_authorized to true",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "SAFE-04",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4 claims evaluation authority",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: record.evaluation_authorized must be exactly False, got True",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: record.evaluation_authorized must be exactly False, got True",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: record authorizes evaluation",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 17,
+        "committed_deleted": 17,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "matur",
+      "family": "safe",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "SAFE-03",
+      "mutation": "claim maturity_state=mature with row_count 400",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "SAFE-05",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: row arithmetic is false or claims maturity",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: record.maturity_state must be exactly 'immature', got 'mature'",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: record.maturity_state must be exactly 'immature', got 'mature'",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: row arithmetic false or claims maturity",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 15,
+        "committed_deleted": 14,
+        "committed_files": 8,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "manifest",
+      "family": "prov",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [
+        {
+          "caught_instead_by": "",
+          "deletion_id": "D-M3F-PROV",
+          "file": "src/eth_research/m3f/growable.py",
+          "guard_is_load_bearing": true,
+          "lines_removed": 1,
+          "owner_exit_after_deletion": 0,
+          "owning_reader": "m3f"
+        },
+        {
+          "caught_instead_by": "",
+          "deletion_id": "D-STD-PROV",
+          "file": "tools/m3f_independent_verify.py",
+          "guard_is_load_bearing": true,
+          "lines_removed": 1,
+          "owner_exit_after_deletion": 0,
+          "owning_reader": "stdlib"
+        }
+      ],
+      "intended_invariant": "PROV-01",
+      "mutation": "rewrite the proposal manifest on disk and repin it",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "PROV-01",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: the manifest at commit 779df6bb6c7a\u2026 hashes b276334cc1b8a639\u2026, the record pins 3300fed9d0478777\u2026",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: proposal manifest_sha256 does not match its content",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: proposal manifest_sha256 does not match its content",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: the manifest at commit 779df6bb6c7a\u2026 does not hash to the digest the record pins for it",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 15,
+        "committed_deleted": 15,
+        "committed_files": 7,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "before its own append window",
+      "family": "prov",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "PROV-02",
+      "mutation": "backdate acceptance_time inside the append window",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "PROV-02",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: acceptance_time is outside the lawful window",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: accepted at 2026-07-16T00:00:00Z before its own append window closed at 2026-07-23T00:00:00Z",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: acceptance 20260715-20260724-315846f9ec5196b4: accepted at 2026-07-16T00:00:00Z before its own append window closed at 2026-07-23T00:00:00Z",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance_time is outside the lawful window",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 7,
+        "committed_deleted": 7,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "publication_commit",
+      "family": "prov",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "PROV-03",
+      "mutation": "name a publication commit that does not exist",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "PROV-03",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "01_honest_state_invariants: acceptance 20260715-20260724-315846f9ec5196b4: publication commit 23da73e43b6e\u2026 is not an ancestor of HEAD",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: publication_commit 23da73e43b6e\u2026 is not an ancestor of HEAD",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: publication_commit 23da73e43b6e\u2026 is not an ancestor of HEAD",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "09_acceptance_chain: acceptance 20260715-20260724-315846f9ec5196b4: publication commit 23da73e43b6e\u2026 is not an ancestor of HEAD",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 12,
+        "committed_deleted": 6,
+        "committed_files": 5,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "without an acceptance record",
+      "family": "prov",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "PROV-04",
+      "mutation": "create a second production proposal no acceptance covers",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "PROV-04",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research.m3e.acceptance.AcceptanceError: production proposal(s) present without an acceptance record (illegal, fail closed): ['20260101-20260102-deadbeefdeadbeef']",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "AcceptanceError: production proposal(s) present without an acceptance record (illegal, fail closed): ['20260101-20260102-deadbeefdeadbeef']",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 14,
+        "committed_deleted": 8,
+        "committed_files": 3,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "prefix",
+      "family": "gov",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "M3F-CATALOG (outside the acceptance invariant catalog)",
+      "mutation": "refresh the frozen catalog's pins to today's bytes, erasing the append-only baseline",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "GOV-01",
+      "reached_intended_guard": true,
+      "resealed_fields": [],
+      "results": {
+        "m3f": {
+          "exit": 1,
+          "message": "04_freeze_catalog: freeze catalog verification failed: 03_artifact_hash: research/m3d/prospective_segments.jsonl: append-only check failed: pinned baseline drifted from the catalog; 03_artifact_hash: research/m3e/proposal_registry.jsonl: append-only check failed: pinned baseline drifted from the catalog",
+          "verdict": "REFUSED"
+        },
+        "production": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "public_entry": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "stdlib": {
+          "exit": 1,
+          "message": "07_freeze_catalog_rehash: research/m3d/prospective_segments.jsonl: catalogued baseline is not an exact prefix (append-only violated)",
+          "verdict": "REFUSED"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    },
+    {
+      "changed_bytes": {
+        "committed_added": 16,
+        "committed_deleted": 15,
+        "committed_files": 8,
+        "files_changed": 0,
+        "lines_added": 0,
+        "lines_deleted": 0
+      },
+      "coordinated_reseal": true,
+      "expected_error_text": "accepted_base",
+      "family": "gov",
+      "governance_resealed": [
+        "fable5_build_exit",
+        "fable5_freeze-build_exit",
+        "capsule_reseal_exit"
+      ],
+      "guard_deletion": [],
+      "intended_invariant": "DATA-03",
+      "mutation": "edit research/m3e/accepted_base.json and repin it everywhere",
+      "mutation_confirmed": true,
+      "notes": "",
+      "outcome": "CAUGHT",
+      "probe_id": "GOV-02",
+      "reached_intended_guard": true,
+      "resealed_fields": [
+        "pins",
+        "binding",
+        "self_hashes",
+        "registry"
+      ],
+      "results": {
+        "m3f": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        },
+        "production": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: committed accepted_base.json does not match the rebuild",
+          "verdict": "REFUSED"
+        },
+        "public_entry": {
+          "exit": 1,
+          "message": "eth_research._json.StrictJSONError: committed accepted_base.json does not match the rebuild",
+          "verdict": "REFUSED"
+        },
+        "stdlib": {
+          "exit": 0,
+          "message": "",
+          "verdict": "PASS"
+        }
+      },
+      "seal_could_not_be_minted": false,
+      "valid_control_passed": true
+    }
+  ],
+  "schema_version": 1,
+  "totals": {
+    "accepted_by_all_readers": 0,
+    "attacks": 43,
+    "caught": 42,
+    "controls": 5,
+    "controls_passed": 5,
+    "guard_deletions_load_bearing": 10,
+    "guard_deletions_run": 12,
+    "refused_by_another_guard": 1,
+    "rows": 48
+  }
+}
