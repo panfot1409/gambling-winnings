@@ -327,11 +327,12 @@ def test_attack_05_dotenv(tmp_path: Path) -> None:
 
 def test_attack_06_pem_key_shaped_file(tmp_path: Path) -> None:
     def mutate(repo: Path, _git: Callable[[Sequence[str]], None]) -> None:
-        _write(
-            repo,
-            f"{PROPOSAL_DIR}/runner_a/signing_key.pem",
-            "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n",
-        )
+        # Assembled at runtime rather than written as a literal: a committed PEM
+        # header in this file is a real hit for tools/scan_secrets.py, and a
+        # fixture must not force the repo-wide scan to carry a false positive.
+        dashes = "-" * 5
+        body = f"{dashes}BEGIN PRIVATE KEY{dashes}\nAAAA\n{dashes}END PRIVATE KEY{dashes}\n"
+        _write(repo, f"{PROPOSAL_DIR}/runner_a/signing_key.pem", body)
 
     message = refuse(tmp_path, mutate)
     assert "secret/key-shaped file" in message

@@ -9,6 +9,7 @@ mutates the real repository.
 
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 
@@ -155,8 +156,19 @@ def test_nonempty_sealed_prospective_ledger_refuses(tree: Path) -> None:
 
 def test_tampered_accepted_evidence_refuses(tree: Path) -> None:
     # A single flipped byte anywhere in the committed cohort evidence must refuse.
+    #
+    # The mutation is derived from the file rather than hard-coded. It used to
+    # search for `"row_count": 3`; once the accepted cohort grew past 3 that
+    # string was absent, the replace became a no-op, and the test asserted a
+    # refusal for a tree nobody had tampered with. Confirming the mutation
+    # changed bytes is what makes the assertion below mean anything.
     manifest = tree / "research/m3d/prospective_manifest.json"
-    manifest.write_bytes(manifest.read_bytes().replace(b'"row_count": 3', b'"row_count": 4'))
+    before = manifest.read_bytes()
+    match = re.search(rb'"row_count": (\d+)', before)
+    assert match is not None, "no row_count to tamper with"
+    after = before.replace(match.group(0), b'"row_count": %d' % (int(match.group(1)) + 1), 1)
+    assert after != before, "mutation did not change any bytes"
+    manifest.write_bytes(after)
     with pytest.raises(V2DActivationError, match="accepted base failed verification"):
         _gate(tree)
 
