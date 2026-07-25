@@ -1331,6 +1331,24 @@ def verify_acceptance_program(repo_root: str | Path, *, deep: bool = True) -> li
         binding = require_mapping(
             f"{entry.proposal_id}.file_set_binding", entry.record.get("file_set_binding")
         )
+        # The binding re-derives from ITS OWN commit pins, so it proves nothing about
+        # the record unless those pins are the record's. Without this, repointing
+        # proposal_head_commit at any other commit that happens to carry the same
+        # proposal manifest passes every remaining check: the binding still
+        # re-derives (from the untouched original commits) and A06's "carries the
+        # proposal" test still succeeds. Measured as probe GIT-01, where both shadow
+        # readers refused and this path did not.
+        for field, bound in (
+            ("expected_parent_commit", "proposal_parent_commit"),
+            ("proposal_head_commit", "proposal_commit"),
+        ):
+            want = require_str(f"{entry.proposal_id}.{field}", entry.record.get(field))
+            got = require_str(f"{entry.proposal_id}.binding.{bound}", binding.get(bound))
+            if got != want:
+                raise AcceptanceError(
+                    f"acceptance {entry.proposal_id}: file-set binding certifies "
+                    f"{bound}={got[:12]}… but the record names {field}={want[:12]}…"
+                )
         try:
             verify_record_binding(root, binding, proposal_id=entry.proposal_id)
         except ProposalFilePolicyError as exc:

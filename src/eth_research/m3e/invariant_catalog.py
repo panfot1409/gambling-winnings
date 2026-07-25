@@ -99,7 +99,12 @@ CATALOG: Final[tuple[Invariant, ...]] = (
         "ROOT-03",
         "working-tree copies of the authority tables are treated as derived caches "
         "and verified one way, from history to disk, never consulted as authority",
-        _ALL,
+        _P,
+        gap="only the production path compares the working-tree copies against the "
+        "bytes at the trusted commit. Both shadow paths derive the root from history "
+        "and simply never read the working-tree copies, which is safe but means "
+        "neither NOTICES a rewritten cache. Measured as probe ROOT-02: the maximal "
+        "re-root is refused by production alone.",
     ),
     # --- git identity and genealogy ---------------------------------------
     Invariant(
@@ -260,7 +265,22 @@ CATALOG: Final[tuple[Invariant, ...]] = (
         "PROV-04",
         "every created production proposal is covered by exactly one acceptance and "
         "every acceptance covers a created proposal — neither set may exceed the other",
+        _P,
+        gap="only the production path enumerates the proposals directory. Both shadow "
+        "paths verify the acceptances they are handed and never ask whether an "
+        "uncovered proposal also exists. Measured as probe PROV-04: an unaccepted "
+        "second proposal is refused by production alone.",
+    ),
+    # --- binding identity ---------------------------------------------------
+    Invariant(
+        "BIND-01",
+        "the file-set binding's own commit pins are exactly the record's commit pins, "
+        "so the binding certifies the proposal the record actually names",
         _ALL,
+        # Closed on the production path in response to probe GIT-01, which both
+        # shadow paths refused and production did not: the binding re-derives from
+        # its own pins, so without this check a record could name a different commit
+        # and still verify.
     ),
 )
 
