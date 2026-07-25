@@ -37,6 +37,47 @@ from eth_research.v2e.status import TIMELINE_LABEL, ProposalStatus, labels_for, 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# The proposal bundle these tests exercise lives at a pinned commit in this
+# repository's own history, so it is materialised from committed evidence rather
+# than assumed to be lying around in /tmp.
+#
+# This matters more than convenience. The path used to be a hard-coded
+# ``/tmp/claude-0/v2e-proposal-checkout``; where it did not exist -- CI, a fresh
+# clone, any other machine -- every load-bearing B-2 test SKIPPED silently. Tests
+# that vanish in the environment you most need them in are not evidence, which is
+# the same failure family the B-2 finding itself is about.
+_PROPOSAL_CHECKOUT_CACHE: dict[str, Path] = {}
+
+
+def _materialise_proposal_checkout(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A read-only worktree of the pinned proposal commit, built from git."""
+    import subprocess
+
+    from eth_research.m3e.proposal_authority import EXPECTED_PROPOSAL_HEAD
+
+    cached = _PROPOSAL_CHECKOUT_CACHE.get(EXPECTED_PROPOSAL_HEAD)
+    if cached is not None:
+        return cached
+    if not (REPO_ROOT / ".git").exists():
+        pytest.skip("git history is required to materialise the proposal checkout")
+    dest = tmp_path_factory.mktemp("proposal-checkout") / "bundle"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--shared", "--no-checkout", str(REPO_ROOT), str(dest)],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(dest), "checkout", "--quiet", "--detach", EXPECTED_PROPOSAL_HEAD],
+        check=True,
+    )
+    _PROPOSAL_CHECKOUT_CACHE[EXPECTED_PROPOSAL_HEAD] = dest
+    return dest
+
+
+@pytest.fixture(scope="session")
+def proposal_checkout(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return _materialise_proposal_checkout(tmp_path_factory)
+
+
 # The append width the accepted proposal carried. Unlike the cohort row count (which
 # grows with every acceptance), this is a fixed property of that one landed proposal.
 _ACCEPTED_APPEND_ROWS = 9
@@ -228,14 +269,14 @@ class TestProposalCheckout:
         with pytest.raises(DashboardStateError, match=r"proposal_manifest|stale or wrong-parent"):
             build_dashboard_state(m3a_checkout, proposal_checkout=checkout)
 
-    def test_tampered_runner_comparison_refuses(self, tmp_path: Path) -> None:
+    def test_tampered_runner_comparison_refuses(
+        self, tmp_path: Path, proposal_checkout: Path
+    ) -> None:
         # auditor-4 F3: the two-runner byte-agreement claim must be READ from the
         # bundle's comparison record, so a falsified record refuses the build.
         import shutil
 
-        source = Path("/tmp/claude-0/v2e-proposal-checkout")
-        if not source.is_dir():
-            pytest.skip("real proposal checkout not present in this environment")
+        source = proposal_checkout
         checkout = tmp_path / "tampered"
         shutil.copytree(source / "research", checkout / "research")
         pdir = next((checkout / "research/m3e/proposals").iterdir())
@@ -316,15 +357,11 @@ class TestRendering:
 class TestProposalBundleIntegrity:
     """Auditor-1 HIGH-1/MED-4/MED-5: the self-hashed manifest is the sole authority."""
 
-    _REAL = Path("/tmp/claude-0/v2e-proposal-checkout")
-
-    def _copy_real(self, tmp_path: Path) -> Path:
+    def _copy_real(self, tmp_path: Path, proposal_checkout: Path) -> Path:
         import shutil
 
-        if not self._REAL.is_dir():
-            pytest.skip("real proposal checkout not present in this environment")
         checkout = tmp_path / "checkout"
-        shutil.copytree(self._REAL / "research", checkout / "research")
+        shutil.copytree(proposal_checkout / "research", checkout / "research")
         return checkout
 
     def test_skeleton_manifest_without_valid_self_hash_refuses(self, tmp_path: Path) -> None:
@@ -348,8 +385,10 @@ class TestProposalBundleIntegrity:
         with pytest.raises(DashboardStateError, match="proposal_manifest"):
             build_dashboard_state(REPO_ROOT, proposal_checkout=tmp_path / "c")
 
-    def test_side_file_diverging_from_manifest_refuses(self, tmp_path: Path) -> None:
-        checkout = self._copy_real(tmp_path)
+    def test_side_file_diverging_from_manifest_refuses(
+        self, tmp_path: Path, proposal_checkout: Path
+    ) -> None:
+        checkout = self._copy_real(tmp_path, proposal_checkout)
         pdir = next((checkout / "research/m3e/proposals").iterdir())
         transition = pdir / "update_transition.json"
         doc = json.loads(transition.read_text("utf-8"))
@@ -358,8 +397,8 @@ class TestProposalBundleIntegrity:
         with pytest.raises(DashboardStateError, match="disagrees with the self-hashed"):
             build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
-    def test_symlinked_proposals_dir_refuses(self, tmp_path: Path) -> None:
-        checkout = self._copy_real(tmp_path)
+    def test_symlinked_proposals_dir_refuses(self, tmp_path: Path, proposal_checkout: Path) -> None:
+        checkout = self._copy_real(tmp_path, proposal_checkout)
         proposals = checkout / "research/m3e/proposals"
         real = checkout / "research/m3e/proposals_real"
         proposals.rename(real)
@@ -367,18 +406,18 @@ class TestProposalBundleIntegrity:
         with pytest.raises(DashboardStateError, match="symlink"):
             build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
-    def test_symlinked_proposal_entry_refuses(self, tmp_path: Path) -> None:
-        checkout = self._copy_real(tmp_path)
+    def test_symlinked_proposal_entry_refuses(
+        self, tmp_path: Path, proposal_checkout: Path
+    ) -> None:
+        checkout = self._copy_real(tmp_path, proposal_checkout)
         proposals = checkout / "research/m3e/proposals"
         entry = next(proposals.iterdir())
         (proposals / "evil-twin").symlink_to(entry.name)
         with pytest.raises(DashboardStateError, match="symlinked proposal entry"):
             build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
-    def test_real_bundle_still_verifies(self) -> None:
-        if not self._REAL.is_dir():
-            pytest.skip("real proposal checkout not present in this environment")
-        state = build_dashboard_state(REPO_ROOT, proposal_checkout=self._REAL)
+    def test_real_bundle_still_verifies(self, proposal_checkout: Path) -> None:
+        state = build_dashboard_state(REPO_ROOT, proposal_checkout=proposal_checkout)
         # This proposal has been accepted, so its proposed state IS the accepted cohort.
         #
         # Auditor C finding B-2: the row-count and last-open lines here used to restate
@@ -418,15 +457,13 @@ class TestAcceptedProposalAnchoring:
     acceptance record, and the result must equal the accepted base on disk.
     """
 
-    _REAL = Path("/tmp/claude-0/v2e-proposal-checkout")
-
-    def _tampered(self, tmp_path: Path, mutate: Callable[[dict[str, Any]], None]) -> Path:
+    def _tampered(
+        self, tmp_path: Path, proposal_checkout: Path, mutate: Callable[[dict[str, Any]], None]
+    ) -> Path:
         import shutil
 
-        if not self._REAL.is_dir():
-            pytest.skip("real proposal checkout not present in this environment")
         checkout = tmp_path / "checkout"
-        shutil.copytree(self._REAL / "research", checkout / "research")
+        shutil.copytree(proposal_checkout / "research", checkout / "research")
         pdir = next((checkout / "research/m3e/proposals").iterdir())
         manifest_path = pdir / "proposal_manifest.json"
         doc = json.loads(manifest_path.read_text("utf-8"))
@@ -444,7 +481,9 @@ class TestAcceptedProposalAnchoring:
         transition_path.write_text(json.dumps(side, sort_keys=True, indent=2) + "\n", "utf-8")
         return checkout
 
-    def test_a_substituted_bundle_is_not_reported_as_accepted(self, tmp_path: Path) -> None:
+    def test_a_substituted_bundle_is_not_reported_as_accepted(
+        self, tmp_path: Path, proposal_checkout: Path
+    ) -> None:
         """Audit finding A-1: the proposal directory NAME is not identity.
 
         Keep the directory name and every anchor the accepted branch compares, change
@@ -457,11 +496,13 @@ class TestAcceptedProposalAnchoring:
         def mutate(doc: dict[str, Any]) -> None:
             doc["proposal_branch"] = "bot/m3e-prospective-update/ATTACKER-CONTROLLED"
 
-        checkout = self._tampered(tmp_path, mutate)
+        checkout = self._tampered(tmp_path, proposal_checkout, mutate)
         with pytest.raises(DashboardStateError, match="not the artifact this acceptance record"):
             build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
-    def test_reparenting_onto_the_post_acceptance_base_refuses(self, tmp_path: Path) -> None:
+    def test_reparenting_onto_the_post_acceptance_base_refuses(
+        self, tmp_path: Path, proposal_checkout: Path
+    ) -> None:
         # The forgery a loose "matches the current accepted base" rule would wave
         # through: re-point the landed proposal at the base its own acceptance produced.
         # Identity is bound before any anchor is consulted, so re-sealing the manifest
@@ -472,11 +513,13 @@ class TestAcceptedProposalAnchoring:
             doc["accepted_base_sha256"] = accepted.base_sha256
             doc["accepted_base_fingerprint"] = accepted.canonical_content_fingerprint
 
-        checkout = self._tampered(tmp_path, mutate)
+        checkout = self._tampered(tmp_path, proposal_checkout, mutate)
         with pytest.raises(DashboardStateError, match="not the artifact this acceptance record"):
             build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
-    def test_result_that_is_not_the_accepted_cohort_refuses(self, tmp_path: Path) -> None:
+    def test_result_that_is_not_the_accepted_cohort_refuses(
+        self, tmp_path: Path, proposal_checkout: Path
+    ) -> None:
         # Internally consistent arithmetic (old + new == proposed) that nonetheless
         # lands on a cohort the repository never accepted. Also caught at identity.
         def mutate(doc: dict[str, Any]) -> None:
@@ -485,11 +528,13 @@ class TestAcceptedProposalAnchoring:
             transition["proposed_row_count"] = int(transition["proposed_row_count"]) + 1
             doc["transition"] = transition
 
-        checkout = self._tampered(tmp_path, mutate)
+        checkout = self._tampered(tmp_path, proposal_checkout, mutate)
         with pytest.raises(DashboardStateError, match="not the artifact this acceptance record"):
             build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
-    def test_side_file_divergence_from_the_pinned_transition_refuses(self, tmp_path: Path) -> None:
+    def test_side_file_divergence_from_the_pinned_transition_refuses(
+        self, tmp_path: Path, proposal_checkout: Path
+    ) -> None:
         """The anchor comparisons stay load-bearing even with a genuine manifest.
 
         Here the self-hashed manifest is untouched (so identity passes) and only the
@@ -497,10 +542,8 @@ class TestAcceptedProposalAnchoring:
         """
         import shutil
 
-        if not self._REAL.is_dir():
-            pytest.skip("real proposal checkout not present in this environment")
         checkout = tmp_path / "checkout"
-        shutil.copytree(self._REAL / "research", checkout / "research")
+        shutil.copytree(proposal_checkout / "research", checkout / "research")
         pdir = next((checkout / "research/m3e/proposals").iterdir())
         path = pdir / "update_transition.json"
         side = json.loads(path.read_text("utf-8"))
@@ -509,15 +552,15 @@ class TestAcceptedProposalAnchoring:
         with pytest.raises(DashboardStateError):
             build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
-    def test_an_unaccepted_proposal_still_uses_the_pending_rule(self, tmp_path: Path) -> None:
+    def test_an_unaccepted_proposal_still_uses_the_pending_rule(
+        self, tmp_path: Path, proposal_checkout: Path
+    ) -> None:
         # Renaming the proposal directory takes it out of the acceptance chain, so the
         # pending rule applies again and its pre-acceptance parent is now wrong.
         import shutil
 
-        if not self._REAL.is_dir():
-            pytest.skip("real proposal checkout not present in this environment")
         checkout = tmp_path / "checkout"
-        shutil.copytree(self._REAL / "research", checkout / "research")
+        shutil.copytree(proposal_checkout / "research", checkout / "research")
         proposals = checkout / "research/m3e/proposals"
         next(proposals.iterdir()).rename(proposals / "20990101-20990102-deadbeefdeadbeef")
         with pytest.raises(DashboardStateError, match="accepted base committed in this repository"):
@@ -537,13 +580,6 @@ class TestAcceptedProposalEqualsTheAcceptedCohort:
     touching the repository or re-sealing anything in the bundle.
     """
 
-    _REAL = Path("/tmp/claude-0/v2e-proposal-checkout")
-
-    def _require_checkout(self) -> Path:
-        if not self._REAL.is_dir():
-            pytest.skip("real proposal checkout not present in this environment")
-        return self._REAL
-
     def _forged_base(self, **overrides: Any) -> AcceptedProspectiveBase:
         """The real verified base with exactly the named field(s) changed.
 
@@ -559,15 +595,19 @@ class TestAcceptedProposalEqualsTheAcceptedCohort:
         )
         return AcceptedProspectiveBase(document=doc)
 
-    def test_control_the_unmutated_base_reports_the_bundle_accepted(self) -> None:
+    def test_control_the_unmutated_base_reports_the_bundle_accepted(
+        self, proposal_checkout: Path
+    ) -> None:
         """The control: with nothing mutated the same call succeeds."""
-        checkout = self._require_checkout()
+        checkout = proposal_checkout
         panel = _proposal_panel(REPO_ROOT, verify_accepted_base(REPO_ROOT), checkout)
         assert panel.status is ProposalStatus.ACCEPTED
         assert panel.ancestry_verified is True
 
-    def test_a_row_count_that_is_not_the_accepted_cohort_refuses(self) -> None:
-        checkout = self._require_checkout()
+    def test_a_row_count_that_is_not_the_accepted_cohort_refuses(
+        self, proposal_checkout: Path
+    ) -> None:
+        checkout = proposal_checkout
         real = verify_accepted_base(REPO_ROOT)
         forged = self._forged_base(row_count=real.row_count + 1)
         # The mutation changed the intended field, and only that field.
@@ -581,8 +621,10 @@ class TestAcceptedProposalEqualsTheAcceptedCohort:
         ):
             _proposal_panel(REPO_ROOT, forged, checkout)
 
-    def test_a_last_open_that_is_not_the_accepted_cohort_refuses(self) -> None:
-        checkout = self._require_checkout()
+    def test_a_last_open_that_is_not_the_accepted_cohort_refuses(
+        self, proposal_checkout: Path
+    ) -> None:
+        checkout = proposal_checkout
         real = verify_accepted_base(REPO_ROOT)
         forged = self._forged_base(last_open="2027-01-01T00:00:00Z")
         assert forged.last_open == "2027-01-01T00:00:00Z"

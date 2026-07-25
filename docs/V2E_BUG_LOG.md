@@ -146,3 +146,45 @@ so the check is load-bearing rather than shadowed.
 Read the refusal, confirm it names the mechanism under test, and prove it by
 removing that mechanism and watching the probe succeed. Exit codes measure
 plumbing; refusal messages and mutants measure the guard.
+
+---
+
+## Reconciliation R-1 — stale open-item labels, and one real defect behind them
+
+**Class:** process finding plus one Class C defect (fixed).
+
+Two findings (C B-3 canonical dashboard status, C B-2 vacuous assertions) were
+carried as "open" in a progress report after earlier commits had reported them
+closed. Neither account was taken on trust; both were verified from committed
+history and by guard-deletion mutants.
+
+| Finding | Fixing commit | Production guard today | Regression test | Guard-deletion mutant | Actual status |
+| --- | --- | --- | --- | --- | --- |
+| C B-3 canonical status | `0d77cf1` (`src/eth_research/v2e/status.py`) | one `StatusLabels` table; heading, badge, claim, detail and timeline all read from it | `test_v2e_status.py` (36), `test_v2e_dashboard.py` (41) | swap the ACCEPTED and PROPOSED `detail` sentences across records → 3 tests FAIL | **CLOSED, load-bearing** |
+| C B-2 vacuous assertions | `0d77cf1` and predecessors | `_proposal_panel` both-ends pin, `src/eth_research/v2e/state.py` | `TestAcceptedProposalEqualsTheAcceptedCohort` | delete the row-count and last-open comparisons → FAIL | **CLOSED, load-bearing** |
+
+Neither fix was lost or torn by the concurrent-writer collision (P-1): all
+sources import, all commits from `47c9d65` forward are ancestors of HEAD, and
+the tree is formatted.
+
+**A first mutant said "vacuous" and was wrong.** The B-3 mutant initially matched
+the first two ``detail="..."`` strings in the file, which are the ``detail`` and
+``timeline_detail`` of the *same* ``_PROPOSED`` record — an intra-record shuffle
+that changes nothing the tests assert. Recorded here because it is P-2 exactly:
+the mutation must be confirmed to be the intended one before its result means
+anything. The corrected cross-record swap fails three tests.
+
+### The real defect the reconciliation surfaced (Class C, fixed)
+
+Every load-bearing B-2 test resolved the proposal bundle through a hard-coded
+`/tmp/claude-0/v2e-proposal-checkout` and called `pytest.skip` when it was
+absent. On this machine the path happened to exist, so the tests ran and looked
+like evidence. Anywhere else — CI, a fresh clone, another operator — they
+**skipped silently**, and a skipped load-bearing test proves nothing precisely
+where proof matters most. That is the same shape as the findings it was meant to
+close: an assertion that cannot fail.
+
+Fixed forward: a session fixture materialises the bundle from the pinned proposal
+commit in this repository's own history (`git clone --shared` + detached
+checkout). Verified in a fresh clone with no `/tmp` checkout present: 41 passed,
+0 skipped.
