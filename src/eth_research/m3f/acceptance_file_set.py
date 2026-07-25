@@ -38,6 +38,7 @@ from typing import Any, Final
 from eth_research.m3f.validation import (
     M3FValidationError,
     canonical_json_bytes,
+    load_canonical_json,
     require_mapping,
     require_str,
 )
@@ -375,9 +376,118 @@ def verify_record_file_set(
     return expected
 
 
+def verify_record_provenance(
+    repo_root: str | Path,
+    record: Mapping[str, Any],
+    completion: Mapping[str, Any],
+    *,
+    proposal_id: str,
+) -> None:
+    """Genealogy and provenance the shadow paths CAN state without source pins.
+
+    Catalog invariants GIT-04, GIT-05, PROV-01 and PROV-03. None of these needs
+    the M3E source constants: the commits come from the record (they are its
+    identity, already bound into the chain), and everything else is re-derived
+    from git. Keeping them here rather than only in ``eth_research.m3e`` is what
+    stops each from being one implementation defect away from unenforced.
+
+    What still cannot live here: ROOT-01..03 (the pins are M3E source constants
+    this package may not import) and DATA-03 (re-measuring the prior rows needs
+    the M3E row reconstruction). Those stay single-path, and the catalog says so.
+    """
+    root = Path(repo_root)
+    parent = _require_commit(
+        f"{proposal_id}.expected_parent_commit", record.get("expected_parent_commit")
+    )
+    head = _require_commit(
+        f"{proposal_id}.proposal_head_commit", record.get("proposal_head_commit")
+    )
+
+    # GIT-05: an answer about ancestry is only as good as the history it is
+    # computed over. Truncated, grafted or replaced history is refused outright.
+    if _git(root, ["rev-parse", "--is-shallow-repository"]).decode().strip() == "true":
+        raise M3FValidationError(
+            f"acceptance {proposal_id}: shallow clone — ancestry answers are computed "
+            "over truncated history; fetch --unshallow before verifying"
+        )
+    git_dir = Path(_git(root, ["rev-parse", "--git-dir"]).decode().strip())
+    resolved = git_dir if git_dir.is_absolute() else root / git_dir
+    if (resolved / "info" / "grafts").exists():
+        raise M3FValidationError(f"acceptance {proposal_id}: a graft file fabricates parentage")
+    replaced = set(_git(root, ["replace", "--list"]).decode("utf-8", "replace").split())
+    hijacked = sorted(replaced & {parent, head})
+    if hijacked:
+        raise M3FValidationError(
+            f"acceptance {proposal_id}: refs/replace substitutes pinned object(s) {hijacked}"
+        )
+
+    # GIT-04: exactly one parent, exactly the one the record names.
+    line = _git(root, ["rev-list", "--parents", "-n", "1", head]).decode("ascii").strip().split()
+    if not line or line[0] != head:
+        raise M3FValidationError(f"acceptance {proposal_id}: could not resolve the head's parents")
+    parents = tuple(line[1:])
+    if parents != (parent,):
+        raise M3FValidationError(
+            f"acceptance {proposal_id}: proposal head has parents {[p[:12] for p in parents]}, "
+            f"the record names {parent[:12]}… as its sole parent"
+        )
+
+    # PROV-01: the head must CARRY this proposal's manifest, byte for byte.
+    # Ancestry alone admits any unrelated commit; membership in the file set says
+    # the path is legal, not that its bytes are the ones the record pins.
+    #
+    # Two distinct digests, easy to confuse and checked separately: the record's
+    # `created` map pins the manifest's BLOB digest, while the top-level
+    # `proposal_manifest_sha256` is the manifest's own internal self-hash field.
+    # Binding only one would leave the other free.
+    manifest_path = f"research/m3e/proposals/{proposal_id}/proposal_manifest.json"
+    blob = _git(root, ["cat-file", "-p", f"{head}:{manifest_path}"])
+    created = require_mapping(
+        require_mapping(record.get("new_accepted"), f"{proposal_id}.new_accepted").get("created"),
+        f"{proposal_id}.new_accepted.created",
+    )
+    pinned_blob = require_str(created.get(manifest_path), f"{proposal_id}.created[manifest]")
+    digest = hashlib.sha256(blob).hexdigest()
+    if digest != pinned_blob:
+        raise M3FValidationError(
+            f"acceptance {proposal_id}: the manifest at commit {head[:12]}… hashes "
+            f"{digest[:16]}…, the record pins {pinned_blob[:16]}…"
+        )
+    document = require_mapping(
+        load_canonical_json(blob, f"{proposal_id} proposal manifest"),
+        f"{proposal_id} proposal manifest",
+    )
+    recorded = require_str(
+        record.get("proposal_manifest_sha256"), f"{proposal_id}.proposal_manifest_sha256"
+    )
+    if require_str(document.get("manifest_sha256"), "manifest.manifest_sha256") != recorded:
+        raise M3FValidationError(
+            f"acceptance {proposal_id}: the manifest's own self-hash at commit {head[:12]}… "
+            f"is not the {recorded[:16]}… the record attests"
+        )
+
+    # PROV-03: the publication commit must be real and behind HEAD.
+    publication = _require_commit(
+        f"{proposal_id}.publication_commit", completion.get("publication_commit")
+    )
+    for label, commit in (("proposal head", head), ("publication commit", publication)):
+        if _git_status(root, ["merge-base", "--is-ancestor", commit, "HEAD"]) != 0:
+            raise M3FValidationError(
+                f"acceptance {proposal_id}: {label} {commit[:12]}… is not an ancestor of HEAD"
+            )
+
+
+def _git_status(repo_root: Path, argv: list[str]) -> int:
+    """A predicate git call: exit status only."""
+    return subprocess.run(
+        ["git", "-C", str(repo_root), *argv], capture_output=True, timeout=_GIT_TIMEOUT
+    ).returncode
+
+
 __all__ = [
     "EXPECTED_BINDING_SCHEMA_VERSION",
     "EXPECTED_POLICY_ID",
     "derive_binding",
     "verify_record_file_set",
+    "verify_record_provenance",
 ]

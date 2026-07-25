@@ -41,6 +41,7 @@ import hashlib
 import json
 import math
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -448,8 +449,6 @@ _GOVERNANCE_ROLE_SET = frozenset({"transitioned_state", "update_attempts_ledger"
 
 
 def _git_out(root: Path, argv: list[str]) -> bytes:
-    import subprocess  # local: keeps the stdlib-only surface obvious at the call site
-
     proc = subprocess.run(  # fixed argv, never a shell string
         ["git", "-C", str(root), *argv], capture_output=True, timeout=120, check=False
     )
@@ -653,6 +652,122 @@ def _check_file_set_binding(root: Path, record: dict[str, Any], proposal_id: str
     _require(not unknown, f"acceptance {proposal_id}: binding carries unknown field(s): {unknown}")
 
 
+_GOVERNANCE_FLAG_KEYS = frozenset(
+    {
+        "candidate_declared",
+        "money_moved",
+        "performance_metrics_computed",
+        "promotion_decision_exists",
+        "strategy_evaluated",
+    }
+)
+
+
+def _utc_day_span(proposal_id: str, first_open: str, last_open: str) -> int:
+    """Inclusive whole-day span of [first_open, last_open], both UTC midnights.
+
+    Written with plain arithmetic rather than a date library, so this tool's
+    answer is not the same code path as either packaged implementation."""
+    import datetime as _dt
+
+    parsed: list[_dt.datetime] = []
+    for label, value in (("first_open", first_open), ("last_open", last_open)):
+        try:
+            moment = _dt.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_dt.UTC)
+        except ValueError as exc:
+            raise IndependentVerifyError(
+                f"acceptance {proposal_id}: {label} {value!r} is not a UTC instant"
+            ) from exc
+        _require(
+            (moment.hour, moment.minute, moment.second) == (0, 0, 0),
+            f"acceptance {proposal_id}: {label} {value!r} is not a UTC midnight",
+        )
+        parsed.append(moment)
+    days = (parsed[1] - parsed[0]).days
+    _require(days >= 0, f"acceptance {proposal_id}: append window runs backwards")
+    return days + 1
+
+
+def _check_record_provenance(
+    root: Path, record: dict[str, Any], completion: dict[str, Any], proposal_id: str
+) -> None:
+    """Catalog GIT-04, GIT-05, PROV-01 and PROV-03, from git and the record alone."""
+    parent = str(record.get("expected_parent_commit", ""))
+    head = str(record.get("proposal_head_commit", ""))
+
+    # GIT-05: an ancestry answer is only as good as the history behind it.
+    _require(
+        _git_out(root, ["rev-parse", "--is-shallow-repository"]).decode().strip() != "true",
+        f"acceptance {proposal_id}: shallow clone — ancestry is computed over truncated history",
+    )
+    git_dir = Path(_git_out(root, ["rev-parse", "--git-dir"]).decode().strip())
+    resolved = git_dir if git_dir.is_absolute() else root / git_dir
+    _require(
+        not (resolved / "info" / "grafts").exists(),
+        f"acceptance {proposal_id}: a graft file fabricates parentage",
+    )
+    replaced = set(_git_out(root, ["replace", "--list"]).decode("utf-8", "replace").split())
+    hijacked = sorted(replaced & {parent, head})
+    _require(
+        not hijacked,
+        f"acceptance {proposal_id}: refs/replace substitutes pinned object(s) {hijacked}",
+    )
+
+    # GIT-04: exactly one parent, exactly the one the record names.
+    line = _git_out(root, ["rev-list", "--parents", "-n", "1", head]).decode("ascii").split()
+    _require(bool(line) and line[0] == head, f"acceptance {proposal_id}: unresolvable head parents")
+    parents = tuple(line[1:])
+    _require(
+        parents == (parent,),
+        f"acceptance {proposal_id}: proposal head has parents {[p[:12] for p in parents]}, "
+        f"the record names {parent[:12]}… as its sole parent",
+    )
+
+    # PROV-01: the head must carry this proposal's manifest, byte for byte. The
+    # blob digest and the manifest's own self-hash field are different values and
+    # are bound separately, so neither is left free.
+    manifest_path = f"research/m3e/proposals/{proposal_id}/proposal_manifest.json"
+    blob = _git_out(root, ["cat-file", "-p", f"{head}:{manifest_path}"])
+    created = dict(dict(record.get("new_accepted") or {}).get("created") or {})
+    _require(
+        _sha256(blob) == str(created.get(manifest_path)),
+        f"acceptance {proposal_id}: the manifest at commit {head[:12]}… does not hash to "
+        "the digest the record pins for it",
+    )
+    document = _loads(blob.decode("utf-8"))
+    _require(isinstance(document, dict), f"acceptance {proposal_id}: manifest is not an object")
+    _require(
+        document.get("manifest_sha256") == record.get("proposal_manifest_sha256"),
+        f"acceptance {proposal_id}: the manifest's own self-hash is not the one the record attests",
+    )
+
+    # PROV-03: the publication commit must be real and behind HEAD.
+    publication = str(completion.get("publication_commit", ""))
+    for label, commit in (("proposal head", head), ("publication commit", publication)):
+        _require(
+            bool(re.fullmatch(r"[0-9a-f]{40}", commit)),
+            f"acceptance {proposal_id}: {label} is not a full 40-hex commit id",
+        )
+        proc = subprocess.run(
+            [
+                "git",
+                "--no-replace-objects",
+                "-C",
+                str(root),
+                "merge-base",
+                "--is-ancestor",
+                commit,
+                "HEAD",
+            ],
+            capture_output=True,
+            timeout=120,
+        )
+        _require(
+            proc.returncode == 0,
+            f"acceptance {proposal_id}: {label} {commit[:12]}… is not an ancestor of HEAD",
+        )
+
+
 def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
     """Independent chain walk: every created production proposal must be covered
     by a verified acceptance record and the tree must equal the chain-head state."""
@@ -812,10 +927,30 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
                 live_set == pinned_set,
                 f"accepted proposal directory {proposal_id} is not a closed set",
             )
+        # Catalog SAFE-02: the KEY SET, then the values. Iterating whatever is
+        # present lets a reseal delete the map wholesale and assert nothing.
+        _require(
+            frozenset(str(k) for k in flags) == _GOVERNANCE_FLAG_KEYS,
+            f"acceptance {proposal_id}: governance_flags keys {sorted(flags)} != "
+            f"required {sorted(_GOVERNANCE_FLAG_KEYS)}",
+        )
+        # Catalog DATA-02: the window must span exactly as many days as it claims
+        # rows. old + appended == new constrains only counts the forger controls.
+        interval = dict(record.get("append_interval") or {})
+        span = _utc_day_span(
+            proposal_id, str(interval.get("first_open")), str(interval.get("last_open"))
+        )
+        _require(
+            span == appended,
+            f"acceptance {proposal_id}: append window spans {span} day(s) but claims "
+            f"{appended} appended row(s)",
+        )
         # Third, separately written derivation of the record's closed file set,
-        # straight from git objects. See _rederive_file_set_binding.
+        # straight from git objects, plus the genealogy and provenance this tool
+        # can state without the M3E source pins (GIT-04, GIT-05, PROV-01, PROV-03).
         if (root / ".git").exists():
             _check_file_set_binding(root, record, proposal_id)
+            _check_record_provenance(root, record, completion, proposal_id)
         accepted.append(proposal_id)
         expected = new_state
     _require(

@@ -275,6 +275,7 @@
     "src/eth_research/m3e/commit_genealogy.py",
     "src/eth_research/m3e/comparison.py",
     "src/eth_research/m3e/cutoff.py",
+    "src/eth_research/m3e/invariant_catalog.py",
     "src/eth_research/m3e/lease.py",
     "src/eth_research/m3e/orchestrator.py",
     "src/eth_research/m3e/proposal.py",
@@ -570,8 +571,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "ad7de59ee29397e82145da972c13347f32a72b6349667334279828cd82ee74be",
-  "tracked_file_count": 1070,
+  "surface_digest": "cb55d10a2a7e440f931e0e66f3726231d2a6e6c386bba42ba283a2b0f0dab443",
+  "tracked_file_count": 1071,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,

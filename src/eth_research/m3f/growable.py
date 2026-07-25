@@ -28,11 +28,15 @@ it verifies.
 from __future__ import annotations
 
 import dataclasses
+import datetime as dt
 import hashlib
 from pathlib import Path
 from typing import Any
 
-from eth_research.m3f.acceptance_file_set import verify_record_file_set
+from eth_research.m3f.acceptance_file_set import (
+    verify_record_file_set,
+    verify_record_provenance,
+)
 from eth_research.m3f.validation import (
     M3FValidationError,
     canonical_json_bytes,
@@ -142,6 +146,41 @@ ACCEPTANCE_REGISTRY_RELPATH = "research/m3e/acceptance_registry.jsonl"
 ACCEPTANCES_ROOT_RELPATH = "research/m3e/acceptances"
 _ACCEPTANCE_RECORD_PREFIX = b"m3d/m3e/proposal_acceptance_record\n"
 _ACCEPTANCE_COMPLETION_PREFIX = b"m3d/m3e/proposal_acceptance_completion\n"
+
+#: The five safety attestations, as an exact key set. Pinning the SET matters:
+#: iterating whatever happens to be present lets a reseal delete the map and
+#: assert nothing at all (catalog invariant SAFE-02).
+ACCEPTANCE_GOVERNANCE_FLAGS: frozenset[str] = frozenset(
+    {
+        "candidate_declared",
+        "money_moved",
+        "performance_metrics_computed",
+        "promotion_decision_exists",
+        "strategy_evaluated",
+    }
+)
+
+
+def _utc_day_span(proposal_id: str, first_open: str, last_open: str) -> int:
+    """Inclusive whole-day span of [first_open, last_open], both UTC midnights."""
+    parsed = []
+    for label, value in (("first_open", first_open), ("last_open", last_open)):
+        try:
+            moment = dt.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.UTC)
+        except ValueError as exc:
+            raise M3FValidationError(
+                f"acceptance {proposal_id}: {label} {value!r} is not a UTC instant"
+            ) from exc
+        if (moment.hour, moment.minute, moment.second) != (0, 0, 0):
+            raise M3FValidationError(
+                f"acceptance {proposal_id}: {label} {value!r} is not a UTC midnight"
+            )
+        parsed.append(moment)
+    delta = (parsed[1] - parsed[0]).days
+    if delta < 0:
+        raise M3FValidationError(f"acceptance {proposal_id}: append window runs backwards")
+    return delta + 1
+
 
 #: Pre-existing cohort files every acceptance transitions (old -> new byte pins).
 ACCEPTANCE_TRANSITIONED_PATHS: tuple[str, ...] = (
@@ -373,6 +412,32 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
         # exactly this check — the same limit the ancestry checks already carry.
         if (root / ".git").exists():
             verify_record_file_set(root, record, proposal_id=proposal_id)
+        # DATA-02: a daily cohort spanning [first_open, last_open] has exactly that
+        # many days. Without this the window could be widened while the row count
+        # stayed put, because old + appended == new constrains only counts.
+        span = _utc_day_span(
+            proposal_id,
+            require_str(interval.get("first_open"), "append_interval.first_open"),
+            require_str(interval.get("last_open"), "append_interval.last_open"),
+        )
+        if span != appended:
+            raise M3FValidationError(
+                f"acceptance {proposal_id}: append window spans {span} day(s) but claims "
+                f"{appended} appended row(s)"
+            )
+        # SAFE-02: the KEY SET first. Iterating whatever is present lets a reseal
+        # delete the map wholesale and assert nothing at all.
+        flags = require_mapping(record.get("governance_flags"), "governance_flags")
+        if frozenset(str(k) for k in flags) != ACCEPTANCE_GOVERNANCE_FLAGS:
+            raise M3FValidationError(
+                f"acceptance {proposal_id}: governance_flags keys {sorted(flags)} != "
+                f"required {sorted(ACCEPTANCE_GOVERNANCE_FLAGS)}"
+            )
+        for name, value in flags.items():
+            if value is not False:
+                raise M3FValidationError(
+                    f"acceptance {proposal_id}: governance flag {name} is not exactly False"
+                )
         # Two runners, byte-identical payloads, re-derived from the pinned hashes.
         runners = require_mapping(record.get("runner_evidence"), "runner_evidence")
         raw_sets = set()
@@ -435,6 +500,12 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
             or completion.get("proposal_id") != proposal_id
         ):
             raise M3FValidationError(f"completion {proposal_id} does not bind its record")
+        # GIT-04/GIT-05/PROV-01/PROV-03: parentage, unsubstituted history, the head
+        # actually carrying this proposal's manifest, and the publication commit
+        # being real and behind HEAD. Deferred to here because it needs the
+        # completion as well as the record.
+        if (root / ".git").exists():
+            verify_record_provenance(root, record, completion, proposal_id=proposal_id)
         accepted.append(proposal_id)
         expected = new_state
         for path, sha in require_mapping(new_accepted.get("created"), "created").items():
