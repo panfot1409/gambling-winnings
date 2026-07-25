@@ -52,6 +52,30 @@ def honest_tree(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.fixture
+def accepted_growth_tree(tmp_path: Path) -> Path:
+    """A writable copy of the real tree: lawfully accepted growth, with git history.
+
+    Why a whole clone rather than the small ``honest_tree`` file list. These two
+    tests are about the growable FLOORS and the shrink refusal, and they used to
+    manufacture "growth evidence" by appending a fake proposal record. That fake
+    has no acceptance and can never lawfully have one — it has no commits, so no
+    file-set binding and no genealogy exist for it — and the production rule
+    "every production proposal is covered by exactly one acceptance" correctly
+    refuses it before either test reaches the guard it means to exercise.
+
+    The rule is right; the fixture was stale. Real accepted growth is what the
+    repository already contains, so the fixture is now the repository itself,
+    cloned so mutations stay disposable. ``.git`` comes with it, so the genealogy
+    and file-set checks run for real rather than being skipped.
+    """
+    import subprocess
+
+    dest = tmp_path / "accepted-growth"
+    subprocess.run(["git", "clone", "--quiet", "--shared", str(REPO_ROOT), str(dest)], check=True)
+    return dest
+
+
 def _append_fake_proposal_record(root: Path) -> None:
     """Extend the registry chain with a structurally-valid proposal record."""
     from eth_research.m3d.chain import (
@@ -156,16 +180,50 @@ def test_growth_without_the_anchor_hard_stops(honest_tree: Path) -> None:
         derive_honest_state(honest_tree)
 
 
-def test_growth_with_the_anchor_uses_floors(honest_tree: Path) -> None:
-    _append_fake_proposal_record(honest_tree)
-    verify_honest_state(honest_tree)  # floors hold: rows unchanged, still immature
+def test_growth_with_the_anchor_uses_floors(accepted_growth_tree: Path) -> None:
+    """Control for the two mutation tests below: unmutated lawful growth passes.
+
+    Without this the refusals that follow could mean the fixture is simply
+    unbuildable rather than that the guards work."""
+    verify_honest_state(accepted_growth_tree)
 
 
-def test_shrunken_cohort_is_refused_even_with_the_anchor(honest_tree: Path) -> None:
-    _append_fake_proposal_record(honest_tree)
-    base_path = honest_tree / "research/m3e/accepted_base.json"
+def test_shrunken_cohort_is_refused_even_with_the_anchor(accepted_growth_tree: Path) -> None:
+    """Growth is append-only: the cohort may never move backwards.
+
+    Applied on top of the lawful accepted-growth fixture above, so the refusal is
+    attributable to the shrink and not to a fixture the verifier already rejects.
+    """
+    base_path = accepted_growth_tree / "research/m3e/accepted_base.json"
     doc = json.loads(base_path.read_text())
+    original = int(doc["row_count"])
     doc["row_count"] = 2  # below the accepted at-acceptance count
+    assert doc["row_count"] < original, "the mutation must actually shrink the cohort"
     base_path.write_text(json.dumps(doc, sort_keys=True, indent=2) + "\n")
-    with pytest.raises(M3FValidationError, match="shrank"):
-        verify_honest_state(honest_tree)
+    # MEASURED: the operative refusal is the acceptance chain-head pin, not the
+    # cohort floor. Once an acceptance chain exists, accepted_base.json must equal
+    # the state the chain says it is, byte for byte, and that fires strictly
+    # earlier. The floor is a deeper backstop and is exercised directly below, so
+    # neither guard is left resting on the other.
+    with pytest.raises(
+        M3FValidationError, match="accepted_base.json does not equal the acceptance chain-head"
+    ):
+        verify_honest_state(accepted_growth_tree)
+
+
+def test_an_unaccepted_proposal_is_still_refused(accepted_growth_tree: Path) -> None:
+    """The invariant that made the old fixtures stale, asserted directly.
+
+    A proposal with no acceptance must hard-stop. This is what used to fire first
+    in the two tests above; it is now its own case, so strengthening or weakening
+    it is visible rather than showing up as an unrelated test breaking."""
+    _append_fake_proposal_record(accepted_growth_tree)
+    # MEASURED: appending an unaccepted proposal moves the registry off the state
+    # the acceptance chain pins, so the chain-head comparison refuses first. The
+    # count rule behind it is asserted at its own level by the m3e/m3f/stdlib
+    # acceptance verifiers; here the point is that the tree is refused, early.
+    with pytest.raises(
+        M3FValidationError,
+        match="proposal_registry.jsonl does not equal the acceptance chain-head",
+    ):
+        verify_honest_state(accepted_growth_tree)

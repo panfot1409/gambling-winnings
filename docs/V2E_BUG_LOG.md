@@ -188,3 +188,58 @@ Fixed forward: a session fixture materialises the bundle from the pinned proposa
 commit in this repository's own history (`git clone --shared` + detached
 checkout). Verified in a fresh clone with no `/tmp` checkout present: 41 passed,
 0 skipped.
+
+---
+
+## Finding F-1 — the M3F growable fixtures were stale, and one guard is unreachable
+
+**Class:** C (fixture staleness, fixed) plus one open Class C disposition request.
+
+### Fixture staleness, not a production regression
+
+`test_growth_with_the_anchor_uses_floors` and
+`test_shrunken_cohort_is_refused_even_with_the_anchor` both failed at `47c9d65`.
+Neither failure was a production regression. Both fixtures manufactured "growth
+evidence" by appending a fake proposal record to the registry, and the newer
+production rule — every production proposal is covered by exactly one acceptance
+— correctly refused that tree before either test reached the guard it meant to
+exercise.
+
+The rule is right and was not weakened. A fake proposal can never lawfully be
+accepted: it has no commits, so no file-set binding and no genealogy exist for
+it. Real accepted growth is what the repository already contains, so the fixture
+is now a clone of the repository itself (with `.git`, so the genealogy and
+file-set checks run rather than being skipped), and the mutations are applied on
+top of a control that is proven to pass unmutated.
+
+Both tests now assert the guard that is actually operative, measured rather than
+assumed:
+
+| test | expected before | operative refusal (measured) |
+| --- | --- | --- |
+| shrunken cohort | `shrank` (cohort floor) | `accepted_base.json does not equal the acceptance chain-head state` |
+| unaccepted proposal (new) | `does not equal the accepted count` | `proposal_registry.jsonl does not equal the acceptance chain-head state` |
+
+In both cases the acceptance chain-head pin is strictly stronger and strictly
+earlier than the guard the old tests named.
+
+### Open: the cohort floor is unreachable (Class C, for Auditor B disposition)
+
+`src/eth_research/m3f/honest_state.py` raises
+`"live cohort shrank below the accepted row count"` when the live cohort falls
+below the committed record. Three separate attempts failed to reach it:
+
+* shrinking `accepted_base.json` → caught by the acceptance chain-head pin;
+* raising the committed `m3d_cohort_row_count` → caught by the
+  `HONEST_STATE.md` must-reproduce-from-JSON check;
+* the small-file-list fixture → caught by the proposal/acceptance count rule.
+
+Deleting the floor entirely and re-running the M3F growable, honest-state and
+audit suites: **all pass**. No input reaches it.
+
+It is therefore defense-in-depth that nothing can currently exercise. It is NOT
+being marked closed on primary-agent judgement, and no contrived test was written
+to give it the appearance of coverage. Auditor B is asked to disposition it:
+either it is genuinely dead code and should be removed, or a reachable regime
+exists that these attempts missed and should be added as a probe. Recorded as
+open until then.
