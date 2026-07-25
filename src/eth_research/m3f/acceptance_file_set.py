@@ -488,6 +488,155 @@ __all__ = [
     "EXPECTED_BINDING_SCHEMA_VERSION",
     "EXPECTED_POLICY_ID",
     "derive_binding",
+    "verify_genesis_root",
     "verify_record_file_set",
     "verify_record_provenance",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Root of authority (catalog ROOT-01, ROOT-02, ROOT-03)
+# ---------------------------------------------------------------------------
+#
+# The pins that define the chain's root are constants in
+# ``src/eth_research/m3e/proposal_authority.py``. This package may not IMPORT
+# that module, but nothing stops it from READING it as committed source and
+# interpreting it independently -- which is what independence actually requires.
+# Sharing the frozen evidence is the point; sharing the code that interprets it
+# is what would be circular.
+#
+# So: parse the pinned source with ``ast`` (no execution, no import), pull the
+# constants out of the syntax tree, then re-derive the genesis root from git
+# objects at the trusted commit using this module's own digest primitives, and
+# compare with the registry's genesis line.
+
+_AUTHORITY_SOURCE_RELPATH: Final[str] = "src/eth_research/m3e/proposal_authority.py"
+_GENESIS_ROOT_DOMAIN: Final[bytes] = b"m3e/proposal_authority/genesis_root\n"
+
+
+def _literal_constants(repo_root: Path) -> dict[str, Any]:
+    """Module-level literal assignments in the pinned authority source.
+
+    ``ast.literal_eval`` only, so reading the file can never execute it: a
+    tampered source cannot run code inside this verifier to hide itself."""
+    import ast
+
+    path = Path(repo_root) / _AUTHORITY_SOURCE_RELPATH
+    if path.is_symlink() or not path.is_file():
+        raise M3FValidationError(f"{_AUTHORITY_SOURCE_RELPATH} is missing or not a regular file")
+    tree = ast.parse(path.read_text("utf-8"), filename=_AUTHORITY_SOURCE_RELPATH)
+    out: dict[str, Any] = {}
+    for node in tree.body:
+        targets = [node.target] if isinstance(node, ast.AnnAssign) else getattr(node, "targets", [])
+        value = getattr(node, "value", None)
+        if value is None:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                try:
+                    out[target.id] = ast.literal_eval(value)
+                except ValueError:
+                    continue
+    return out
+
+
+def _canonical_compact(payload: Mapping[str, Any]) -> bytes:
+    """The compact canonical form the genesis-root digest is computed over."""
+    import json
+
+    return json.dumps(
+        dict(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+
+
+def derive_genesis_root(repo_root: str | Path) -> dict[str, Any]:
+    """Re-derive the chain's root of authority, independently (ROOT-01..03).
+
+    Returns the derived root plus the historical digests, so callers bind what
+    was derived rather than recomputing a second opinion.
+    """
+    root = Path(repo_root)
+    pins = _literal_constants(root)
+    for required in (
+        "AUTHORITY_SCHEMA_VERSION",
+        "TRUSTED_BASELINE_COMMIT",
+        "TRUSTED_BASELINE_TREE",
+        "AUTHORITY_TABLES",
+        "ACCEPTED_MANIFEST_PATH",
+        "ACCEPTED_MANIFEST_SHA256",
+        "ACCEPTED_ROW_COUNT",
+        "ACCEPTED_LAST_OPEN",
+    ):
+        if required not in pins:
+            raise M3FValidationError(f"authority source does not define {required}")
+
+    commit = _require_commit("TRUSTED_BASELINE_COMMIT", pins["TRUSTED_BASELINE_COMMIT"])
+    if _git(root, ["cat-file", "-t", commit]).decode().strip() != "commit":
+        raise M3FValidationError(f"trusted baseline {commit[:12]}… is not a commit")
+    tree_sha = _git(root, ["rev-parse", f"{commit}^{{tree}}"]).decode().strip()
+    if tree_sha != pins["TRUSTED_BASELINE_TREE"]:
+        raise M3FValidationError(
+            f"trusted baseline tree {tree_sha[:12]}… != the pinned "
+            f"{str(pins['TRUSTED_BASELINE_TREE'])[:12]}…"
+        )
+
+    # ROOT-02: each authority table, AS STORED AT THE TRUSTED COMMIT, must hash
+    # to the digest committed source pins. Read from git objects, never the
+    # working tree -- that distinction is the whole A-1 finding.
+    historical: dict[str, str] = {}
+    for relpath in sorted(dict(pins["AUTHORITY_TABLES"])):
+        blob = _git(root, ["cat-file", "-p", f"{commit}:{relpath}"])
+        digest = hashlib.sha256(blob).hexdigest()
+        pinned = str(dict(pins["AUTHORITY_TABLES"])[relpath])
+        if digest != pinned:
+            raise M3FValidationError(
+                f"authority table {relpath!r} at {commit[:12]}… hashes {digest[:16]}…, "
+                f"committed source pins {pinned[:16]}…"
+            )
+        historical[relpath] = digest
+
+    manifest_blob = _git(root, ["cat-file", "-p", f"{commit}:{pins['ACCEPTED_MANIFEST_PATH']}"])
+    manifest_digest = hashlib.sha256(manifest_blob).hexdigest()
+    if manifest_digest != pins["ACCEPTED_MANIFEST_SHA256"]:
+        raise M3FValidationError(
+            f"accepted manifest at the trusted commit hashes {manifest_digest[:16]}…, "
+            f"committed source pins {str(pins['ACCEPTED_MANIFEST_SHA256'])[:16]}…"
+        )
+
+    body = {
+        "authority_schema_version": pins["AUTHORITY_SCHEMA_VERSION"],
+        "trusted_commit": commit,
+        "trusted_tree": tree_sha,
+        "authority_tables": historical,
+        "accepted_manifest_sha256": pins["ACCEPTED_MANIFEST_SHA256"],
+        "accepted_row_count": pins["ACCEPTED_ROW_COUNT"],
+        "accepted_last_open": pins["ACCEPTED_LAST_OPEN"],
+    }
+    return {
+        "genesis_root": hashlib.sha256(_GENESIS_ROOT_DOMAIN + _canonical_compact(body)).hexdigest(),
+        "authority_tables": historical,
+        "trusted_commit": commit,
+    }
+
+
+def verify_genesis_root(repo_root: str | Path, genesis_entry: Mapping[str, Any]) -> None:
+    """The registry's genesis line must carry the independently derived root.
+
+    ROOT-03 falls out of this: the working-tree copies of the authority tables
+    are never consulted here, so they can only ever be derived caches. The
+    comparison runs one way, from history to the record.
+    """
+    derived = derive_genesis_root(repo_root)
+    recorded = genesis_entry.get("genesis_root")
+    if recorded != derived["genesis_root"]:
+        raise M3FValidationError(
+            f"acceptance genesis root {str(recorded)[:16]}… does not equal the root "
+            f"re-derived from pinned source and trusted history "
+            f"({derived['genesis_root'][:16]}…)"
+        )
+    declared = [str(a) for a in (genesis_entry.get("genesis_authorities") or [])]
+    if declared != sorted(derived["authority_tables"]):
+        raise M3FValidationError(
+            f"acceptance genesis authority list {declared} != the tables the root was "
+            f"derived from {sorted(derived['authority_tables'])}"
+        )

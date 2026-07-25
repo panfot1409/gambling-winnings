@@ -433,6 +433,116 @@ def _acceptance_self_hash_ok(doc: dict[str, Any], field: str, prefix: bytes) -> 
     _require(doc.get(field) == digest, f"{field} self-hash mismatch")
 
 
+_AUTHORITY_SOURCE_RELPATH = "src/eth_research/m3e/proposal_authority.py"
+_GENESIS_ROOT_DOMAIN = b"m3e/proposal_authority/genesis_root\n"
+
+
+def _authority_constants(root: Path) -> dict[str, Any]:
+    """Module-level literals of the pinned authority source, via ast only.
+
+    Independence does not mean ignoring the frozen constants — it means
+    interpreting the same frozen evidence with different code. This tool may not
+    load the package at all, so it reads that source as text and walks the syntax
+    tree instead. ``literal_eval`` never executes it, so a tampered source cannot
+    run code inside the verifier that is inspecting it."""
+    import ast
+
+    path = root / _AUTHORITY_SOURCE_RELPATH
+    _require(
+        not path.is_symlink() and path.is_file(),
+        f"{_AUTHORITY_SOURCE_RELPATH} is missing or not a regular file",
+    )
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=_AUTHORITY_SOURCE_RELPATH)
+    out: dict[str, Any] = {}
+    for node in tree.body:
+        targets = [node.target] if isinstance(node, ast.AnnAssign) else getattr(node, "targets", [])
+        value = getattr(node, "value", None)
+        if value is None:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                try:
+                    out[target.id] = ast.literal_eval(value)
+                except ValueError:
+                    continue
+    return out
+
+
+def _derive_genesis_root(root: Path) -> tuple[str, list[str]]:
+    """Re-derive the chain's root of authority (catalog ROOT-01, ROOT-02, ROOT-03).
+
+    Every input is a pinned source constant or a byte read out of the trusted
+    commit's git objects. The working-tree copies of the authority tables are
+    never consulted, so they cannot be anything but a derived cache."""
+    pins = _authority_constants(root)
+    for required in (
+        "AUTHORITY_SCHEMA_VERSION",
+        "TRUSTED_BASELINE_COMMIT",
+        "TRUSTED_BASELINE_TREE",
+        "AUTHORITY_TABLES",
+        "ACCEPTED_MANIFEST_PATH",
+        "ACCEPTED_MANIFEST_SHA256",
+        "ACCEPTED_ROW_COUNT",
+        "ACCEPTED_LAST_OPEN",
+    ):
+        _require(required in pins, f"authority source does not define {required}")
+
+    commit = str(pins["TRUSTED_BASELINE_COMMIT"])
+    _require(bool(re.fullmatch(r"[0-9a-f]{40}", commit)), "trusted baseline is not a 40-hex id")
+    _require(
+        _git_out(root, ["cat-file", "-t", commit]).decode().strip() == "commit",
+        f"trusted baseline {commit[:12]} is not a commit",
+    )
+    tree_sha = _git_out(root, ["rev-parse", commit + "^{tree}"]).decode().strip()
+    _require(
+        tree_sha == str(pins["TRUSTED_BASELINE_TREE"]),
+        "trusted baseline tree does not equal the pinned tree",
+    )
+
+    historical: dict[str, str] = {}
+    tables = dict(pins["AUTHORITY_TABLES"])
+    for relpath in sorted(tables):
+        blob = _git_out(root, ["cat-file", "-p", f"{commit}:{relpath}"])
+        digest = _sha256(blob)
+        _require(
+            digest == str(tables[relpath]),
+            f"authority table {relpath!r} at the trusted commit does not hash to the "
+            "digest committed source pins",
+        )
+        historical[relpath] = digest
+
+    manifest = _git_out(root, ["cat-file", "-p", f"{commit}:{pins['ACCEPTED_MANIFEST_PATH']}"])
+    _require(
+        _sha256(manifest) == str(pins["ACCEPTED_MANIFEST_SHA256"]),
+        "accepted manifest at the trusted commit does not hash to the pinned digest",
+    )
+
+    body = {
+        "authority_schema_version": pins["AUTHORITY_SCHEMA_VERSION"],
+        "trusted_commit": commit,
+        "trusted_tree": tree_sha,
+        "authority_tables": historical,
+        "accepted_manifest_sha256": pins["ACCEPTED_MANIFEST_SHA256"],
+        "accepted_row_count": pins["ACCEPTED_ROW_COUNT"],
+        "accepted_last_open": pins["ACCEPTED_LAST_OPEN"],
+    }
+    compact = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    return hashlib.sha256(_GENESIS_ROOT_DOMAIN + compact).hexdigest(), sorted(historical)
+
+
+def _check_genesis_root(root: Path, genesis: dict[str, Any]) -> None:
+    derived, authorities = _derive_genesis_root(root)
+    _require(
+        genesis.get("genesis_root") == derived,
+        "acceptance genesis root does not equal the root re-derived from pinned "
+        "source constants and trusted history",
+    )
+    _require(
+        [str(a) for a in (genesis.get("genesis_authorities") or [])] == authorities,
+        "acceptance genesis authority list does not match the tables the root was derived from",
+    )
+
+
 _FILE_SET_POLICY_ID = "m3e-proposal-file-policy-v1"
 _ALLOWED_PROPOSAL_ROOTS = ("research/m3d/", "research/m3e/")
 _ALLOWED_PROPOSAL_SUFFIXES = (".json", ".jsonl")
@@ -806,6 +916,9 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
         "genesis authority list does not match the enforced set",
     )
     _require(genesis.get("pre_acceptance_proposal_count") == 0, "genesis proposal count non-zero")
+    # ROOT-01..03, derived here rather than taken from the record.
+    if (root / ".git").exists():
+        _check_genesis_root(root, genesis)
     accepted: list[str] = []
     for position, entry in enumerate(records[1:], start=1):
         _require(entry.get("entry_kind") == "acceptance", "unknown acceptance entry kind")

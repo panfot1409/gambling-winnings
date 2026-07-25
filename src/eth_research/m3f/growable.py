@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from eth_research.m3f.acceptance_file_set import (
+    verify_genesis_root,
     verify_record_file_set,
     verify_record_provenance,
 )
@@ -316,6 +317,12 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
         )
     if genesis.get("pre_acceptance_proposal_count") != 0:
         raise M3FValidationError("acceptance genesis claims a non-zero pre-acceptance count")
+    # ROOT-01..03: the genesis ROOT is re-derived here from the pinned constants in
+    # committed source (read via ast, never imported) plus the authority-table
+    # bytes as stored at the trusted commit. The working-tree copies above are
+    # cross-checked, but they are a derived cache; this is the authority.
+    if (root / ".git").exists():
+        verify_genesis_root(root, genesis)
 
     accepted: list[str] = []
     expected = dict(pins)

@@ -26,6 +26,17 @@ today, as measured, not as aspired to. Several invariants are single-path, and
 that is written down rather than smoothed over: an invariant enforced once is
 one implementation defect away from being enforced never. Each such entry
 carries ``gap`` explaining why.
+
+How the shadow paths reach the root pins without importing them
+---------------------------------------------------------------
+``ROOT-01..03`` depend on constants in ``eth_research.m3e.proposal_authority``,
+which neither shadow path may import. They do not need to. Independence means
+interpreting the same frozen evidence with different code, not pretending the
+evidence does not exist — so each shadow path parses that committed source with
+``ast`` (``literal_eval`` only, never executing it), pulls the pins out of the
+syntax tree, and re-derives the genesis root from the trusted commit's git
+objects using its own digest primitives. Sharing the frozen constants is the
+point; sharing the code that interprets them would be the circularity.
 """
 
 from __future__ import annotations
@@ -76,25 +87,19 @@ CATALOG: Final[tuple[Invariant, ...]] = (
         "ROOT-01",
         "the chain's genesis root is derived from source constants plus bytes read "
         "out of a pinned historical commit, never from the working tree",
-        _P,
-        gap="the source pins live in eth_research.m3e, which the M3F package may not "
-        "import and the stdlib tool may not import at all. Both shadow paths still "
-        "check the genesis pins, but against byte-frozen tables in the working tree "
-        "— the weaker property the A-1 finding was about.",
+        _ALL,
     ),
     Invariant(
         "ROOT-02",
         "each authority table, as stored at the trusted baseline commit, hashes to "
         "the digest pinned in committed source",
-        _P,
-        gap="same import boundary as ROOT-01.",
+        _ALL,
     ),
     Invariant(
         "ROOT-03",
         "working-tree copies of the authority tables are treated as derived caches "
         "and verified one way, from history to disk, never consulted as authority",
-        _P,
-        gap="same import boundary as ROOT-01.",
+        _ALL,
     ),
     # --- git identity and genealogy ---------------------------------------
     Invariant(
