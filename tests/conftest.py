@@ -35,6 +35,7 @@ from eth_research.protocol import BenchmarkProtocol
 
 if TYPE_CHECKING:
     from eth_research.m3d.receipt import ProspectiveAttemptReceipt
+    from eth_research.m3e.accepted_base import AcceptedProspectiveBase
     from eth_research.m3e.proposal import AssembledProposal
 
 
@@ -665,6 +666,49 @@ def m3d_staged_cohort() -> Callable[..., Path]:
 # window produce byte-identical raw bodies (the canonical-equality happy path); a
 # ``mutate`` hook lets a test perturb one runner to exercise the mismatch path.
 
+# Every M3E boundary instant below is DERIVED from the committed accepted base, never
+# written as a wall-clock literal. The accepted prospective cohort grows whenever
+# governance accepts a proposal, so a literal ``as_of`` that was valid when it was
+# written silently becomes a clock anomaly ("as_of predates the accepted last open")
+# the moment the base moves forward. Deriving keeps the *semantics* under test fixed —
+# "exactly N new settled completed days are due" — against whatever base is accepted.
+
+# The historical window these fixtures were written against: seven new completed days.
+M3E_DEFAULT_NEW_DAYS = 7
+
+# ``plan_update_window`` only counts the newest completed day once it has settled for
+# at least an hour past its close, so ``as_of`` must sit far enough past midnight.
+_M3E_SETTLE_OFFSET = pd.Timedelta(hours=2, minutes=17)
+
+
+def m3e_zulu(instant: pd.Timestamp) -> str:
+    """Format a UTC instant in the second-resolution Zulu form the M3E schemas require."""
+    return instant.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def m3e_as_of_for_new_days(
+    base: AcceptedProspectiveBase, new_days: int = M3E_DEFAULT_NEW_DAYS
+) -> str:
+    """Derive an ``as_of`` that makes exactly ``new_days`` new completed days due.
+
+    The window runs from ``last_open + 1 day`` through ``last_open + new_days days``
+    inclusive, so the settled completed-day cutoff must land one day past the newest
+    day wanted.
+    """
+    last_open = pd.Timestamp(base.last_open)
+    return m3e_zulu(last_open + pd.Timedelta(days=new_days + 1) + _M3E_SETTLE_OFFSET)
+
+
+def m3e_instant_after_window(update_plan: object, *, seconds: int) -> str:
+    """An instant shortly after the plan's newest window closes.
+
+    A runner cannot have retrieved a candle before that candle's day ended, so receipt
+    timestamps are derived from the plan they replay rather than pinned to a literal.
+    """
+    windows = update_plan.windows  # type: ignore[attr-defined]
+    window_end: pd.Timestamp = max(pd.Timestamp(str(w["window_end"])) for w in windows)
+    return m3e_zulu(window_end + _M3E_SETTLE_OFFSET + pd.Timedelta(seconds=seconds))
+
 
 def _m3e_descending_candles(window_start: str, window_end: str) -> list[list[float | int]]:
     """Coinbase-order [time, low, high, open, close, volume] rows, newest-first.
@@ -727,7 +771,7 @@ def write_m3e_runner(
                 "content_type": "application/json",
                 "response_byte_length": len(raw),
                 "response_sha256": sha256_bytes(raw),
-                "retrieved_at": "2026-07-22T02:17:05Z",
+                "retrieved_at": m3e_instant_after_window(update_plan, seconds=5),
             }
         )
     document = {
@@ -742,7 +786,7 @@ def write_m3e_runner(
         "workflow_run_id": workflow_run_id,
         "runner_identity": runner_identity,
         "client_identity": client_identity,
-        "created_at_utc": "2026-07-22T02:17:06Z",
+        "created_at_utc": m3e_instant_after_window(update_plan, seconds=6),
         "responses": responses,
     }
     receipt = ProspectiveAttemptReceipt.from_mapping(document)
@@ -760,7 +804,7 @@ def m3e_write_runner() -> Callable[..., ProspectiveAttemptReceipt]:
 
 
 def stage_m3e_proposal(
-    proposal_dir: Path, *, repo_root: Path, as_of: str = "2026-07-22T02:17:00Z"
+    proposal_dir: Path, *, repo_root: Path, as_of: str | None = None
 ) -> AssembledProposal:
     """Stage a complete synthetic M3E proposal directory (two runners + derived evidence).
 
@@ -768,6 +812,10 @@ def stage_m3e_proposal(
     are isolated), and the comparison/transition/manifest are assembled offline via
     the real assembler and written into ``proposal_dir``. ``repo_root`` supplies the
     accepted M3D base the transition re-derives from.
+
+    ``as_of`` defaults to the derived instant that makes exactly
+    ``M3E_DEFAULT_NEW_DAYS`` new completed days due against the *currently accepted*
+    base; pass an explicit instant only to exercise a different window.
     """
     from eth_research.m3e.accepted_base import verify_accepted_base
     from eth_research.m3e.cutoff import plan_update_window
@@ -777,7 +825,7 @@ def stage_m3e_proposal(
     proposal_dir = Path(proposal_dir)
     proposal_dir.mkdir(parents=True, exist_ok=True)
     base = verify_accepted_base(repo_root)
-    plan = build_update_plan(base, plan_update_window(base, as_of))
+    plan = build_update_plan(base, plan_update_window(base, as_of or m3e_as_of_for_new_days(base)))
     write_m3e_runner(
         proposal_dir / "runner_a",
         plan,

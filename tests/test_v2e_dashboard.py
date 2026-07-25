@@ -10,10 +10,15 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from eth_research.m3e.accepted_base import verify_accepted_base
+from eth_research.m3e.proposal import PROPOSAL_MANIFEST_DOMAIN
+from eth_research.m3e.validation import domain_sha256
 from eth_research.v2e.render import render_html
 from eth_research.v2e.state import (
     REHEARSAL_BANNER,
@@ -25,6 +30,10 @@ from eth_research.v2e.state import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# The append width the accepted proposal carried. Unlike the cohort row count (which
+# grows with every acceptance), this is a fixed property of that one landed proposal.
+_ACCEPTED_APPEND_ROWS = 9
+
 
 @pytest.fixture(scope="module")
 def real_state() -> DashboardState:
@@ -35,8 +44,11 @@ class TestHappyPath:
     def test_reflects_the_accepted_honest_state(self, real_state: DashboardState) -> None:
         s = real_state
         assert s.schema_version == 1
-        assert s.cohort.accepted_row_count == 3
+        # Derived from the committed accepted base: the cohort grows as governance
+        # accepts proposals, so pinning a literal would only re-assert today's count.
+        assert s.cohort.accepted_row_count == verify_accepted_base(REPO_ROOT).row_count
         assert s.cohort.target_row_count == 365
+        assert 0 < s.cohort.accepted_row_count < s.cohort.target_row_count
         assert s.cohort.maturity_state == "immature"
         assert s.cohort.evaluation_authorized is False
         assert s.candidate.eligible_candidate_present is False
@@ -307,9 +319,90 @@ class TestProposalBundleIntegrity:
         if not self._REAL.is_dir():
             pytest.skip("real proposal checkout not present in this environment")
         state = build_dashboard_state(REPO_ROOT, proposal_checkout=self._REAL)
-        assert state.proposal.proposed_row_count == 12
-        assert state.proposal.new_completed_days == 9
+        accepted = verify_accepted_base(REPO_ROOT)
+        # This proposal has been accepted, so its proposed state IS the accepted cohort.
+        assert state.proposal.accepted is True
+        assert state.proposal.proposed_row_count == accepted.row_count
+        assert state.proposal.proposed_last_open == accepted.last_open
+        assert state.proposal.new_completed_days == _ACCEPTED_APPEND_ROWS
         assert state.proposal.ancestry_verified is True
+        assert "accepted" in state.proposal.detail
+
+
+class TestAcceptedProposalAnchoring:
+    """An accepted proposal is pinned at BOTH ends, not merely 'newer than the base'.
+
+    The pending rule ("parent == the base accepted right now") cannot apply once the
+    proposal has landed, because the accepted base has moved forward to include it. The
+    replacement must stay exact: the parent is the pre-acceptance base pinned in the
+    acceptance record, and the result must equal the accepted base on disk.
+    """
+
+    _REAL = Path("/tmp/claude-0/v2e-proposal-checkout")
+
+    def _tampered(self, tmp_path: Path, mutate: Callable[[dict[str, Any]], None]) -> Path:
+        import shutil
+
+        if not self._REAL.is_dir():
+            pytest.skip("real proposal checkout not present in this environment")
+        checkout = tmp_path / "checkout"
+        shutil.copytree(self._REAL / "research", checkout / "research")
+        pdir = next((checkout / "research/m3e/proposals").iterdir())
+        manifest_path = pdir / "proposal_manifest.json"
+        doc = json.loads(manifest_path.read_text("utf-8"))
+        mutate(doc)
+        # Re-seal the manifest so the self-hash still validates: a forger who edits a
+        # bundle would of course re-hash it, so the anchoring must be what refuses.
+        body = {k: v for k, v in doc.items() if k != "manifest_sha256"}
+        doc["manifest_sha256"] = domain_sha256(PROPOSAL_MANIFEST_DOMAIN, body)
+        manifest_path.write_text(json.dumps(doc, sort_keys=True, indent=2) + "\n", "utf-8")
+        # Keep the side file consistent with the re-sealed manifest so the divergence
+        # check does not mask the anchoring check under test.
+        transition_path = pdir / "update_transition.json"
+        side = json.loads(transition_path.read_text("utf-8"))
+        side.update(doc["transition"])
+        transition_path.write_text(json.dumps(side, sort_keys=True, indent=2) + "\n", "utf-8")
+        return checkout
+
+    def test_reparenting_onto_the_post_acceptance_base_refuses(self, tmp_path: Path) -> None:
+        # The exact forgery a loose "matches the current accepted base" rule would wave
+        # through: re-point the landed proposal at the base its own acceptance produced.
+        accepted = verify_accepted_base(REPO_ROOT)
+
+        def mutate(doc: dict[str, Any]) -> None:
+            doc["accepted_base_sha256"] = accepted.base_sha256
+            doc["accepted_base_fingerprint"] = accepted.canonical_content_fingerprint
+
+        checkout = self._tampered(tmp_path, mutate)
+        with pytest.raises(DashboardStateError, match="pre-acceptance base pinned"):
+            build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
+
+    def test_result_that_is_not_the_accepted_cohort_refuses(self, tmp_path: Path) -> None:
+        # Internally consistent arithmetic (old + new == proposed) that nonetheless
+        # lands on a cohort the repository never accepted.
+        def mutate(doc: dict[str, Any]) -> None:
+            transition = dict(doc["transition"])
+            transition["new_window_row_count"] = int(transition["new_window_row_count"]) + 1
+            transition["proposed_row_count"] = int(transition["proposed_row_count"]) + 1
+            doc["transition"] = transition
+
+        checkout = self._tampered(tmp_path, mutate)
+        with pytest.raises(DashboardStateError, match="does not equal the accepted cohort"):
+            build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
+
+    def test_an_unaccepted_proposal_still_uses_the_pending_rule(self, tmp_path: Path) -> None:
+        # Renaming the proposal directory takes it out of the acceptance chain, so the
+        # pending rule applies again and its pre-acceptance parent is now wrong.
+        import shutil
+
+        if not self._REAL.is_dir():
+            pytest.skip("real proposal checkout not present in this environment")
+        checkout = tmp_path / "checkout"
+        shutil.copytree(self._REAL / "research", checkout / "research")
+        proposals = checkout / "research/m3e/proposals"
+        next(proposals.iterdir()).rename(proposals / "20990101-20990102-deadbeefdeadbeef")
+        with pytest.raises(DashboardStateError, match="accepted base committed in this repository"):
+            build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
 
 class TestGovernanceConflicts:

@@ -1,14 +1,21 @@
-"""Two-runner canonical-equality attestation (commit 9)."""
+"""Two-runner canonical-equality attestation (commit 9).
+
+All boundary instants are derived from the committed accepted base's ``last_open``
+(never hard-coded), so the same boundary semantics are checked against whatever
+cohort state governance has accepted.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 import eth_research
-from eth_research.m3e.accepted_base import verify_accepted_base
+from conftest import M3E_DEFAULT_NEW_DAYS, m3e_as_of_for_new_days, m3e_zulu
+from eth_research.m3e.accepted_base import AcceptedProspectiveBase, verify_accepted_base
 from eth_research.m3e.comparison import compare_runners
 from eth_research.m3e.cutoff import plan_update_window
 from eth_research.m3e.runner_boundary import VerifiedRunner, load_and_verify_runner
@@ -16,15 +23,19 @@ from eth_research.m3e.update_plan import ProspectiveUpdatePlan, build_update_pla
 from eth_research.m3e.validation import M3EValidationError
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
-_AS_OF = "2026-07-22T02:17:00Z"
+_DAY = pd.Timedelta(days=1)
 
 _Mutate = Callable[[int, list[list[float | int]]], list[list[float | int]]]
 
 
+@pytest.fixture(scope="module")
+def base() -> AcceptedProspectiveBase:
+    return verify_accepted_base(REPO_ROOT)
+
+
 @pytest.fixture
-def plan() -> ProspectiveUpdatePlan:
-    base = verify_accepted_base(REPO_ROOT)
-    return build_update_plan(base, plan_update_window(base, _AS_OF))
+def plan(base: AcceptedProspectiveBase) -> ProspectiveUpdatePlan:
+    return build_update_plan(base, plan_update_window(base, m3e_as_of_for_new_days(base)))
 
 
 def _runner(
@@ -52,16 +63,20 @@ def _runner(
 
 
 def test_two_isolated_runners_agree(
-    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+    m3e_write_runner: Callable[..., object],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+    base: AcceptedProspectiveBase,
 ) -> None:
     a = _runner(m3e_write_runner, tmp_path, plan, "a")
     b = _runner(m3e_write_runner, tmp_path, plan, "b")
     result = compare_runners(a, b)
     assert result.canonical_content_match is True
     assert result.runners_isolated is True
-    assert result.row_count == 7
+    assert result.row_count == M3E_DEFAULT_NEW_DAYS
     assert result.new_window_fingerprint == a.new_window_fingerprint
-    assert result.first_open == "2026-07-15T00:00:00Z"
+    # The agreed window starts on the first day the accepted base is missing.
+    assert result.first_open == m3e_zulu(pd.Timestamp(base.last_open) + _DAY)
 
 
 def test_disagreeing_runners_hard_stop(
@@ -78,10 +93,16 @@ def test_disagreeing_runners_hard_stop(
 
 
 def test_runners_on_different_plans_hard_stop(
-    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+    m3e_write_runner: Callable[..., object],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+    base: AcceptedProspectiveBase,
 ) -> None:
-    base = verify_accepted_base(REPO_ROOT)
-    other = build_update_plan(base, plan_update_window(base, "2026-07-23T02:17:00Z"))
+    # A strictly wider window than ``plan``: a genuinely different update plan.
+    other = build_update_plan(
+        base, plan_update_window(base, m3e_as_of_for_new_days(base, M3E_DEFAULT_NEW_DAYS + 1))
+    )
+    assert other.plan_sha256 != plan.plan_sha256
     a = _runner(m3e_write_runner, tmp_path, plan, "a")
     # Runner b fetched a different window entirely.
     raw_b = tmp_path / "runner_b"

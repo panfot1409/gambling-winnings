@@ -1,4 +1,8 @@
-"""Proposal assembly + the 35-check whole-proposal verifier (commit 11)."""
+"""Proposal assembly + the 35-check whole-proposal verifier (commit 11).
+
+Row counts are derived from the committed accepted base (never hard-coded), so the
+append-only arithmetic is checked against whatever cohort governance has accepted.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +15,8 @@ from typing import Any
 import pytest
 
 import eth_research
+from conftest import M3E_DEFAULT_NEW_DAYS
+from eth_research.m3e.accepted_base import verify_accepted_base
 from eth_research.m3e.proposal import (
     COMPARISON_NAME,
     PROPOSAL_MANIFEST_DOMAIN,
@@ -52,7 +58,10 @@ def test_assembled_branch_is_a_bot_proposal_branch(
 ) -> None:
     assembled = m3e_stage_proposal(tmp_path / "prop", repo_root=REPO_ROOT)
     assert assembled.proposal_branch.startswith("bot/m3e-prospective-update/")
-    assert assembled.transition.proposed_row_count == 10
+    # Append-only: the proposal extends the accepted base by exactly the new window.
+    accepted_rows = verify_accepted_base(REPO_ROOT).row_count
+    assert assembled.transition.old_row_count == accepted_rows
+    assert assembled.transition.proposed_row_count == accepted_rows + M3E_DEFAULT_NEW_DAYS
 
 
 def test_a_tampered_comparison_file_is_caught(

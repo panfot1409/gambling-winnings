@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from eth_research._json import StrictJSONError
+from eth_research.m3e.acceptance import AcceptanceError, load_acceptance_chain
 from eth_research.m3e.accepted_base import AcceptedProspectiveBase, verify_accepted_base
 from eth_research.m3e.cutoff import plan_update_window
 from eth_research.m3e.proposal import load_proposal_manifest
@@ -167,6 +168,9 @@ class ProposalPanel:
     proposed_last_open: str | None = None
     append_only: bool | None = None
     ancestry_verified: bool | None = None
+    # True once governance has recorded an acceptance for this proposal, False while it
+    # is still an unmerged draft. ``None`` when no checkout is configured.
+    accepted: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,6 +295,38 @@ def _require_subset(embedded: dict[str, Any], on_disk: dict[str, Any], label: st
             )
 
 
+def _acceptance_anchor(root: Path, proposal_id: str) -> dict[str, Any] | None:
+    """The verified acceptance anchors for ``proposal_id``, or ``None`` if still pending.
+
+    Loading the chain re-verifies it (hash chain, per-record self-hashes, and the
+    read-time semantic re-derivation), so a resealed or forged record fails here rather
+    than being displayed as an accepted cohort.
+    """
+    try:
+        entries = load_acceptance_chain(root)
+    except (AcceptanceError, M3EValidationError, StrictJSONError, OSError, ValueError) as exc:
+        raise _fail("acceptance chain", exc) from exc
+    for entry in entries:
+        if entry.proposal_id != proposal_id:
+            continue
+        try:
+            previous = entry.record["previous_accepted"]
+            new = entry.record["new_accepted"]
+            return {
+                "base_sha256": str(previous["base_sha256"]),
+                "canonical_content_fingerprint": str(previous["canonical_content_fingerprint"]),
+                "row_count": _require_strict_int(previous["row_count"], "previous.row_count"),
+                "last_open": str(previous["last_open"]),
+                "new_base_sha256": str(new["base_sha256"]),
+                "new_fingerprint": str(new["canonical_content_fingerprint"]),
+            }
+        except (KeyError, TypeError) as exc:
+            raise DashboardStateError(
+                f"acceptance record for {proposal_id} is missing required anchors: {exc}"
+            ) from exc
+    return None
+
+
 def _proposal_panel(
     root: Path, accepted: AcceptedProspectiveBase, checkout: Path | None
 ) -> ProposalPanel:
@@ -332,6 +368,14 @@ def _proposal_panel(
     transition = _load_strict_object(checkout, f"{rel}/update_transition.json")
     comparison = _load_strict_object(checkout, f"{rel}/acquisition_comparison.json")
 
+    # A proposal is either still pending or already accepted, and the two are checked
+    # against DIFFERENT exact anchors -- never against a loose "anything newer is fine"
+    # rule. Pending: the proposal must chain to the base accepted right now. Accepted:
+    # it must chain to the exact pre-acceptance base pinned in its acceptance record AND
+    # its proposed state must equal the base accepted right now, exactly. The accepted
+    # branch is therefore strictly more binding: it pins both ends of the transition.
+    prior = _acceptance_anchor(root, pdir.name)
+
     try:
         if manifest.get("kind") != "prospective_update_proposal":
             raise DashboardStateError("proposal manifest kind is not a prospective update")
@@ -343,12 +387,25 @@ def _proposal_panel(
             raise DashboardStateError("proposal review policy does not require a draft")
         if review.get("auto_merge_forbidden") is not True:
             raise DashboardStateError("proposal review policy does not forbid auto-merge")
-        if manifest.get("accepted_base_sha256") != accepted.base_sha256:
+        # The base this proposal must declare as its parent.
+        parent_sha = accepted.base_sha256 if prior is None else prior["base_sha256"]
+        parent_fingerprint = (
+            accepted.canonical_content_fingerprint
+            if prior is None
+            else prior["canonical_content_fingerprint"]
+        )
+        parent_rows = accepted.row_count if prior is None else prior["row_count"]
+        parent_last_open = accepted.last_open if prior is None else prior["last_open"]
+        if manifest.get("accepted_base_sha256") != parent_sha:
             raise DashboardStateError(
                 "stale or wrong-parent proposal: its accepted_base_sha256 does not match the "
-                "accepted base committed in this repository"
+                + (
+                    "accepted base committed in this repository"
+                    if prior is None
+                    else "pre-acceptance base pinned in its acceptance record"
+                )
             )
-        if manifest.get("accepted_base_fingerprint") != accepted.canonical_content_fingerprint:
+        if manifest.get("accepted_base_fingerprint") != parent_fingerprint:
             raise DashboardStateError("proposal ancestry fingerprint mismatch; refusing")
         embedded_transition = manifest["transition"]
         embedded_comparison = manifest["comparison"]
@@ -367,22 +424,45 @@ def _proposal_panel(
         new_rows = _require_strict_int(transition["new_window_row_count"], "new_window_row_count")
         proposed_rows = _require_strict_int(transition["proposed_row_count"], "proposed_row_count")
         proposed_last_open = str(transition["proposed_last_open"])
-        if transition.get("old_fingerprint") != accepted.canonical_content_fingerprint:
+        if transition.get("old_fingerprint") != parent_fingerprint:
             raise DashboardStateError("proposal transition old fingerprint mismatch; refusing")
-        if transition.get("old_last_open") != accepted.last_open:
+        if transition.get("old_last_open") != parent_last_open:
             raise DashboardStateError("proposal transition old last-open mismatch; refusing")
-        if new_rows < 1 or old_rows != accepted.row_count or old_rows + new_rows != proposed_rows:
+        if new_rows < 1 or old_rows != parent_rows or old_rows + new_rows != proposed_rows:
             raise DashboardStateError(
                 "proposal row arithmetic conflates accepted and proposed state"
             )
-        if proposed_last_open <= accepted.last_open:
+        if proposed_last_open <= parent_last_open:
             raise DashboardStateError("proposal does not extend the cohort forward in time")
+        if prior is not None:
+            # Accepted: the proposed state must BE the accepted state, exactly. Anything
+            # else means the tree and the acceptance record disagree about what landed.
+            if proposed_rows != accepted.row_count:
+                raise DashboardStateError(
+                    "accepted proposal row count does not equal the accepted cohort on disk"
+                )
+            if proposed_last_open != accepted.last_open:
+                raise DashboardStateError(
+                    "accepted proposal last-open does not equal the accepted cohort on disk"
+                )
+            if prior["new_base_sha256"] != accepted.base_sha256:
+                raise DashboardStateError(
+                    "acceptance record's resulting base does not match the accepted base on disk"
+                )
+            if prior["new_fingerprint"] != accepted.canonical_content_fingerprint:
+                raise DashboardStateError(
+                    "acceptance record's resulting fingerprint does not match the accepted base"
+                )
         branch = str(manifest["proposal_branch"])
     except KeyError as exc:
         raise DashboardStateError(f"proposal bundle is missing required field {exc}") from exc
     return ProposalPanel(
         configured=True,
-        detail="pending draft proposal verified against the accepted base (unmerged)",
+        detail=(
+            "pending draft proposal verified against the accepted base (unmerged)"
+            if prior is None
+            else "accepted proposal: its rows ARE the accepted cohort (acceptance chain verified)"
+        ),
         proposal_id=pdir.name,
         proposal_branch=branch,
         proposed_row_count=proposed_rows,
@@ -390,6 +470,7 @@ def _proposal_panel(
         proposed_last_open=proposed_last_open,
         append_only=True,
         ancestry_verified=True,
+        accepted=prior is not None,
     )
 
 
@@ -419,10 +500,14 @@ def _acquisition_panel(
         )
     if proposal.configured:
         agreement = "two isolated runners agreed byte-for-byte (canonical_content_match)"
-        append_result = "append-only extension verified against the accepted base"
+        append_result = (
+            "append-only extension accepted into the cohort"
+            if proposal.accepted
+            else "append-only extension verified against the accepted base"
+        )
     else:
-        agreement = "recorded in the pending proposal bundle (no local checkout configured)"
-        append_result = "recorded in the pending proposal bundle (no local checkout configured)"
+        agreement = "recorded in the proposal bundle (no local checkout configured)"
+        append_result = "recorded in the proposal bundle (no local checkout configured)"
     return AcquisitionPanel(
         schedule_enabled=True,
         standing_workflow=str(posture.get("standing_update_workflow", "")),
@@ -455,10 +540,14 @@ def _integrity_panel(
     except V2DActivationError as exc:
         raise _fail(ANCHOR_RELPATH, exc) from exc
     _require_regular_file(root, "governance/v2/fable5_source_freeze.json")
-    if proposal.configured:
-        proposal_verification = "pending proposal verified (append-only, ancestry-checked)"
-    else:
+    if not proposal.configured:
         proposal_verification = "no local proposal checkout configured"
+    elif proposal.accepted:
+        proposal_verification = (
+            "accepted proposal verified (append-only, ancestry-checked, acceptance chain verified)"
+        )
+    else:
+        proposal_verification = "pending proposal verified (append-only, ancestry-checked)"
     return IntegrityPanel(
         sealed_ledgers=sealed,
         accepted_base_verified=True,
@@ -539,9 +628,14 @@ def _timeline(
         (
             "Pending proposal",
             (
-                "one DATA-ONLY draft update proposal verified locally; awaiting human review"
-                if proposal.configured
-                else "check GitHub for any pending draft proposal (not locally verified)"
+                "check GitHub for any pending draft proposal (not locally verified)"
+                if not proposal.configured
+                else (
+                    "the local DATA-ONLY proposal has been ACCEPTED into the cohort; "
+                    "no proposal is pending locally"
+                    if proposal.accepted
+                    else "one DATA-ONLY draft update proposal verified locally; awaiting review"
+                )
             ),
         ),
         ("Strategy events", "none — no strategy has ever been evaluated"),

@@ -1,4 +1,9 @@
-"""Per-runner strict acquisition validators for the update window (commit 7)."""
+"""Per-runner strict acquisition validators for the update window (commit 7).
+
+All boundary instants are derived from the committed accepted base's ``last_open``
+(never hard-coded), so the same boundary semantics are checked against whatever
+cohort state governance has accepted.
+"""
 
 from __future__ import annotations
 
@@ -6,11 +11,13 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 import eth_research
+from conftest import M3E_DEFAULT_NEW_DAYS, m3e_as_of_for_new_days, m3e_zulu
 from eth_research.m3d.receipt import ProspectiveAttemptReceipt
-from eth_research.m3e.accepted_base import verify_accepted_base
+from eth_research.m3e.accepted_base import AcceptedProspectiveBase, verify_accepted_base
 from eth_research.m3e.acquisition import (
     build_runner_bundles,
     new_window_canonical_rows,
@@ -21,15 +28,19 @@ from eth_research.m3e.update_plan import ProspectiveUpdatePlan, build_update_pla
 from eth_research.m3e.validation import M3EValidationError
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
-_AS_OF = "2026-07-22T02:17:00Z"
+_DAY = pd.Timedelta(days=1)
 
 _Mutate = Callable[[int, list[list[float | int]]], list[list[float | int]]]
 
 
+@pytest.fixture(scope="module")
+def base() -> AcceptedProspectiveBase:
+    return verify_accepted_base(REPO_ROOT)
+
+
 @pytest.fixture
-def plan() -> ProspectiveUpdatePlan:
-    base = verify_accepted_base(REPO_ROOT)
-    return build_update_plan(base, plan_update_window(base, _AS_OF))
+def plan(base: AcceptedProspectiveBase) -> ProspectiveUpdatePlan:
+    return build_update_plan(base, plan_update_window(base, m3e_as_of_for_new_days(base)))
 
 
 def _runner(
@@ -57,13 +68,16 @@ def test_a_runner_produces_the_seven_new_completed_days(
     m3e_write_runner: Callable[..., ProspectiveAttemptReceipt],
     tmp_path: Path,
     plan: ProspectiveUpdatePlan,
+    base: AcceptedProspectiveBase,
 ) -> None:
     raw_dir, receipt = _runner(m3e_write_runner, tmp_path, plan, "a")
     bundles = build_runner_bundles(raw_dir=raw_dir, update_plan=plan, receipt=receipt)
     rows = new_window_canonical_rows(bundles)
-    assert len(rows) == 7
-    assert rows[0][0] == "2026-07-15T00:00:00Z"
-    assert rows[-1][0] == "2026-07-21T00:00:00Z"
+    assert len(rows) == M3E_DEFAULT_NEW_DAYS
+    # A contiguous run of completed days starting the day after the accepted base ends.
+    last_open = pd.Timestamp(base.last_open)
+    assert rows[0][0] == m3e_zulu(last_open + _DAY)
+    assert rows[-1][0] == m3e_zulu(last_open + M3E_DEFAULT_NEW_DAYS * _DAY)
 
 
 def test_two_independent_runners_agree_byte_for_byte(
@@ -134,9 +148,13 @@ def test_a_receipt_for_a_different_plan_is_rejected(
     m3e_write_runner: Callable[..., ProspectiveAttemptReceipt],
     tmp_path: Path,
     plan: ProspectiveUpdatePlan,
+    base: AcceptedProspectiveBase,
 ) -> None:
-    base = verify_accepted_base(REPO_ROOT)
-    other = build_update_plan(base, plan_update_window(base, "2026-07-23T02:17:00Z"))
+    # A strictly wider window than ``plan``: a genuinely different update plan.
+    other = build_update_plan(
+        base, plan_update_window(base, m3e_as_of_for_new_days(base, M3E_DEFAULT_NEW_DAYS + 1))
+    )
+    assert other.plan_sha256 != plan.plan_sha256
     raw_dir, receipt = _runner(m3e_write_runner, tmp_path, other, "a")
     with pytest.raises(M3EValidationError, match="plan hash does not match"):
         build_runner_bundles(raw_dir=raw_dir, update_plan=plan, receipt=receipt)

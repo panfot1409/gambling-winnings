@@ -1,4 +1,9 @@
-"""Workflow-artifact boundary + offline acquisition runner (commit 8)."""
+"""Workflow-artifact boundary + offline acquisition runner (commit 8).
+
+All boundary instants are derived from the committed accepted base's ``last_open``
+(never hard-coded), so the same boundary semantics are checked against whatever
+cohort state governance has accepted.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +15,13 @@ import pandas as pd
 import pytest
 
 import eth_research
-from eth_research.m3e.accepted_base import verify_accepted_base
+from conftest import (
+    M3E_DEFAULT_NEW_DAYS,
+    m3e_as_of_for_new_days,
+    m3e_instant_after_window,
+    m3e_zulu,
+)
+from eth_research.m3e.accepted_base import AcceptedProspectiveBase, verify_accepted_base
 from eth_research.m3e.acquire_runner import (
     RESPONSES_SIDECAR,
     emit_curl_plan,
@@ -22,13 +33,17 @@ from eth_research.m3e.update_plan import ProspectiveUpdatePlan, build_update_pla
 from eth_research.m3e.validation import M3EValidationError, sha256_bytes
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
-_AS_OF = "2026-07-22T02:17:00Z"
+_DAY = pd.Timedelta(days=1)
+
+
+@pytest.fixture(scope="module")
+def base() -> AcceptedProspectiveBase:
+    return verify_accepted_base(REPO_ROOT)
 
 
 @pytest.fixture
-def plan() -> ProspectiveUpdatePlan:
-    base = verify_accepted_base(REPO_ROOT)
-    return build_update_plan(base, plan_update_window(base, _AS_OF))
+def plan(base: AcceptedProspectiveBase) -> ProspectiveUpdatePlan:
+    return build_update_plan(base, plan_update_window(base, m3e_as_of_for_new_days(base)))
 
 
 def _descending(window_start: str, window_end: str) -> list[list[float | int]]:
@@ -59,7 +74,7 @@ def _stage_with_sidecar(staging: Path, plan: ProspectiveUpdatePlan) -> None:
                     "filename": str(w["raw_filename"]),
                     "http_code": 200,
                     "ordinal": int(w["ordinal"]),
-                    "retrieved_at": "2026-07-22T02:17:05Z",
+                    "retrieved_at": m3e_instant_after_window(plan, seconds=5),
                 },
                 sort_keys=True,
             )
@@ -71,7 +86,10 @@ def _stage_with_sidecar(staging: Path, plan: ProspectiveUpdatePlan) -> None:
 # workflow-artifact boundary                                                  #
 # --------------------------------------------------------------------------- #
 def test_boundary_re_derives_a_runner_artifact(
-    m3e_write_runner: Callable[..., object], tmp_path: Path, plan: ProspectiveUpdatePlan
+    m3e_write_runner: Callable[..., object],
+    tmp_path: Path,
+    plan: ProspectiveUpdatePlan,
+    base: AcceptedProspectiveBase,
 ) -> None:
     raw_dir = tmp_path / "runner_a"
     m3e_write_runner(
@@ -83,9 +101,11 @@ def test_boundary_re_derives_a_runner_artifact(
         runner_identity="ubuntu-x64-a",
     )
     runner = load_and_verify_runner(raw_dir, runner_label="a")
-    assert runner.row_count == 7
-    assert runner.first_open == "2026-07-15T00:00:00Z"
-    assert runner.last_open == "2026-07-21T00:00:00Z"
+    assert runner.row_count == M3E_DEFAULT_NEW_DAYS
+    # A contiguous run of completed days starting the day after the accepted base ends.
+    last_open = pd.Timestamp(base.last_open)
+    assert runner.first_open == m3e_zulu(last_open + _DAY)
+    assert runner.last_open == m3e_zulu(last_open + M3E_DEFAULT_NEW_DAYS * _DAY)
     assert runner.plan_sha256 == plan.plan_sha256
     assert runner.identity_tuple() == ("a" * 40, "run-a", "ubuntu-x64-a")
 
@@ -157,7 +177,7 @@ def test_offline_verify_writes_a_matching_receipt(
         source_commit="a" * 40,
         client_identity="curl/8.0",
         runner_identity="ubuntu-x64-a",
-        created_at_utc="2026-07-22T02:17:06Z",
+        created_at_utc=m3e_instant_after_window(plan, seconds=6),
     )
     assert len(receipt.responses) == len(plan.windows)
     # Production drops the intermediate responses sidecar once the receipt is written;
@@ -165,7 +185,7 @@ def test_offline_verify_writes_a_matching_receipt(
     # re-derives through the boundary.
     (staging / RESPONSES_SIDECAR).unlink()
     runner = load_and_verify_runner(staging, runner_label="a")
-    assert runner.row_count == 7
+    assert runner.row_count == M3E_DEFAULT_NEW_DAYS
 
 
 def test_offline_verify_rejects_an_unexpected_staged_file(
@@ -184,7 +204,7 @@ def test_offline_verify_rejects_an_unexpected_staged_file(
             source_commit="a" * 40,
             client_identity="curl/8.0",
             runner_identity="ubuntu-x64-a",
-            created_at_utc="2026-07-22T02:17:06Z",
+            created_at_utc=m3e_instant_after_window(plan, seconds=6),
         )
 
 
@@ -209,7 +229,7 @@ def test_offline_verify_rejects_a_non_200_sidecar(
             source_commit="a" * 40,
             client_identity="curl/8.0",
             runner_identity="ubuntu-x64-a",
-            created_at_utc="2026-07-22T02:17:06Z",
+            created_at_utc=m3e_instant_after_window(plan, seconds=6),
         )
 
 
