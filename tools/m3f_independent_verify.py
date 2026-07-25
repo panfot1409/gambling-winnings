@@ -432,6 +432,227 @@ def _acceptance_self_hash_ok(doc: dict[str, Any], field: str, prefix: bytes) -> 
     _require(doc.get(field) == digest, f"{field} self-hash mismatch")
 
 
+_FILE_SET_POLICY_ID = "m3e-proposal-file-policy-v1"
+_ALLOWED_PROPOSAL_ROOTS = ("research/m3d/", "research/m3e/")
+_ALLOWED_PROPOSAL_SUFFIXES = (".json", ".jsonl")
+_TRANSITIONED = frozenset(ACCEPTANCE_TRANSITIONED_PATHS)
+_PROPOSAL_DOCS = frozenset(
+    {"proposal_manifest.json", "acquisition_comparison.json", "update_transition.json"}
+)
+_RAW_NAME_RE = re.compile(r"^coinbase-eth-usd-1d-update_(\d{4})_\d{8}_\d{8}\.json$")
+_MANIFEST_ROLE_SET = frozenset(
+    {"proposal_document", "runner_update_plan", "runner_acquisition_receipt", "runner_raw_response"}
+)
+_RAW_ROLE_SET = frozenset({"m3d_bundle_raw_response", "runner_raw_response"})
+_GOVERNANCE_ROLE_SET = frozenset({"transitioned_state", "update_attempts_ledger"})
+
+
+def _git_out(root: Path, argv: list[str]) -> bytes:
+    import subprocess  # local: keeps the stdlib-only surface obvious at the call site
+
+    proc = subprocess.run(  # fixed argv, never a shell string
+        ["git", "-C", str(root), *argv], capture_output=True, timeout=120, check=False
+    )
+    _require(proc.returncode == 0, f"git {argv[0]} failed: {proc.stderr.decode()[:200]}")
+    _require(len(proc.stdout) <= 8 * 1024 * 1024, f"git {argv[0]} output exceeds the ceiling")
+    return proc.stdout
+
+
+def _canon(payload: Any) -> bytes:
+    text = json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False)
+    return (text + "\n").encode("utf-8")
+
+
+def _dom(domain: str, payload: Any) -> str:
+    return hashlib.sha256(f"m3d/{domain}\n".encode() + _canon(payload)).hexdigest()
+
+
+def _paths_digest(paths: list[str]) -> str:
+    return _dom("m3e/proposal_file_policy/path_set", {"paths": sorted(paths)})
+
+
+def _proposal_role(path: str, proposal_id: str) -> str:
+    """This tool's own path→role rules, written from the policy specification.
+
+    A third implementation of the same decision. It shares no code with the m3e
+    policy or the m3f re-derivation, so a defect in either is visible here as a
+    disagreement instead of being confirmed by a copy of itself."""
+    _require(bool(re.fullmatch(r"[A-Za-z0-9._/-]+", path)), f"unlawful path spelling: {path!r}")
+    _require(
+        not path.startswith("/") and ".." not in path.split("/") and "//" not in path,
+        f"unlawful path shape: {path!r}",
+    )
+    _require(
+        not any(seg.startswith(".") for seg in path.split("/")), f"hidden/dotfile path: {path}"
+    )
+    _require(path.startswith(_ALLOWED_PROPOSAL_ROOTS), f"path outside allowed roots: {path}")
+    _require(path.endswith(_ALLOWED_PROPOSAL_SUFFIXES), f"disallowed extension: {path}")
+    if path in _TRANSITIONED:
+        return "transitioned_state"
+    if path == "research/m3d/update_attempts.jsonl":
+        return "update_attempts_ledger"
+    if path.startswith("research/m3d/raw/coinbase/"):
+        tail = path[len("research/m3d/raw/coinbase/") :].split("/")
+        _require(len(tail) == 2, f"unknown file under the m3d raw root: {path}")
+        bundle, name = tail
+        _require(
+            bool(
+                re.fullmatch(
+                    r"coinbase-eth-usd-prospective-update-\d{8}-\d{8}-"
+                    + re.escape(proposal_id[-16:]),
+                    bundle,
+                )
+            ),
+            f"raw bundle does not belong to {proposal_id}: {path}",
+        )
+        if name == "acquisition_plan.json":
+            return "m3d_bundle_plan"
+        if name == "acquisition_receipt.json":
+            return "m3d_bundle_receipt"
+        _require(bool(_RAW_NAME_RE.fullmatch(name)), f"unknown file in the raw bundle: {path}")
+        return "m3d_bundle_raw_response"
+    if path.startswith("research/m3e/proposals/"):
+        tail = path[len("research/m3e/proposals/") :].split("/")
+        _require(tail[0] == proposal_id, f"file belongs to another proposal: {path}")
+        rest = tail[1:]
+        if len(rest) == 1:
+            _require(rest[0] in _PROPOSAL_DOCS, f"unknown file in the proposal directory: {path}")
+            return "proposal_document"
+        _require(len(rest) == 2, f"proposal directory nested too deeply: {path}")
+        runner, name = rest
+        _require(runner in {"runner_a", "runner_b"}, f"unknown runner directory: {path}")
+        if name == "update_plan.json":
+            return "runner_update_plan"
+        if name == "acquisition_receipt.json":
+            return "runner_acquisition_receipt"
+        _require(bool(_RAW_NAME_RE.fullmatch(name)), f"unknown file in a runner directory: {path}")
+        return "runner_raw_response"
+    _require(False, f"unknown file (no policy rule admits it): {path}")
+    raise AssertionError("unreachable")
+
+
+def _rederive_file_set_binding(root: Path, proposal_id: str, parent: str, head: str) -> dict:
+    """Rebuild the whole binding from git objects, taking no input from the record
+    except the two commit ids (which are the proposal's identity)."""
+    tree: dict[str, tuple[str, str, str]] = {}
+    for chunk in _git_out(root, ["ls-tree", "-r", "-z", head]).split(b"\0"):
+        if not chunk:
+            continue
+        meta, _, raw_path = chunk.partition(b"\t")
+        parts = meta.decode("utf-8", "surrogateescape").split(" ")
+        _require(len(parts) == 3 and bool(raw_path), f"unparsable ls-tree record: {chunk!r}")
+        tree[raw_path.decode("utf-8", "surrogateescape")] = (parts[0], parts[1], parts[2])
+
+    fields = [
+        f
+        for f in _git_out(
+            root, ["diff", "--name-status", "-z", "--no-renames", "--no-ext-diff", parent, head]
+        ).split(b"\0")
+        if f
+    ]
+    _require(len(fields) % 2 == 0, "git diff --name-status produced an odd field count")
+    changed = [
+        (
+            fields[i].decode("utf-8", "surrogateescape"),
+            fields[i + 1].decode("utf-8", "surrogateescape"),
+        )
+        for i in range(0, len(fields), 2)
+    ]
+    changed.sort(key=lambda item: item[1])
+    numstat = _git_out(root, ["diff", "--numstat", "-z", "--no-renames", parent, head]).decode(
+        "utf-8", "surrogateescape"
+    )
+
+    members: list[dict[str, Any]] = []
+    for status, path in changed:
+        _require(status in {"A", "M"}, f"{path}: status {status!r} (only A/M are legal)")
+        role = _proposal_role(path, proposal_id)
+        entry = tree.get(path)
+        _require(entry is not None, f"changed path absent from the proposal tree: {path}")
+        mode, otype, obj_sha = entry  # type: ignore[misc]
+        _require(otype == "blob" and mode == "100644", f"{path}: unlawful object {otype}/{mode}")
+        blob = _git_out(root, ["cat-file", "blob", obj_sha])
+        member: dict[str, Any] = {
+            "byte_length": len(blob),
+            "mode": mode,
+            "object_type": otype,
+            "path": path,
+            "role": role,
+            "sha256": _dom("m3e/proposal_file_policy/blob", {"bytes": blob.hex()}),
+        }
+        ordinal = _RAW_NAME_RE.fullmatch(path.rsplit("/", 1)[-1])
+        if ordinal:
+            member["acquisition_ordinal"] = int(ordinal.group(1))
+        members.append(member)
+    members.sort(key=lambda m: str(m["path"]))
+    paths = [str(m["path"]) for m in members]
+    roles = {str(m["path"]): str(m["role"]) for m in members}
+
+    return {
+        "file_set_policy_id": _FILE_SET_POLICY_ID,
+        "binding_schema_version": 1,
+        "proposal_parent_commit": parent,
+        "proposal_commit": head,
+        "proposal_tree_sha256": _dom(
+            "m3e/proposal_file_policy/tree",
+            {
+                "entries": [
+                    {"mode": m, "path": p, "sha": s, "type": t}
+                    for p, (m, t, s) in sorted(tree.items())
+                ]
+            },
+        ),
+        "proposal_diff_name_status_sha256": _dom(
+            "m3e/proposal_file_policy/diff_name_status",
+            {"name_status": [[s, p] for s, p in changed]},
+        ),
+        "proposal_diff_numstat_sha256": _dom(
+            "m3e/proposal_file_policy/diff_numstat", {"numstat": numstat}
+        ),
+        "allowed_member_count": len(paths),
+        "allowed_member_paths_sha256": _paths_digest(paths),
+        "manifest_member_paths_sha256": _paths_digest(
+            [p for p in paths if roles[p] in _MANIFEST_ROLE_SET]
+        ),
+        "raw_member_paths_sha256": _paths_digest([p for p in paths if roles[p] in _RAW_ROLE_SET]),
+        "governance_member_paths_sha256": _paths_digest(
+            [p for p in paths if roles[p] in _GOVERNANCE_ROLE_SET]
+        ),
+        "proposal_bundle_sha256": _dom("m3e/proposal_file_policy/bundle", {"members": members}),
+    }
+
+
+def _check_file_set_binding(root: Path, record: dict[str, Any], proposal_id: str) -> None:
+    binding = record.get("file_set_binding")
+    _require(isinstance(binding, dict), f"acceptance {proposal_id}: file_set_binding missing")
+    _require(
+        binding.get("file_set_policy_id") == _FILE_SET_POLICY_ID
+        and binding.get("binding_schema_version") == 1,
+        f"acceptance {proposal_id}: unknown file-set policy or schema version",
+    )
+    parent = str(binding.get("proposal_parent_commit", ""))
+    head = str(binding.get("proposal_commit", ""))
+    for label, commit in (("parent", parent), ("head", head)):
+        _require(
+            bool(re.fullmatch(r"[0-9a-f]{40}", commit)),
+            f"acceptance {proposal_id}: binding {label} is not a full 40-hex commit id",
+        )
+    _require(
+        head == str(record.get("proposal_head_commit"))
+        and parent == str(record.get("expected_parent_commit")),
+        f"acceptance {proposal_id}: binding certifies different commits than the record",
+    )
+    derived = _rederive_file_set_binding(root, proposal_id, parent, head)
+    for key in sorted(derived):
+        _require(
+            binding.get(key) == derived[key],
+            f"acceptance {proposal_id}: file-set binding disagrees with git at {key!r} "
+            f"(record={binding.get(key)!r}, derived={derived[key]!r})",
+        )
+    unknown = sorted(set(binding) - set(derived))
+    _require(not unknown, f"acceptance {proposal_id}: binding carries unknown field(s): {unknown}")
+
+
 def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
     """Independent chain walk: every created production proposal must be covered
     by a verified acceptance record and the tree must equal the chain-head state."""
@@ -591,6 +812,10 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
                 live_set == pinned_set,
                 f"accepted proposal directory {proposal_id} is not a closed set",
             )
+        # Third, separately written derivation of the record's closed file set,
+        # straight from git objects. See _rederive_file_set_binding.
+        if (root / ".git").exists():
+            _check_file_set_binding(root, record, proposal_id)
         accepted.append(proposal_id)
         expected = new_state
     _require(

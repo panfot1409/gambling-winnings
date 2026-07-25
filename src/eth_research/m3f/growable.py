@@ -32,6 +32,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from eth_research.m3f.acceptance_file_set import verify_record_file_set
 from eth_research.m3f.validation import (
     M3FValidationError,
     canonical_json_bytes,
@@ -363,6 +364,15 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
                 raise M3FValidationError(
                     f"acceptance {proposal_id}: proposal directory is not a closed set"
                 )
+        # The closed set the record CLAIMS is re-derived from the pinned commits by
+        # this package's own policy implementation. The record's member list is
+        # never used as the allowlist; a smuggled member, a dropped member or a
+        # relabelled member all fail here as well as in the m3e verifier.
+        # Requires git: without a repository there are no historical objects to
+        # re-derive from, so an exported tree verifies everything else and skips
+        # exactly this check — the same limit the ancestry checks already carry.
+        if (root / ".git").exists():
+            verify_record_file_set(root, record, proposal_id=proposal_id)
         # Two runners, byte-identical payloads, re-derived from the pinned hashes.
         runners = require_mapping(record.get("runner_evidence"), "runner_evidence")
         raw_sets = set()

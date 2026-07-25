@@ -291,6 +291,7 @@
     "src/eth_research/m3e/validation.py",
     "src/eth_research/m3e/verify_m3e_program.py",
     "src/eth_research/m3f/__init__.py",
+    "src/eth_research/m3f/acceptance_file_set.py",
     "src/eth_research/m3f/audit.py",
     "src/eth_research/m3f/bundle.py",
     "src/eth_research/m3f/catalog.py",
@@ -568,8 +569,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "39c6658cd4286f791c5f766c6a6b2e6a26367ded54e85741e45642d83615bf6e",
-  "tracked_file_count": 1066,
+  "surface_digest": "21e55c12caadbe8586e58c649fcf7caf318aa58eee58f9eee39e56f439cce653",
+  "tracked_file_count": 1067,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
