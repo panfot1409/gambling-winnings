@@ -61,6 +61,12 @@ from eth_research.m3e.proposal_authority import (
     derive_genesis_root,
     require_derived_cache_matches,
 )
+from eth_research.m3e.proposal_file_policy import (
+    ProposalFilePolicyError,
+    build_record_binding,
+    verify_proposal_file_policy,
+    verify_record_binding,
+)
 from eth_research.m3e.validation import (
     M3EValidationError,
     canonical_json_bytes,
@@ -640,6 +646,24 @@ def build_acceptance_record(
             raise AcceptanceError(f"sealed ledger {logical} is non-empty; acceptance forbidden")
         sealed[logical] = {"path": path, "byte_count": 0, "sha256": EMPTY_SHA256}
 
+    # The closed file set is derived by POLICY from the two pinned commits. The
+    # pins this record is about to carry are then checked AGAINST it, in the only
+    # safe direction: a declared path outside the derived set is refused, and the
+    # derived set must be fully covered so nothing can be silently omitted. The
+    # policy never sees the pin maps, so declaring a file cannot admit it.
+    expected_parent = require_str("runner_a source commit", comparison["runner_a_identity"][0])
+    verified_files = verify_proposal_file_policy(
+        root,
+        proposal_id=proposal_id,
+        parent_commit=expected_parent,
+        head_commit=proposal_head_commit,
+        declared_paths={
+            "created_pins": sorted(created_state),
+            "state_pins": sorted(accepted_state),
+        },
+        require_full_cover=True,
+    )
+
     body: dict[str, Any] = {
         "schema_version": ACCEPTANCE_SCHEMA_VERSION,
         "kind": ACCEPTANCE_RECORD_KIND,
@@ -647,9 +671,8 @@ def build_acceptance_record(
         "sequence": len(chain) + 1,
         "proposal_id": proposal_id,
         "proposal_head_commit": proposal_head_commit,
-        "expected_parent_commit": require_str(
-            "runner_a source commit", comparison["runner_a_identity"][0]
-        ),
+        "expected_parent_commit": expected_parent,
+        "file_set_binding": build_record_binding(root, verified_files),
         "proposal_manifest_sha256": require_sha256_hex(
             "manifest_sha256", manifest["manifest_sha256"]
         ),
@@ -1298,6 +1321,22 @@ def verify_acceptance_program(repo_root: str | Path, *, deep: bool = True) -> li
         if (root / path).read_bytes() != b"":
             raise AcceptanceError(f"sealed ledger {logical} is non-empty (HARD STOP)")
     record("A07_sealed_ledgers_byte_empty")
+
+    # A08: the closed file set is re-derived from the pinned proposal commit by
+    # POLICY and compared with the record. The record's own member list is never
+    # consulted as the allowlist -- doing so would reopen the exact hole this
+    # closes (auditor B A-5: a smuggled file plus its pin was accepted).
+    for entry in chain:
+        binding = require_mapping(
+            f"{entry.proposal_id}.file_set_binding", entry.record.get("file_set_binding")
+        )
+        try:
+            verify_record_binding(root, binding, proposal_id=entry.proposal_id)
+        except ProposalFilePolicyError as exc:
+            raise AcceptanceError(
+                f"acceptance {entry.proposal_id}: file-set binding does not re-derive: {exc}"
+            ) from exc
+    record("A08_file_set_binding_rederives", f"proposals={len(chain)}")
     return checks
 
 

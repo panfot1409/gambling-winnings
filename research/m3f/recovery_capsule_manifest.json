@@ -1,6 +1,6 @@
 {
   "capsule_algorithm": "sha256-over-sorted-path-sha256-length-lines-v1",
-  "capsule_digest": "fdbf1a73695aaa818b59bf5ebe29dd075de1751e8aba02d43f167b4a221afdcc",
+  "capsule_digest": "a36c4ac5f5d8f17890780eb40bb3ddcd079bd10dd4c448bcc99930661398e1ec",
   "contains_sealed_partition_contents": false,
   "contains_secrets_or_credentials": false,
   "excludes": [
@@ -624,17 +624,17 @@
     {
       "byte_length": 1599,
       "path": "research/m3e/acceptance_registry.jsonl",
-      "sha256": "d3f26d2f0d5791d9edd08c203bdbc40346e3807eb0eb90cdd031ca35e3f8e438"
+      "sha256": "12e8323c204abc118666d312ccf5ea937e4c92742935a155f713031acb0efcad"
     },
     {
-      "byte_length": 8563,
+      "byte_length": 9672,
       "path": "research/m3e/acceptances/20260715-20260724-315846f9ec5196b4/acceptance.json",
-      "sha256": "9d648f640459a09988f9b98785f028338ab82bf39b17880fe8c474324626df8d"
+      "sha256": "5e950c0893e63b0991a160ab559e91815ec8cb07dfb9d73cf398dcefc1d3f42b"
     },
     {
       "byte_length": 410,
       "path": "research/m3e/acceptances/20260715-20260724-315846f9ec5196b4/acceptance_completion.json",
-      "sha256": "15a3534217c0207073ada59b86eab83cede0d24aa25ebd77c93475ef880c9bf9"
+      "sha256": "6a58fa073ad46afa8324031f2fba63692872a4b6824a385d6fd0a0cca74336e8"
     },
     {
       "byte_length": 1875,

@@ -1,5 +1,5 @@
 {
-  "acceptance_sha256": "b70c255c964d92788c09d49e5dc38875f5b0dc0c3fb489fcf6585a2d75a6a376",
+  "acceptance_sha256": "33eb3c6858ea23bee2560a929b51cd3025957a9eeaaae7a2b2aa038f698a5ec8",
   "acceptance_time": "2026-07-24T13:30:00Z",
   "append_interval": {
     "first_open": "2026-07-15T00:00:00Z",
@@ -30,6 +30,21 @@
   "comparison_sha256": "a360a3ddb1ca2f63a3d3ac59ae47aa7618e7ade27e56fefb8d0dcdc540eaa1f8",
   "evaluation_authorized": false,
   "expected_parent_commit": "ba2dcc1d63f29a009d3660be2d960388a9615da0",
+  "file_set_binding": {
+    "allowed_member_count": 19,
+    "allowed_member_paths_sha256": "7ebc17d5f773c1ae4d16c138c8aa8a3c42c740eb220b26401f2553c2db0674ab",
+    "binding_schema_version": 1,
+    "file_set_policy_id": "m3e-proposal-file-policy-v1",
+    "governance_member_paths_sha256": "a2d38d17932f3cc8384c73716352487f796e6de3b7875bf0297347f8e49d92c0",
+    "manifest_member_paths_sha256": "7a1840a7b50c3d1ace87685d429bce006edf5b68763c82bc9c0d2fd83c7e5f01",
+    "proposal_bundle_sha256": "cd2ca074591589ce0d6a9c6855d2b03fb642a2181ef4c14d0c4b6c7af3f57be8",
+    "proposal_commit": "779df6bb6c7ab4ac312e9d8fe7028392581db237",
+    "proposal_diff_name_status_sha256": "0ed0419845f08b5228052e1c9addec6e77808ba2a75d2f7d1081dc1c44350f74",
+    "proposal_diff_numstat_sha256": "51535254d6462f552f4992487ad7a36ab2534dd09e43244ce2065c64d94a130f",
+    "proposal_parent_commit": "ba2dcc1d63f29a009d3660be2d960388a9615da0",
+    "proposal_tree_sha256": "928df94e1ca4596a7e8814140db7a13046d9f6d993c49893c16a66c114611e92",
+    "raw_member_paths_sha256": "2e3c52ec72a3eba9525d4e52aeb1cf387d6f5d48e743eae82c3a662ad57a5d3f"
+  },
   "governance_flags": {
     "candidate_declared": false,
     "money_moved": false,

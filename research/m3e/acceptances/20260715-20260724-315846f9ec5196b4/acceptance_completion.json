@@ -1,6 +1,6 @@
 {
-  "acceptance_sha256": "b70c255c964d92788c09d49e5dc38875f5b0dc0c3fb489fcf6585a2d75a6a376",
-  "completion_sha256": "dcbb90b18cf2ed8ab25ecd529809b4754fb8e08194b274bf177a29a014a84db6",
+  "acceptance_sha256": "33eb3c6858ea23bee2560a929b51cd3025957a9eeaaae7a2b2aa038f698a5ec8",
+  "completion_sha256": "251e4f2e75d6bd4ec717550a1483931cd43c1f0195c4b3ced1e2ff5314433a43",
   "kind": "m3e_proposal_acceptance_completion",
   "package_version": "0.8.0",
   "proposal_id": "20260715-20260724-315846f9ec5196b4",

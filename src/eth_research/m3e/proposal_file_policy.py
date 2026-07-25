@@ -986,3 +986,157 @@ __all__ = [
     "require_no_path_collisions",
     "verify_proposal_file_policy",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Acceptance-record binding (B A-5, phase 2)
+# ---------------------------------------------------------------------------
+#
+# The policy above decides which files are LEGAL. This section turns that
+# decision into fields an acceptance record carries, so a later reader can
+# re-derive them from git and compare. The direction matters: verification
+# re-computes every value from the pinned proposal commit and compares against
+# the record. The record's own file list is never consulted as the allowlist —
+# that is precisely the A-5 hole (a smuggled file plus its pin) and re-reading
+# the record would reopen it.
+
+BINDING_SCHEMA_VERSION: Final[int] = 1
+FILE_SET_POLICY_ID: Final[str] = "m3e-proposal-file-policy-v1"
+
+#: Domain separators. Each digest covers a different projection of the same
+#: change set, so they must not be interchangeable: domain separation makes a
+#: digest computed for one field invalid if pasted into another.
+_D_TREE: Final[str] = "m3e/proposal_file_policy/tree"
+_D_NAME_STATUS: Final[str] = "m3e/proposal_file_policy/diff_name_status"
+_D_NUMSTAT: Final[str] = "m3e/proposal_file_policy/diff_numstat"
+_D_PATHS: Final[str] = "m3e/proposal_file_policy/path_set"
+_D_BUNDLE: Final[str] = "m3e/proposal_file_policy/bundle"
+
+#: Roles whose members are named by the proposal manifest / runner documents.
+_MANIFEST_ROLES: Final[frozenset[str]] = frozenset(
+    {ROLE_PROPOSAL_DOC, ROLE_RUNNER_PLAN, ROLE_RUNNER_RECEIPT, ROLE_RUNNER_RAW}
+)
+#: Roles that are raw upstream response bodies.
+_RAW_ROLES: Final[frozenset[str]] = frozenset({ROLE_BUNDLE_RAW, ROLE_RUNNER_RAW})
+#: Roles that are pre-existing governed cohort state the proposal transitions.
+_GOVERNANCE_ROLES: Final[frozenset[str]] = frozenset(
+    {ROLE_TRANSITIONED_STATE, ROLE_UPDATE_ATTEMPTS}
+)
+
+_RAW_ORDINAL_RE: Final[re.Pattern[str]] = re.compile(r"_(\d{4})_\d{8}_\d{8}\.json\Z")
+
+
+def _digest_paths(domain: str, paths: Iterable[str]) -> str:
+    """Digest a path set in canonical sorted order.
+
+    Sorting makes the digest independent of enumeration order, so it cannot be
+    changed by reordering alone; the domain keeps it from colliding with the
+    other path-set digests below.
+    """
+    return domain_sha256(domain, {"paths": sorted(paths)})
+
+
+def _raw_ordinal(path: str) -> int | None:
+    """The acquisition ordinal encoded in a raw response filename, if any."""
+    match = _RAW_ORDINAL_RE.search(path)
+    return int(match.group(1)) if match else None
+
+
+def build_record_binding(repo_root: str | Path, verified: VerifiedProposalFiles) -> dict[str, Any]:
+    """The acceptance-record fields that bind this proposal's closed file set.
+
+    Every value is derived from git and from the policy, never from a manifest
+    or a pin map. ``proposal_tree_sha256`` is a SHA-256 over the canonical tree
+    listing, NOT the git tree object id (which is SHA-1) — the field name says
+    sha256 and it means it.
+    """
+    root = Path(repo_root)
+    tree = _ls_tree(root, verified.head_commit)
+
+    tree_rows = [
+        {"mode": mode, "path": path, "sha": obj_sha, "type": obj_type}
+        for path, (mode, obj_type, obj_sha) in sorted(tree.items())
+    ]
+    numstat = _git(
+        root,
+        ["diff", "--numstat", "-z", "--no-renames", verified.parent_commit, verified.head_commit],
+    ).decode("utf-8", "surrogateescape")
+
+    members: list[dict[str, Any]] = []
+    for entry in verified.files:
+        mode, obj_type, obj_sha = tree[entry.path]
+        blob = _cat_blob(root, obj_sha)
+        member: dict[str, Any] = {
+            "byte_length": len(blob),
+            "mode": mode,
+            "object_type": obj_type,
+            "path": entry.path,
+            "role": entry.role,
+            "sha256": domain_sha256("m3e/proposal_file_policy/blob", {"bytes": blob.hex()}),
+        }
+        ordinal = _raw_ordinal(entry.path)
+        if ordinal is not None:
+            member["acquisition_ordinal"] = ordinal
+        members.append(member)
+    members.sort(key=lambda m: str(m["path"]))
+
+    paths = verified.closed_set
+    return {
+        "file_set_policy_id": FILE_SET_POLICY_ID,
+        "binding_schema_version": BINDING_SCHEMA_VERSION,
+        "proposal_parent_commit": verified.parent_commit,
+        "proposal_commit": verified.head_commit,
+        "proposal_tree_sha256": domain_sha256(_D_TREE, {"entries": tree_rows}),
+        "proposal_diff_name_status_sha256": domain_sha256(
+            _D_NAME_STATUS, {"name_status": [list(p) for p in verified.name_status]}
+        ),
+        "proposal_diff_numstat_sha256": domain_sha256(_D_NUMSTAT, {"numstat": numstat}),
+        "allowed_member_count": len(paths),
+        "allowed_member_paths_sha256": _digest_paths(_D_PATHS, paths),
+        "manifest_member_paths_sha256": _digest_paths(
+            _D_PATHS, [f.path for f in verified.files if f.role in _MANIFEST_ROLES]
+        ),
+        "raw_member_paths_sha256": _digest_paths(
+            _D_PATHS, [f.path for f in verified.files if f.role in _RAW_ROLES]
+        ),
+        "governance_member_paths_sha256": _digest_paths(
+            _D_PATHS, [f.path for f in verified.files if f.role in _GOVERNANCE_ROLES]
+        ),
+        "proposal_bundle_sha256": domain_sha256(_D_BUNDLE, {"members": members}),
+    }
+
+
+def verify_record_binding(
+    repo_root: str | Path,
+    binding: Mapping[str, Any],
+    *,
+    proposal_id: str,
+) -> dict[str, Any]:
+    """Re-derive the binding from git and require the record to match exactly.
+
+    The commit pins come from the record (they are identity, and the caller has
+    already bound them to the acceptance chain), but the LEGAL FILE SET is then
+    recomputed by policy from those commits. A record that lists extra members —
+    even with correct hashes for them — cannot widen the set, because the set is
+    never read from the record.
+    """
+    root = Path(repo_root)
+    parent = require_str("binding.proposal_parent_commit", binding.get("proposal_parent_commit"))
+    head = require_str("binding.proposal_commit", binding.get("proposal_commit"))
+    verified = verify_proposal_file_policy(
+        root, proposal_id=proposal_id, parent_commit=parent, head_commit=head
+    )
+    expected = build_record_binding(root, verified)
+    for key, want in sorted(expected.items()):
+        got = binding.get(key)
+        if got != want:
+            raise ProposalFilePolicyError(
+                f"acceptance record file-set binding disagrees with git at {key!r}: "
+                f"record={got!r} derived={want!r}"
+            )
+    missing = set(binding) - set(expected)
+    if missing:
+        raise ProposalFilePolicyError(
+            f"acceptance record file-set binding carries unknown field(s): {sorted(missing)}"
+        )
+    return expected
