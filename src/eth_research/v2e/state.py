@@ -136,6 +136,19 @@ def _require_sha(value: str) -> str:
     return value
 
 
+def _require_digest(value: object, label: str) -> str:
+    """A 64-hex digest, validated rather than coerced.
+
+    Bare ``str()`` would turn a malformed record field into a harmless-looking string
+    that simply fails to compare; an anchor that cannot be parsed must fail loudly.
+    """
+    if not isinstance(value, str) or len(value) != 64:
+        raise DashboardStateError(f"{label} is not a 64-hex digest")
+    if any(c not in "0123456789abcdef" for c in value):
+        raise DashboardStateError(f"{label} is not a 64-hex digest")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class RepoIdentity:
     repository: str
@@ -317,8 +330,22 @@ def _acceptance_anchor(root: Path, proposal_id: str) -> dict[str, Any] | None:
                 "canonical_content_fingerprint": str(previous["canonical_content_fingerprint"]),
                 "row_count": _require_strict_int(previous["row_count"], "previous.row_count"),
                 "last_open": str(previous["last_open"]),
-                "new_base_sha256": str(new["base_sha256"]),
-                "new_fingerprint": str(new["canonical_content_fingerprint"]),
+                "new_base_sha256": _require_digest(new["base_sha256"], "new_accepted.base_sha256"),
+                "new_fingerprint": _require_digest(
+                    new["canonical_content_fingerprint"], "new_accepted.fingerprint"
+                ),
+                # Bundle identity. Without these the ONLY link between the bundle on
+                # disk and the acceptance record is the proposal directory NAME, so a
+                # substituted or stale bundle rendered as "accepted, chain verified".
+                "proposal_manifest_sha256": _require_digest(
+                    entry.record["proposal_manifest_sha256"], "proposal_manifest_sha256"
+                ),
+                "proposed_cohort_fingerprint": _require_digest(
+                    entry.record["proposed_cohort_fingerprint"], "proposed_cohort_fingerprint"
+                ),
+                "transition_sha256": _require_digest(
+                    entry.record["transition_sha256"], "transition_sha256"
+                ),
             }
         except (KeyError, TypeError) as exc:
             raise DashboardStateError(
@@ -387,6 +414,28 @@ def _proposal_panel(
             raise DashboardStateError("proposal review policy does not require a draft")
         if review.get("auto_merge_forbidden") is not True:
             raise DashboardStateError("proposal review policy does not forbid auto-merge")
+        if prior is not None:
+            # IDENTITY FIRST. The directory name is not identity: bind the bundle on
+            # disk to the artifact the acceptance record actually pins, before any
+            # claim of acceptance is made about it. A forger who edits the bundle and
+            # re-seals `manifest_sha256` (as any forger would) is caught here.
+            if manifest.get("manifest_sha256") != prior["proposal_manifest_sha256"]:
+                raise DashboardStateError(
+                    "proposal bundle is not the artifact this acceptance record accepted: "
+                    "its manifest hash does not match the record's pinned "
+                    "proposal_manifest_sha256"
+                )
+            if (
+                transition.get("proposed_cohort_fingerprint")
+                != prior["proposed_cohort_fingerprint"]
+            ):
+                raise DashboardStateError(
+                    "accepted proposal's cohort fingerprint does not match the acceptance record"
+                )
+            if transition.get("transition_sha256") != prior["transition_sha256"]:
+                raise DashboardStateError(
+                    "accepted proposal's transition hash does not match the acceptance record"
+                )
         # The base this proposal must declare as its parent.
         parent_sha = accepted.base_sha256 if prior is None else prior["base_sha256"]
         parent_fingerprint = (

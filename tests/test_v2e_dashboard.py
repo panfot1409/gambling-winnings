@@ -364,9 +364,28 @@ class TestAcceptedProposalAnchoring:
         transition_path.write_text(json.dumps(side, sort_keys=True, indent=2) + "\n", "utf-8")
         return checkout
 
+    def test_a_substituted_bundle_is_not_reported_as_accepted(self, tmp_path: Path) -> None:
+        """Audit finding A-1: the proposal directory NAME is not identity.
+
+        Keep the directory name and every anchor the accepted branch compares, change
+        what it did not (here the branch label), and re-seal ``manifest_sha256`` as any
+        forger would. Before identity was bound, this rendered as "accepted proposal:
+        its rows ARE the accepted cohort (acceptance chain verified)" with an
+        attacker-controlled branch string.
+        """
+
+        def mutate(doc: dict[str, Any]) -> None:
+            doc["proposal_branch"] = "bot/m3e-prospective-update/ATTACKER-CONTROLLED"
+
+        checkout = self._tampered(tmp_path, mutate)
+        with pytest.raises(DashboardStateError, match="not the artifact this acceptance record"):
+            build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
+
     def test_reparenting_onto_the_post_acceptance_base_refuses(self, tmp_path: Path) -> None:
-        # The exact forgery a loose "matches the current accepted base" rule would wave
+        # The forgery a loose "matches the current accepted base" rule would wave
         # through: re-point the landed proposal at the base its own acceptance produced.
+        # Identity is bound before any anchor is consulted, so re-sealing the manifest
+        # to carry the new parent is itself what gets caught — earlier, not later.
         accepted = verify_accepted_base(REPO_ROOT)
 
         def mutate(doc: dict[str, Any]) -> None:
@@ -374,12 +393,12 @@ class TestAcceptedProposalAnchoring:
             doc["accepted_base_fingerprint"] = accepted.canonical_content_fingerprint
 
         checkout = self._tampered(tmp_path, mutate)
-        with pytest.raises(DashboardStateError, match="pre-acceptance base pinned"):
+        with pytest.raises(DashboardStateError, match="not the artifact this acceptance record"):
             build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
     def test_result_that_is_not_the_accepted_cohort_refuses(self, tmp_path: Path) -> None:
         # Internally consistent arithmetic (old + new == proposed) that nonetheless
-        # lands on a cohort the repository never accepted.
+        # lands on a cohort the repository never accepted. Also caught at identity.
         def mutate(doc: dict[str, Any]) -> None:
             transition = dict(doc["transition"])
             transition["new_window_row_count"] = int(transition["new_window_row_count"]) + 1
@@ -387,7 +406,27 @@ class TestAcceptedProposalAnchoring:
             doc["transition"] = transition
 
         checkout = self._tampered(tmp_path, mutate)
-        with pytest.raises(DashboardStateError, match="does not equal the accepted cohort"):
+        with pytest.raises(DashboardStateError, match="not the artifact this acceptance record"):
+            build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
+
+    def test_side_file_divergence_from_the_pinned_transition_refuses(self, tmp_path: Path) -> None:
+        """The anchor comparisons stay load-bearing even with a genuine manifest.
+
+        Here the self-hashed manifest is untouched (so identity passes) and only the
+        side file diverges, which must still refuse rather than be displayed.
+        """
+        import shutil
+
+        if not self._REAL.is_dir():
+            pytest.skip("real proposal checkout not present in this environment")
+        checkout = tmp_path / "checkout"
+        shutil.copytree(self._REAL / "research", checkout / "research")
+        pdir = next((checkout / "research/m3e/proposals").iterdir())
+        path = pdir / "update_transition.json"
+        side = json.loads(path.read_text("utf-8"))
+        side["proposed_cohort_fingerprint"] = "0" * 64
+        path.write_text(json.dumps(side, sort_keys=True, indent=2) + "\n", "utf-8")
+        with pytest.raises(DashboardStateError):
             build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
     def test_an_unaccepted_proposal_still_uses_the_pending_rule(self, tmp_path: Path) -> None:

@@ -116,6 +116,24 @@ _SEALED_LEDGERS: tuple[tuple[str, str], ...] = (
     ("prospective_evaluation", "research/m3d/prospective_evaluations.jsonl"),
 )
 
+# The exact governance-flag key set an acceptance record must carry. An audit found
+# that every check written as ``for k, v in mapping.items(): assert not v`` is
+# vacuously satisfied by an EMPTY mapping, so a coordinated reseal could delete all
+# five safety attestations rather than falsify them. Membership is therefore checked
+# against this exact set, not merely iterated.
+_REQUIRED_GOVERNANCE_FLAGS: frozenset[str] = frozenset(
+    {
+        "candidate_declared",
+        "money_moved",
+        "performance_metrics_computed",
+        "promotion_decision_exists",
+        "strategy_evaluated",
+    }
+)
+
+# Same class of hole for the sealed-ledger attestations: an empty map asserted nothing.
+_REQUIRED_SEALED_LEDGER_KEYS: frozenset[str] = frozenset(logical for logical, _ in _SEALED_LEDGERS)
+
 _FORBIDDEN_SUBSTRINGS = (
     "sharpe",
     "sortino",
@@ -147,6 +165,30 @@ def _require_utc_instant(label: str, value: object) -> str:
     if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != text:
         raise AcceptanceError(f"{label}: does not round-trip canonically")
     return text
+
+
+def _utc_day_span(proposal_id: str, first_open: str, last_open: str) -> int:
+    """Inclusive whole-day span of ``[first_open, last_open]`` for a daily cohort.
+
+    Both ends must be exact UTC midnights: the cohort is daily, so a non-midnight
+    boundary is not a claim this schema can express, and silently rounding it would
+    let a forger widen the window without changing the row count.
+    """
+    import datetime
+
+    ends = []
+    for label, text in (("first_open", first_open), ("last_open", last_open)):
+        instant = _require_utc_instant(f"acceptance {proposal_id}: append_interval.{label}", text)
+        parsed = datetime.datetime.strptime(instant, "%Y-%m-%dT%H:%M:%SZ")
+        if (parsed.hour, parsed.minute, parsed.second) != (0, 0, 0):
+            raise AcceptanceError(
+                f"acceptance {proposal_id}: append_interval.{label} is not a UTC midnight"
+            )
+        ends.append(parsed)
+    delta = (ends[1] - ends[0]).days
+    if delta < 0:
+        raise AcceptanceError(f"acceptance {proposal_id}: append window ends before it starts")
+    return delta + 1
 
 
 def _sha256_file(path: Path, label: str) -> str:
@@ -284,25 +326,62 @@ def _require_semantics_hold(record: dict[str, Any], proposal_id: str) -> None:
             raise AcceptanceError(
                 f"acceptance {proposal_id}: {counter} is non-zero — prior rows were disturbed"
             )
-    if (
-        "prior_rows_are_exact_prefix" in proof
-        and proof.get("prior_rows_are_exact_prefix") is not True
-    ):
-        raise AcceptanceError(f"acceptance {proposal_id}: prior rows are not an exact prefix")
-    if require_int("prior_row_count", proof.get("prior_row_count", old_rows)) != old_rows:
+    # MANDATORY, not "present and true": an optional assertion is deleted, not
+    # falsified, by any forger who reads this code.
+    if proof.get("prior_rows_are_exact_prefix") is not True:
+        raise AcceptanceError(
+            f"acceptance {proposal_id}: prior rows are not asserted to be an exact prefix"
+        )
+    # No default: ``proof.get(k, old_rows)`` compared the record against itself, so
+    # deleting the key satisfied the check unconditionally.
+    if "prior_row_count" not in proof:
+        raise AcceptanceError(f"acceptance {proposal_id}: append_only_proof omits prior_row_count")
+    if require_int("prior_row_count", proof.get("prior_row_count")) != old_rows:
         raise AcceptanceError(f"acceptance {proposal_id}: measured prior row count disagrees")
+    # The append window must itself be arithmetically consistent: a daily cohort
+    # spanning [first_open, last_open] has exactly that many days. Without this, the
+    # window could be widened (e.g. back to January) while the row count stayed put,
+    # because ``old + appended == new`` constrains only counts the forger also controls.
+    first_open = require_str("append_interval.first_open", interval.get("first_open"))
+    span_days = _utc_day_span(
+        proposal_id, first_open, require_str("append_interval.last_open", interval.get("last_open"))
+    )
+    if span_days != appended:
+        raise AcceptanceError(
+            f"acceptance {proposal_id}: append window [{first_open}, "
+            f"{interval.get('last_open')}] spans {span_days} day(s) but claims "
+            f"{appended} appended row(s)"
+        )
     # Evidence pins must exist; an empty `created` map would trivially satisfy the
     # created-evidence check against ANY tree.
     created = require_mapping("new_accepted.created", new_accepted.get("created"))
     if not created:
         raise AcceptanceError(f"acceptance {proposal_id}: pins no created evidence")
     # Sealed-ledger facts inside the record must state emptiness, not any byte count.
-    for logical, facts in require_mapping("sealed_ledgers", record.get("sealed_ledgers")).items():
+    # The key set is pinned first: iterating an emptied map asserted nothing at all.
+    sealed = require_mapping("sealed_ledgers", record.get("sealed_ledgers"))
+    if frozenset(sealed) != _REQUIRED_SEALED_LEDGER_KEYS:
+        raise AcceptanceError(
+            f"acceptance {proposal_id}: sealed_ledgers keys "
+            f"{sorted(sealed)} != required {sorted(_REQUIRED_SEALED_LEDGER_KEYS)}"
+        )
+    for logical, facts in sealed.items():
         entry = require_mapping(f"sealed_ledgers.{logical}", facts)
         if require_int(f"{logical}.byte_count", entry.get("byte_count")) != 0:
             raise AcceptanceError(f"acceptance {proposal_id}: sealed ledger {logical} not empty")
         if require_sha256_hex(f"{logical}.sha256", entry.get("sha256")) != EMPTY_SHA256:
             raise AcceptanceError(f"acceptance {proposal_id}: sealed ledger {logical} digest wrong")
+    # Same exact-key-set treatment for the five safety attestations. Iterating them
+    # let a reseal delete the map wholesale and assert nothing.
+    flags = require_mapping("governance_flags", record.get("governance_flags"))
+    if frozenset(flags) != _REQUIRED_GOVERNANCE_FLAGS:
+        raise AcceptanceError(
+            f"acceptance {proposal_id}: governance_flags keys "
+            f"{sorted(flags)} != required {sorted(_REQUIRED_GOVERNANCE_FLAGS)}"
+        )
+    for name, value in flags.items():
+        if require_bool(f"governance_flags.{name}", value):
+            raise AcceptanceError(f"acceptance {proposal_id}: governance flag {name} is set")
     accepted_at = _require_utc_instant(
         f"acceptance {proposal_id}: acceptance_time", record.get("acceptance_time")
     )
@@ -1004,6 +1083,54 @@ def _require_commit_carries_proposal(root: Path, commit: str, entry: AcceptanceE
         raise AcceptanceError(
             f"proposal head {commit[:12]}… carries a manifest that does not match the "
             "acceptance record's pinned manifest hash"
+        )
+    _require_record_agrees_with_manifest(entry, manifest)
+
+
+def _require_record_agrees_with_manifest(entry: AcceptanceEntry, manifest: dict[str, Any]) -> None:
+    """The record's append accounting must equal the manifest it pins.
+
+    Re-deriving a record's arithmetic *from the record* proves only that the forger
+    was consistent: ``old + appended == new`` constrains three numbers the forger
+    controls simultaneously, so relabelling (prior 3→1, appended 9→11) survives it.
+    The manifest is an independently hashed artifact naming the same transition, so
+    comparing against it is what makes the accounting non-forgeable without also
+    forging the manifest — which would break the pinned ``proposal_manifest_sha256``.
+    """
+    record = entry.record
+    transition = require_mapping("manifest.transition", manifest.get("transition"))
+    previous = require_mapping("previous_accepted", record.get("previous_accepted"))
+    new_accepted = require_mapping("new_accepted", record.get("new_accepted"))
+    interval = require_mapping("append_interval", record.get("append_interval"))
+
+    for label, from_record, from_manifest in (
+        ("prior row count", previous.get("row_count"), transition.get("old_row_count")),
+        ("prior last open", previous.get("last_open"), transition.get("old_last_open")),
+        ("appended row count", interval.get("row_count"), transition.get("new_window_row_count")),
+        ("appended last open", interval.get("last_open"), transition.get("proposed_last_open")),
+        ("new row count", new_accepted.get("row_count"), transition.get("proposed_row_count")),
+        ("new last open", new_accepted.get("last_open"), transition.get("proposed_last_open")),
+        (
+            "proposed cohort fingerprint",
+            record.get("proposed_cohort_fingerprint"),
+            transition.get("proposed_cohort_fingerprint"),
+        ),
+        (
+            "transition hash",
+            record.get("transition_sha256"),
+            transition.get("transition_sha256"),
+        ),
+    ):
+        if from_record != from_manifest:
+            raise AcceptanceError(
+                f"acceptance {entry.proposal_id}: {label} in the acceptance record "
+                f"({from_record!r}) disagrees with the pinned proposal manifest "
+                f"({from_manifest!r})"
+            )
+    if transition.get("is_append_only") is not True:
+        raise AcceptanceError(
+            f"acceptance {entry.proposal_id}: the pinned proposal manifest does not "
+            "assert an append-only transition"
         )
 
 
