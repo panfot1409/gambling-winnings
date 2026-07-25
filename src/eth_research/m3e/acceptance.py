@@ -68,6 +68,12 @@ from eth_research.m3e.validation import (
     require_sha256_hex,
     require_str,
 )
+from eth_research.v2e.proposal_authority import (
+    AUTHORITY_SCHEMA_VERSION,
+    AUTHORITY_TABLES,
+    derive_genesis_root,
+    require_derived_cache_matches,
+)
 
 ACCEPTANCE_REGISTRY_PATH = "research/m3e/acceptance_registry.jsonl"
 ACCEPTANCES_ROOT = "research/m3e/acceptances"
@@ -285,9 +291,15 @@ def build_genesis_record(repo_root: str | Path) -> dict[str, Any]:
         "pre_acceptance_state": derive_genesis_pins(repo_root),
         "pre_acceptance_proposal_count": 0,
         "genesis_authorities": list(_GENESIS_AUTHORITIES),
+        # The root of authority, derived from committed source constants and bytes
+        # read out of a pinned ancestor commit. The working-tree authority tables
+        # below are a derived cache; THIS is what the chain is rooted in.
+        "authority_schema_version": AUTHORITY_SCHEMA_VERSION,
+        "genesis_root": derive_genesis_root(Path(repo_root)),
         "note": (
-            "pins the exact pre-acceptance bytes of every transitioned cohort path; "
-            "every authority table listed in genesis_authorities must agree exactly"
+            "rooted in eth_research.v2e.proposal_authority: source-pinned constants "
+            "plus authority-table bytes read from the trusted baseline commit, not "
+            "from the mutable working tree"
         ),
     }
 
@@ -855,12 +867,35 @@ def load_acceptance_chain(
         or genesis.get("schema_version") != ACCEPTANCE_SCHEMA_VERSION
     ):
         raise AcceptanceError("acceptance registry genesis sentinel is malformed")
+    # ROOT OF AUTHORITY FIRST. The pre-acceptance pins below are checked against the
+    # working-tree authority tables, which an audit showed an attacker can rewrite
+    # wholesale together with this genesis line. So before consulting them at all,
+    # require the genesis to bind the root derived from source constants plus bytes
+    # read out of the trusted baseline commit — neither of which the working tree
+    # can move.
+    require_exact(
+        "genesis.authority_schema_version",
+        genesis.get("authority_schema_version"),
+        AUTHORITY_SCHEMA_VERSION,
+    )
+    expected_root = derive_genesis_root(root)
+    if genesis.get("genesis_root") != expected_root:
+        raise AcceptanceError(
+            "genesis line does not bind the root of authority derived from the trusted "
+            f"baseline commit (expected {expected_root[:16]}…, found "
+            f"{str(genesis.get('genesis_root'))[:16]}…) — the chain is rooted somewhere "
+            "this repository's history does not support"
+        )
     pins = require_mapping("genesis.pre_acceptance_state", genesis.get("pre_acceptance_state"))
     derived = derive_genesis_pins(root)
     if {str(k): str(v) for k, v in pins.items()} != derived:
         raise AcceptanceError(
             "genesis pre-acceptance pins do not match the byte-frozen stack tables"
         )
+    # And the working-tree authority tables are a DERIVED CACHE: verified one-way
+    # against the historical bytes, never treated as the authority themselves.
+    for relpath, historical_digest in AUTHORITY_TABLES.items():
+        require_derived_cache_matches(root, relpath, historical_digest, "genesis authority cache")
     require_exact(
         "genesis.pre_acceptance_proposal_count",
         genesis.get("pre_acceptance_proposal_count"),

@@ -474,6 +474,7 @@
     "src/eth_research/v2e/__init__.py",
     "src/eth_research/v2e/dashboard.py",
     "src/eth_research/v2e/paper.py",
+    "src/eth_research/v2e/proposal_authority.py",
     "src/eth_research/v2e/render.py",
     "src/eth_research/v2e/server.py",
     "src/eth_research/v2e/state.py",
@@ -565,8 +566,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "5131c6fb0e5cab61d8e41117cd8cefaf7027db06f1b4944d8a0bf7388fd920e1",
-  "tracked_file_count": 1061,
+  "surface_digest": "43530533be0153bb7948515b8dcf59ae028d81fd2caaffd4faf1e6b453a29058",
+  "tracked_file_count": 1062,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
