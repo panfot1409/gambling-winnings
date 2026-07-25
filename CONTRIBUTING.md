@@ -64,3 +64,29 @@ The three sealed access ledgers under `research/` stay **byte-empty**, and no ac
 The repository currently ships **no `LICENSE`** (see `docs/V1_LICENSE_DECISION.md`). Until a license
 is chosen by the maintainers, by contributing you are proposing changes to the maintainers' own
 repository; redistribution terms for the project as a whole remain the maintainers' decision.
+
+## Audit and review boundaries (read-only by default)
+
+Independent auditors — human or automated — are **read-only with respect to the
+shared working tree**. This is a correctness requirement, not etiquette: a writer
+in a shared checkout invalidates every concurrent reader, and this repository has
+already lost two full-suite runs and produced one torn import block that way (see
+`docs/V2E_BUG_LOG.md`, process defect P-1).
+
+When auditing or red-teaming:
+
+- do not modify, create, delete, format or patch any file in the shared checkout;
+- do not run `git` commands that write (`commit`, `add`, `checkout`, `merge`,
+  `reset`, `rebase`, `push`) — reading history is expected and encouraged;
+- never invoke a build/registration command with `--write` against the shared tree;
+- reproduce every attack in a scratch directory or a disposable clone, and say
+  in your report where you worked;
+- if you believe a source change is required, report it — do not apply it.
+
+A finding is stronger, not weaker, for having been produced without touching the
+thing under audit: it cannot be confused with the auditor's own edits.
+
+Correspondingly, whoever holds the write role must not run `git add -A` while any
+audit or background task is live; stage explicit paths, and if another task's
+work is swept in by mistake, say so in the commit rather than letting the message
+misdescribe the contents.
