@@ -47,8 +47,10 @@ endpoints, so there is nothing for CSRF to target).
 - `cohort` — ACCEPTED state on the served checkout only: row count vs 365 target,
   progress %, first/last open, remaining rows, maturity, `evaluation_authorized`
   (always false today), accepted fingerprint.
-- `proposal` — pending UNMERGED proposal facts, only when `--proposal-checkout` is
-  given and ancestry-verified; never conflated with accepted state.
+- `proposal` — facts about the checked-out proposal and its canonical acceptance
+  status (`proposed` / `accepted` / `rejected` / `superseded`), only when
+  `--proposal-checkout` is given and ancestry-verified; never conflated with
+  accepted state. Every surface derives that one status; no panel computes its own.
 - `acquisition` — schedule posture, standing workflow, last registry entry, last live
   run/outcome, two-runner agreement, append-only result, next-due status, and the
   standing guarantees (`direct_main_writes=false`, `draft_review_required=true`).
