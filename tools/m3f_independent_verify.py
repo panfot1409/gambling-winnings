@@ -464,6 +464,12 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
         expected == _acceptance_authority_pins(root),
         "genesis pins do not match the byte-frozen authority tables",
     )
+    _require(
+        [str(a) for a in (genesis.get("genesis_authorities") or [])]
+        == list(ACCEPTANCE_GENESIS_AUTHORITIES),
+        "genesis authority list does not match the enforced set",
+    )
+    _require(genesis.get("pre_acceptance_proposal_count") == 0, "genesis proposal count non-zero")
     accepted: list[str] = []
     for position, entry in enumerate(records[1:], start=1):
         _require(entry.get("entry_kind") == "acceptance", "unknown acceptance entry kind")
@@ -519,6 +525,28 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
             _require(facts.get("byte_count") == 0, f"sealed ledger {logical} claims bytes")
         _require(record.get("evaluation_authorized") is False, "record authorizes evaluation")
         _require(record.get("maturity_state") == "immature", "record claims maturity")
+        # Two runners with byte-identical payloads, re-derived from the pinned hashes.
+        runners = record.get("runner_evidence")
+        _require(isinstance(runners, dict) and len(runners) >= 2, "fewer than two runners attested")
+        raw_sets = set()
+        for rname, rbody in runners.items():
+            _require(isinstance(rbody, dict), f"runner_evidence.{rname} malformed")
+            raws = rbody.get("raw_response_sha256")
+            _require(isinstance(raws, dict) and bool(raws), f"runner {rname} pins no raw payload")
+            raw_sets.add(tuple(sorted(raws.items())))
+        _require(len(raw_sets) == 1, "attested runner payloads are not byte-identical")
+        # Acceptance time must be bounded and must not predate its own window.
+        at = record.get("acceptance_time")
+        _require(isinstance(at, str) and at.endswith("Z"), "acceptance_time malformed")
+        _require(
+            at >= str(dict(record.get("append_interval") or {}).get("last_open"))
+            and at < "2031-01-01T00:00:00Z",
+            "acceptance_time is outside the lawful window",
+        )
+        _require(
+            record.get("proposal_head_commit") != record.get("expected_parent_commit"),
+            "proposal head equals its own expected parent",
+        )
         flags = record.get("governance_flags")
         _require(isinstance(flags, dict), "governance_flags missing")
         for name, value in flags.items():

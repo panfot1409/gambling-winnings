@@ -269,6 +269,11 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
         raise M3FValidationError(
             "acceptance genesis pins do not match the byte-frozen authority tables"
         )
+    declared = [str(a) for a in genesis.get("genesis_authorities", [])]
+    if declared != list(ACCEPTANCE_GENESIS_AUTHORITIES):
+        raise M3FValidationError(
+            "acceptance genesis authority list does not match the enforced set"
+        )
 
     accepted: list[str] = []
     expected = dict(pins)
@@ -339,8 +344,46 @@ def read_acceptance_state(repo_root: str | Path) -> AcceptanceView | None:
         for counter in ("prior_rows_changed", "prior_rows_deleted"):
             if require_int(proof.get(counter), counter) != 0:
                 raise M3FValidationError(f"acceptance {proposal_id}: {counter} is non-zero")
-        if not require_mapping(new_accepted.get("created"), "new_accepted.created"):
+        created_pins = require_mapping(new_accepted.get("created"), "new_accepted.created")
+        if not created_pins:
             raise M3FValidationError(f"acceptance {proposal_id}: pins no created evidence")
+        # The accepted proposal directory is a CLOSED set: an extra file smuggled in
+        # after acceptance must fail here too, not only in the m3e verifier.
+        proposal_dir = root / "research/m3e/proposals" / proposal_id
+        if proposal_dir.is_dir():
+            live = {
+                p.relative_to(root).as_posix()
+                for p in proposal_dir.rglob("*")
+                if p.is_file() or p.is_symlink()
+            }
+            pinned = {p for p in created_pins if p.startswith("research/m3e/proposals/")}
+            if live != pinned:
+                raise M3FValidationError(
+                    f"acceptance {proposal_id}: proposal directory is not a closed set"
+                )
+        # Two runners, byte-identical payloads, re-derived from the pinned hashes.
+        runners = require_mapping(record.get("runner_evidence"), "runner_evidence")
+        raw_sets = set()
+        for rname, rbody in runners.items():
+            body = require_mapping(rbody, f"runner_evidence.{rname}")
+            raws = require_mapping(body.get("raw_response_sha256"), "raw_response_sha256")
+            if not raws:
+                raise M3FValidationError(f"acceptance {proposal_id}: runner {rname} pins no payload")
+            raw_sets.add(tuple(sorted((str(k), str(v)) for k, v in raws.items())))
+        if len(runners) < 2 or len(raw_sets) != 1:
+            raise M3FValidationError(
+                f"acceptance {proposal_id}: runners are missing or not byte-identical"
+            )
+        accepted_at = require_str(record.get("acceptance_time"), "acceptance_time")
+        window_close = require_str(interval.get("last_open"), "append_interval.last_open")
+        if accepted_at < window_close or accepted_at >= "2031-01-01T00:00:00Z":
+            raise M3FValidationError(
+                f"acceptance {proposal_id}: acceptance_time is outside the lawful window"
+            )
+        if record.get("proposal_head_commit") == record.get("expected_parent_commit"):
+            raise M3FValidationError(
+                f"acceptance {proposal_id}: proposal head equals its own expected parent"
+            )
         for logical, facts in require_mapping(
             record.get("sealed_ledgers"), "sealed_ledgers"
         ).items():

@@ -84,6 +84,12 @@ _COMPLETION_DOMAIN = "m3e/proposal_acceptance_completion"
 
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
+#: Upper bound on a lawful ``acceptance_time``. The prospective cohort matures at
+#: 365 daily rows from a 2026 genesis, so any acceptance stamped at or beyond this
+#: instant is a false claim, not a clock skew. Fixed (not wall-clock) so every
+#: verifier stays deterministic and offline-reproducible.
+_ACCEPTANCE_HORIZON = "2031-01-01T00:00:00Z"
+
 #: Pre-existing cohort files every acceptance transitions (old sha -> new sha pins).
 TRANSITIONED_STATE_PATHS: tuple[str, ...] = (
     "research/m3d/prospective_manifest.json",
@@ -297,13 +303,31 @@ def _require_semantics_hold(record: dict[str, Any], proposal_id: str) -> None:
             raise AcceptanceError(f"acceptance {proposal_id}: sealed ledger {logical} not empty")
         if require_sha256_hex(f"{logical}.sha256", entry.get("sha256")) != EMPTY_SHA256:
             raise AcceptanceError(f"acceptance {proposal_id}: sealed ledger {logical} digest wrong")
-    _require_utc_instant(
+    accepted_at = _require_utc_instant(
         f"acceptance {proposal_id}: acceptance_time", record.get("acceptance_time")
     )
+    # An acceptance cannot predate the data it accepts, and cannot claim a time
+    # outside the governed horizon (a resealed far-future stamp is a false claim
+    # inside committed evidence, so it must fail rather than merely look odd).
+    last_open = require_str("append_interval.last_open", interval.get("last_open"))
+    if accepted_at < last_open:
+        raise AcceptanceError(
+            f"acceptance {proposal_id}: accepted at {accepted_at} before its own "
+            f"append window closed at {last_open}"
+        )
+    if accepted_at >= _ACCEPTANCE_HORIZON:
+        raise AcceptanceError(
+            f"acceptance {proposal_id}: acceptance_time {accepted_at} is beyond the "
+            f"governed horizon {_ACCEPTANCE_HORIZON}"
+        )
     for field in ("proposal_head_commit", "expected_parent_commit"):
         value = require_nonempty_str(field, record.get(field))
         if len(value) != 40 or any(c not in "0123456789abcdef" for c in value):
             raise AcceptanceError(f"acceptance {proposal_id}: {field} is not a 40-hex commit id")
+    if record.get("proposal_head_commit") == record.get("expected_parent_commit"):
+        raise AcceptanceError(
+            f"acceptance {proposal_id}: proposal head equals its own expected parent"
+        )
 
 
 def _require_tree_matches_accepted_base(root: Path, record: dict[str, Any]) -> None:
@@ -763,6 +787,14 @@ def load_acceptance_chain(
         genesis.get("pre_acceptance_proposal_count"),
         0,
     )
+    # The declared authority list is enforced, not decorative: emptying or trimming
+    # it must not shrink the cross-check that anchors the genesis pins.
+    declared = [str(a) for a in genesis.get("genesis_authorities", [])]
+    if declared != list(_GENESIS_AUTHORITIES):
+        raise AcceptanceError(
+            "genesis authority list does not match the enforced authority set "
+            f"(declared={declared}, enforced={list(_GENESIS_AUTHORITIES)})"
+        )
 
     entries: list[AcceptanceEntry] = []
     prior_transitioned = derived
@@ -943,6 +975,53 @@ def _git_head_contains(root: Path, commit: str) -> bool:
         return False
 
 
+def _require_commit_carries_proposal(
+    root: Path, commit: str, entry: AcceptanceEntry
+) -> None:
+    """The recorded proposal head must actually contain this proposal's manifest.
+
+    ``git merge-base --is-ancestor`` is satisfied by *any* real ancestor commit,
+    so on its own it lets a resealed record name an unrelated commit. Reading the
+    manifest blob out of the named commit and matching it to the pinned
+    ``proposal_manifest_sha256`` binds the record to the one commit that could
+    have produced it.
+    """
+    relpath = f"{ACCEPTANCES_PROPOSALS_ROOT}/{entry.proposal_id}/proposal_manifest.json"
+    try:
+        blob = subprocess.run(
+            ["git", "-C", str(root), "cat-file", "-p", f"{commit}:{relpath}"],
+            check=True,
+            capture_output=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise AcceptanceError(
+            f"proposal head {commit[:12]}… does not carry {relpath} "
+            "(the recorded commit did not introduce this proposal)"
+        ) from exc
+    pinned = require_sha256_hex(
+        "proposal_manifest_sha256", entry.record.get("proposal_manifest_sha256")
+    )
+    manifest = require_mapping("manifest at proposal head", load_canonical_json_bytes_strict(blob))
+    if require_sha256_hex("manifest.manifest_sha256", manifest.get("manifest_sha256")) != pinned:
+        raise AcceptanceError(
+            f"proposal head {commit[:12]}… carries a manifest that does not match the "
+            "acceptance record's pinned manifest hash"
+        )
+
+
+def load_canonical_json_bytes_strict(raw: bytes) -> Any:
+    """Parse committed canonical JSON bytes through the strict decoder."""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile("wb", suffix=".json", delete=False) as handle:
+        handle.write(raw)
+        temp = Path(handle.name)
+    try:
+        return load_canonical_json(temp)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
 def verify_acceptance_program(repo_root: str | Path, *, deep: bool = True) -> list[tuple[str, str]]:
     """Full production verification of the acceptance layer.
 
@@ -1044,7 +1123,14 @@ def verify_acceptance_program(repo_root: str | Path, *, deep: bool = True) -> li
             ):
                 if not commit or not _git_head_contains(root, str(commit)):
                     raise AcceptanceError(f"{label} {str(commit)[:12]}… is not an ancestor of HEAD")
-            record("A06_commits_are_ancestors")
+            # Ancestry alone is far too weak: ANY real commit is an ancestor of
+            # HEAD, so a resealed record could name an unrelated one. The recorded
+            # proposal head must actually CARRY this proposal's manifest, matching
+            # the pinned hash.
+            _require_commit_carries_proposal(
+                root, str(newest.record["proposal_head_commit"]), newest
+            )
+            record("A06_commits_are_ancestors_and_carry_the_proposal")
     else:
         record("A04_created_evidence_pinned", "no acceptances")
 
