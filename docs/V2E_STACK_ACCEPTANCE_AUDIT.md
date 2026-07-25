@@ -236,3 +236,82 @@ state; no row used in research; no strategy code touched it; sealed ledgers empt
 the V2E dashboard reports the cohort as accepted rather than pending;
 V2A/V2B/V2C/Fable 5 historical state byte-reproducible; collection remains
 data-only).
+
+---
+
+## Part 3 — §2.2 CORRECTION RECORD (append-only)
+
+This section is appended, not substituted. Everything above stands as it was
+written, including the claims this section corrects. Reading the earlier text
+without this section will mislead; that is the point of leaving it in place.
+
+### 3.1 State at the time of writing
+
+| Fact | Value |
+|---|---|
+| HEAD | `6eed057` |
+| Auditor A (raw data / provenance) | ACCEPT — 0 A, 1 B, 4 C |
+| Auditor B (append-only / tamper-evidence) | **BLOCK** — 5 Class A |
+| Auditor C (accepted-vs-proposed) | **BLOCK** — 1 Class A, 2 B, 4 C |
+| Auditor D (scope & safety) | ACCEPT — 0 A, 1 B, 4 C |
+| Auditor E (replay neutrality) | ACCEPT — 0 A, 0 B, 3 C |
+| Merge | NOT performed |
+| Full pytest suite | NOT currently proven green |
+
+Two runs of the full suite were invalidated by my own actions and neither
+produced a usable result: the first ran against a dirty working tree and then a
+mid-run HEAD move (`1c4a279` → `45cf9d8`) that I caused by committing while it
+was executing; the second was killed deliberately once Auditor C's blocker made
+the code under test obsolete. The failure counts observed during the first run
+(3, then 5) carry no information about correctness and must not be cited.
+
+### 3.2 Corrections to earlier claims in this document and in session reporting
+
+**C-1. The "8/8 caught by ALL THREE" claim was over-generalised.**
+Earlier reporting stated that a coordinated reseal was defeated, on the evidence
+of an 8-attack matrix in which 8 of 8 were caught by all three readers. That
+count was accurate for that matrix. It was then generalised into a claim about
+the *design*, which is false. Auditor B's broader 41-probe matrix found **13
+attacks accepted by all three readers**, including a maximal re-root that
+rewrites both genesis authority tables plus the genesis line, and a relabelling
+of the append accounting (prior rows 3→1, appended 9→11) that the committed
+proposal manifest in the same tree contradicts. The honest statement is: the
+reseal defence held against the attacks that had been tried, and failed against
+several that had not.
+
+**C-2. "The fable5 rebuild produced no diff" was true of one command, not of the branch.**
+Auditor E established the accurate position: **five of seven** published
+artifacts are byte-identical to `main` —
+`research/v2a/results.json`, `research/v2b/v2b_results.json`,
+`governance/v2c/oq_registry.jsonl`, `docs/M3C_M3E_STACK_FREEZE_TABLE.json`,
+`research/v2ab/stack_freeze_table.json` — and **two change**:
+`governance/v2/fable5_system_inventory.json` and
+`governance/v2/fable5_source_freeze.json`. The delta is mechanical and fully
+explained (the new `acceptance.py` module added to two module lists, the
+`surface_digest`, and `tracked_file_count` 1042 → 1061, matching exactly the 19
+files this branch adds). Every Fable 5 *findings* artifact is byte-identical.
+"No diff" was wrong as a statement about the branch.
+
+**C-3. Independence of the three readers was overstated.**
+Auditor B established that row-level append-only truth rests on **one** reader,
+not three: shrinking committed cohort evidence and deleting pinned evidence are
+caught only by the canonical verifier's deep landed-update re-proof; the M3F and
+stdlib paths miss both. Several git-fact checks are 1-of-3, because only the
+canonical reader consults git at all.
+
+### 3.3 The guarantee this work targets
+
+> Operationally tamper-evident under trusted Git ancestry, committed-source
+> binding, source-freeze verification, protected-review workflow and explicit
+> root-authority pins.
+
+It is explicitly **not**:
+
+> Cryptographically tamper-proof against an attacker who can rewrite the
+> repository, verifier source, source freeze and trusted Git history together.
+
+The word "tamper-proof" is not used about this system. Where every anchor lives
+in the same mutable tree as the evidence it anchors, no in-repository verifier is
+sound against an actor who can rewrite both; the remediation raises the cost from
+editing data to editing committed source and history, which are covered by
+different controls, and states the residual limit rather than closing it.
