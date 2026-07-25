@@ -29,13 +29,38 @@ history together.
 WHAT THIS DOES NOT CLAIM
 ========================
 
-This is **operationally tamper-evident under trusted Git ancestry, committed-source
-binding, source-freeze verification and protected review** — not cryptographically
-tamper-proof. An actor able to rewrite trusted Git history, this module's source,
-the source-freeze authority and the branch-protection evidence *together* is
-outside the in-repository trust boundary, and nothing inside the repository can
-detect them. That limit is stated here rather than papered over, and the word
-"tamper-proof" is deliberately not used anywhere in this package.
+The exact claim, stated once and used verbatim wherever this property is cited:
+
+    Operationally tamper-evident relative to pinned historical Git objects,
+    committed verifier source, source-freeze enforcement, exact closed-file-set
+    policy and protected review.
+
+What that sentence deliberately does **not** say:
+
+* It is **not cryptographic remote attestation.** Nothing here proves to a third
+  party, over a network, that the code that ran is the code that was reviewed.
+  Every check is a local re-derivation performed by whoever runs it.
+* It is **not tamper-proof.** Evidence of tampering is what the design produces;
+  prevention of tampering is not. The word "tamper-proof" is deliberately not
+  used anywhere in this package.
+* It is **not safe against an attacker able to rewrite trusted history, verifier
+  source, freeze authority and review controls together.** Such an actor is
+  outside the in-repository trust boundary and nothing inside the repository can
+  detect them. That limit is stated here rather than papered over.
+* The three enforcement paths **do not constitute three external trust anchors.**
+  All of them read the same repository and the same git objects. What running
+  separately written implementations buys is implementation diversity: a wrong
+  regex, a transcription slip or a mis-ordered digest in one shows up as
+  disagreement with the others. It buys no external trust whatsoever.
+* The independent oracle likewise provides **implementation diversity**, not
+  independence from the repository. It is independent of the *package*, not of
+  the *data*.
+
+What the source constants do buy, stated precisely: they raise the required
+attack from **mutable-data editing** — rewriting a JSON file in the working tree,
+which a reseal can make internally consistent — to **reviewed source or history
+modification**, which has to pass the same review gate as any other code change.
+That is a real increase in cost. It is not a proof of impossibility.
 
 This module is a LEAF: it imports only the standard library, so any layer may
 depend on it without creating a cycle. It lives in ``m3e`` because that package
