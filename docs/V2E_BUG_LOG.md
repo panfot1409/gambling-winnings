@@ -94,3 +94,55 @@ reader — tests, imports, verifiers, and `git add`.
 **Standing lesson.** A red result obtained from a tree that was moving is not
 evidence of a defect, and must be withdrawn rather than reported — three of this
 milestone's reds were of exactly that kind.
+
+---
+
+## Process defect P-2 — three probes that "caught" nothing
+
+**Class:** process (no defect shipped; three adversarial results were withdrawn
+before being reported as evidence).
+
+**What happened.** The first attack matrix written for auditor B's A-5 finding
+(the closed proposal file set) reported three of four probes CAUGHT. Reading the
+refusal messages rather than the exit codes showed none of them exercised the new
+check:
+
+1. **F1** smuggled a file into `runner_a/` and pinned it. Refused by the proposal
+   loader's runner-directory shape check — a guard that predates this work.
+2. **F2** additionally recomputed the file-set binding to match the lie, but its
+   *setup* was refused: the harness edited the record before deriving, and the
+   record lives under an allowed root, so the policy's own "no uncommitted drift"
+   rule fired. A setup failure is not a probe result.
+3. **F3** built a real forged proposal commit. Refused by the existing
+   closed-set check over `research/m3e/proposals/<id>/`.
+
+A fourth confound was found later: the compatibility path appeared to catch the
+re-chained probes, but its only failures were `09_recovery_capsule` and
+`10_recovery_drill` — capsule drift caused by the probe changing bytes, not a
+semantic catch at all.
+
+**Root cause.** Two distinct errors. The probes were not *re-chained* past the
+guards that already existed, so they never reached the mechanism under test; and
+the harness left deterministic derived artifacts stale, manufacturing an
+unrelated failure that read as a catch.
+
+**Remediation.** The matrix was rewritten:
+
+- attacks target the m3d side of the proposal, which the pre-existing closed-set
+  check does not glob — the one place a pin-is-the-allowlist bug was still
+  reachable;
+- the smuggled file is committed *before* the binding is derived, so the attacker
+  works from a clean tree exactly as a real one would;
+- the reseal step now rebuilds the recovery capsule and the drill record too,
+  because a competent attacker would;
+- every probe is additionally re-run with the new check deleted from the clone's
+  source. If the probe still fails, the check was not the guard that caught it.
+
+Under the rewritten matrix all three attacks are caught by all three enforcement
+paths, the control passes on all three, and deleting A08 makes all three pass —
+so the check is load-bearing rather than shadowed.
+
+**Standing lesson.** A probe is not "caught" because the command exited nonzero.
+Read the refusal, confirm it names the mechanism under test, and prove it by
+removing that mechanism and watching the probe succeed. Exit codes measure
+plumbing; refusal messages and mutants measure the guard.
