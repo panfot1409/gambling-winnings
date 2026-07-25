@@ -243,3 +243,81 @@ to give it the appearance of coverage. Auditor B is asked to disposition it:
 either it is genuinely dead code and should be removed, or a reachable regime
 exists that these attempts missed and should be added as a probe. Recorded as
 open until then.
+
+## §4 — the probe truth table, and the two defects it found
+
+`docs/V2E_ACCEPTANCE_PROBE_TRUTH_TABLE.md` (and its `.json` sibling) record 48
+rows measured against `ecfa8e7`: 5 mandatory controls and 43 coordinated
+attacks, each run against four readers. The harness that produces it is
+committed at `tools/acceptance_probes/`, so the numbers can be re-derived rather
+than taken on trust.
+
+### The earlier 41-probe count is not cited
+
+Auditor B's original 41-probe matrix was never persisted as machine-readable
+evidence. Nothing in the new table cites it, every row was re-measured, and the
+new table supersedes any earlier count. Repeating a number whose evidence no
+longer exists would be exactly the kind of claim this section is meant to
+eliminate.
+
+### Two harness faults that had produced false "caught" verdicts
+
+Both were found and fixed *before* any number here was trusted, and both are
+worth recording because they are the failure mode this discipline exists to
+catch — a probe that looks caught but measures nothing:
+
+1. **The reseal rebuilt the registry unconditionally.** All five `CHAIN-*`
+   mutations were silently undone by the very reseal meant to help the attacker,
+   so the chain probes reported "accepted by all readers" against an unmutated
+   chain. Self-hash and registry rebuild are now explicit, per-probe reseal
+   steps; the CHAIN probes request neither.
+2. **The recovery capsule was not rebuilt after a source edit.** Two readers
+   were "catching" attacks with `recovery drill record drifted from a fresh
+   drill` — capsule staleness, not a semantic refusal. The capsule, notice and
+   drill are now rebuilt as part of the governance reseal. This is the same P-2
+   mistake recorded earlier in this log, caught a second time by applying the
+   same rule.
+
+### D-1 (Class C, FIXED): the file-set binding did not have to be about the record
+
+`verify_record_binding` re-derives the file set from **its own**
+`proposal_parent_commit` / `proposal_commit`. Nothing checked those were the
+record's pins. Repointing `proposal_head_commit` at any other commit that also
+carries the same proposal manifest therefore passed every production check: the
+binding still re-derived from the untouched original commits, and A06's "this
+commit carries the proposal" test still succeeded.
+
+Both shadow readers refused it (`binding certifies a different commit than the
+record's proposal_head_commit`); the production path accepted it. Measured as
+probe `GIT-01`. A08 now cross-checks both commit fields first; `GIT-01` refuses
+on all four readers, the control still passes, and deletion mutant `D-BIND`
+confirms the new check is what catches it. Catalogued as `BIND-01`.
+
+### D-2 (Class C, FIXED): the invariant catalog overstated two coverage claims
+
+The catalog claimed `ROOT-03` and `PROV-04` on all three enforcement paths. The
+probes contradict both:
+
+* `ROOT-02` (rewrite both working-tree authority tables plus the registry
+  genesis root, then reseal everything) is refused by production alone. The
+  shadow paths derive the root from history and never read the working-tree
+  copies — safe, but it means neither *notices* a rewritten cache. `ROOT-03` is
+  production-only.
+* `PROV-04` (a second production proposal no acceptance covers) is refused by
+  production alone. Neither shadow path enumerates the proposals directory.
+
+Both now carry their measured gap. `tests/test_m3e_invariant_catalog.py` reads
+the committed truth table and fails when any path accepted an attack aimed at an
+invariant that path claims to enforce, naming the probe that disproves it. The
+check was mutation-tested: claiming `DATA-03` on all three paths fails with the
+four probes that refute it.
+
+### Recorded, not fixed: `GIT-07` reaches a different guard than intended
+
+A `refs/replace` entry substituting the pinned commit is refused by all four
+readers, but not by `GEN-04`, the check written for that attack: A06's ancestry
+test resolves the replaced object and fails first, so `GEN-04` never runs. That
+is a defence-ordering observation rather than a hole — the attack is refused
+everywhere, and `GEN-04` is probed directly in
+`tests/test_m3e_commit_genealogy.py`. It is recorded as
+`REFUSED_BY_ANOTHER_GUARD` rather than counted as a catch.
