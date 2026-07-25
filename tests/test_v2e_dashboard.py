@@ -10,30 +10,77 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from eth_research.m3e.accepted_base import verify_accepted_base
+from eth_research.m3e.accepted_base import (
+    ACCEPTED_BASE_PATH,
+    AcceptedProspectiveBase,
+    verify_accepted_base,
+)
 from eth_research.m3e.proposal import PROPOSAL_MANIFEST_DOMAIN
-from eth_research.m3e.validation import domain_sha256
+from eth_research.m3e.validation import canonical_json_bytes, domain_sha256
 from eth_research.v2e.render import render_html
 from eth_research.v2e.state import (
     REHEARSAL_BANNER,
     DashboardState,
     DashboardStateError,
+    _proposal_panel,
     build_dashboard_state,
     to_status_document,
 )
-from eth_research.v2e.status import TIMELINE_LABEL, ProposalStatus, labels_for
+from eth_research.v2e.status import TIMELINE_LABEL, ProposalStatus, labels_for, status_from_detail
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # The append width the accepted proposal carried. Unlike the cohort row count (which
 # grows with every acceptance), this is a fixed property of that one landed proposal.
 _ACCEPTED_APPEND_ROWS = 9
+
+_ACCEPTANCE_REGISTRY = "research/m3e/acceptance_registry.jsonl"
+_ACCEPTANCES_DIR = "research/m3e/acceptances"
+
+# The genesis facts the committed acceptance evidence pins -- the same literals
+# ``tests/test_m3e_accepted_base.py`` asserts, so the chain below bottoms out in a
+# constant rather than in the function whose output is being checked.
+_GENESIS_ROW_COUNT = 3
+_GENESIS_LAST_OPEN = "2026-07-14T00:00:00Z"
+
+
+def _cohort_governance_accepted() -> dict[str, Any]:
+    """The cohort the committed governance acceptance evidence records as accepted.
+
+    This is the authority INDEPENDENT of ``verify_accepted_base`` (which re-derives the
+    cohort from M3D bytes at read time). Walking every recorded append interval from the
+    genesis literals and requiring the walk to land on the newest ``new_accepted`` block
+    keeps the pin anchored on a constant while still growing with real acceptances.
+    """
+    lines = (REPO_ROOT / _ACCEPTANCE_REGISTRY).read_text("utf-8").splitlines()
+    ids = [
+        str(entry["proposal_id"])
+        for entry in (json.loads(line) for line in lines)
+        if entry.get("entry_kind") == "acceptance"
+    ]
+    assert ids, "the acceptance registry must record at least one accepted proposal"
+    records = [
+        json.loads((REPO_ROOT / _ACCEPTANCES_DIR / pid / "acceptance.json").read_text("utf-8"))
+        for pid in ids
+    ]
+    genesis = records[0]["previous_accepted"]
+    assert genesis["row_count"] == _GENESIS_ROW_COUNT
+    assert genesis["last_open"] == _GENESIS_LAST_OPEN
+    rows = _GENESIS_ROW_COUNT
+    for record in records:
+        assert record["append_only_proof"]["is_append_only"] is True
+        rows += int(record["append_interval"]["row_count"])
+    latest = records[-1]["new_accepted"]
+    assert isinstance(latest, dict)
+    assert latest["row_count"] == rows, "the recorded append chain does not reach new_accepted"
+    return latest
 
 
 @pytest.fixture(scope="module")
@@ -45,9 +92,15 @@ class TestHappyPath:
     def test_reflects_the_accepted_honest_state(self, real_state: DashboardState) -> None:
         s = real_state
         assert s.schema_version == 1
-        # Derived from the committed accepted base: the cohort grows as governance
-        # accepts proposals, so pinning a literal would only re-assert today's count.
-        assert s.cohort.accepted_row_count == verify_accepted_base(REPO_ROOT).row_count
+        # Auditor C finding B-2: this used to read ``verify_accepted_base(REPO_ROOT)``,
+        # the same function, file and path ``build_dashboard_state`` used to populate the
+        # field -- so both operands moved together and no wrong cohort could ever fail it.
+        # The expected cohort now comes from the committed governance acceptance evidence
+        # (independent of the re-derivation), anchored on the genesis literals.
+        accepted = _cohort_governance_accepted()
+        assert s.cohort.accepted_row_count == int(accepted["row_count"])
+        assert s.cohort.accepted_last_open == accepted["last_open"]
+        assert s.cohort.accepted_fingerprint == accepted["canonical_content_fingerprint"]
         assert s.cohort.target_row_count == 365
         assert 0 < s.cohort.accepted_row_count < s.cohort.target_row_count
         assert s.cohort.maturity_state == "immature"
@@ -326,15 +379,34 @@ class TestProposalBundleIntegrity:
         if not self._REAL.is_dir():
             pytest.skip("real proposal checkout not present in this environment")
         state = build_dashboard_state(REPO_ROOT, proposal_checkout=self._REAL)
-        accepted = verify_accepted_base(REPO_ROOT)
         # This proposal has been accepted, so its proposed state IS the accepted cohort.
+        #
+        # Auditor C finding B-2: the row-count and last-open lines here used to restate
+        # the exact equality the accepted branch already enforces, so deleting those
+        # production guards left both assertions evaluating True. The equality is now
+        # pinned to the INDEPENDENT governance acceptance evidence, and
+        # TestAcceptedProposalEqualsTheAcceptedCohort below proves the guards themselves
+        # refuse when the tree and the acceptance record disagree.
+        accepted = _cohort_governance_accepted()
         assert state.proposal.status is ProposalStatus.ACCEPTED
         assert state.proposal.accepted_manifest_sha256 == state.proposal.manifest_sha256
-        assert state.proposal.proposed_row_count == accepted.row_count
-        assert state.proposal.proposed_last_open == accepted.last_open
+        assert state.proposal.proposed_row_count == int(accepted["row_count"])
+        assert state.proposal.proposed_last_open == accepted["last_open"]
         assert state.proposal.new_completed_days == _ACCEPTED_APPEND_ROWS
         assert state.proposal.ancestry_verified is True
-        assert "accepted" in state.proposal.detail
+        # B-2 item 3: ``"accepted" in detail`` was vacuous -- the PENDING sentence
+        # ("pending draft proposal verified against the accepted base (unmerged)")
+        # contains that substring too, so the check discriminated nothing.
+        detail = state.proposal.detail
+        # Anchored OUTSIDE the label table on literal text, so swapping the accepted and
+        # pending sentences in LABELS cannot satisfy these: a landed proposal may not be
+        # described as pending or unmerged.
+        assert "pending" not in detail
+        assert "unmerged" not in detail
+        assert "accepted" in detail
+        # ... and the sentence must still round-trip to exactly this status.
+        assert status_from_detail(detail) is ProposalStatus.ACCEPTED
+        assert detail != labels_for(ProposalStatus.PROPOSED).detail
 
 
 class TestAcceptedProposalAnchoring:
@@ -452,6 +524,118 @@ class TestAcceptedProposalAnchoring:
             build_dashboard_state(REPO_ROOT, proposal_checkout=checkout)
 
 
+class TestAcceptedProposalEqualsTheAcceptedCohort:
+    """Auditor C finding B-2 items 1-2: make the both-ends pin load-bearing.
+
+    The accepted branch requires the proposed state to BE the accepted state exactly.
+    A test that merely restates that equality can never fail -- production raises
+    first. These cases instead move the accepted cohort out from under a genuine,
+    unmodified bundle (one field at a time) and require the exact refusal.
+
+    ``_proposal_panel`` is the production function that owns the comparison, and it
+    takes the accepted base as a parameter, so a forged base reaches the guard without
+    touching the repository or re-sealing anything in the bundle.
+    """
+
+    _REAL = Path("/tmp/claude-0/v2e-proposal-checkout")
+
+    def _require_checkout(self) -> Path:
+        if not self._REAL.is_dir():
+            pytest.skip("real proposal checkout not present in this environment")
+        return self._REAL
+
+    def _forged_base(self, **overrides: Any) -> AcceptedProspectiveBase:
+        """The real verified base with exactly the named field(s) changed.
+
+        ``base_sha256`` is re-sealed so the forgery is internally coherent -- a forger
+        who edits a base would of course re-hash it -- and the caller asserts the
+        re-seal did not repair the mutation.
+        """
+        real = verify_accepted_base(REPO_ROOT)
+        doc = {**real.document, **overrides}
+        doc["base_sha256"] = domain_sha256(
+            "m3e_accepted_prospective_base",
+            {k: v for k, v in doc.items() if k != "base_sha256"},
+        )
+        return AcceptedProspectiveBase(document=doc)
+
+    def test_control_the_unmutated_base_reports_the_bundle_accepted(self) -> None:
+        """The control: with nothing mutated the same call succeeds."""
+        checkout = self._require_checkout()
+        panel = _proposal_panel(REPO_ROOT, verify_accepted_base(REPO_ROOT), checkout)
+        assert panel.status is ProposalStatus.ACCEPTED
+        assert panel.ancestry_verified is True
+
+    def test_a_row_count_that_is_not_the_accepted_cohort_refuses(self) -> None:
+        checkout = self._require_checkout()
+        real = verify_accepted_base(REPO_ROOT)
+        forged = self._forged_base(row_count=real.row_count + 1)
+        # The mutation changed the intended field, and only that field.
+        assert forged.row_count == real.row_count + 1
+        assert forged.row_count != real.row_count
+        assert forged.last_open == real.last_open
+        assert forged.canonical_content_fingerprint == real.canonical_content_fingerprint
+        with pytest.raises(
+            DashboardStateError,
+            match="accepted proposal row count does not equal the accepted cohort on disk",
+        ):
+            _proposal_panel(REPO_ROOT, forged, checkout)
+
+    def test_a_last_open_that_is_not_the_accepted_cohort_refuses(self) -> None:
+        checkout = self._require_checkout()
+        real = verify_accepted_base(REPO_ROOT)
+        forged = self._forged_base(last_open="2027-01-01T00:00:00Z")
+        assert forged.last_open == "2027-01-01T00:00:00Z"
+        assert forged.last_open != real.last_open
+        assert forged.row_count == real.row_count
+        assert forged.canonical_content_fingerprint == real.canonical_content_fingerprint
+        with pytest.raises(
+            DashboardStateError,
+            match="accepted proposal last-open does not equal the accepted cohort on disk",
+        ):
+            _proposal_panel(REPO_ROOT, forged, checkout)
+
+
+class TestAcceptedCohortIsTheOneGovernanceAccepted:
+    """Auditor C finding B-2 item 4: the published cohort must be re-derivable.
+
+    The old assertion compared the panel against the very call that populated it. What
+    actually protects the number is ``verify_accepted_base`` requiring the committed
+    snapshot to rebuild byte-for-byte from committed M3D evidence -- so the load-bearing
+    case is a coherently re-sealed snapshot that no longer matches its rebuild.
+    """
+
+    def test_control_the_untouched_clone_builds(self, m3a_checkout: Path) -> None:
+        state = build_dashboard_state(m3a_checkout)
+        assert state.cohort.accepted_row_count == int(_cohort_governance_accepted()["row_count"])
+
+    def test_a_resealed_accepted_base_that_does_not_rebuild_refuses(
+        self, m3a_checkout: Path
+    ) -> None:
+        path = m3a_checkout / ACCEPTED_BASE_PATH
+        before = path.read_bytes()
+        doc = json.loads(before.decode("utf-8"))
+        # Exactly one semantic mutation: the published cohort size.
+        doc["row_count"] = int(doc["row_count"]) + 1
+        # Re-seal the self-hash so the snapshot still loads -- only the rebuild
+        # comparison can catch this, which is precisely the guard under test.
+        doc["base_sha256"] = domain_sha256(
+            "m3e_accepted_prospective_base",
+            {k: v for k, v in doc.items() if k != "base_sha256"},
+        )
+        after = canonical_json_bytes(doc)
+        path.write_bytes(after)
+        # Prove the mutation actually changed the intended bytes and semantic field.
+        assert after != before
+        reread = json.loads(path.read_bytes().decode("utf-8"))
+        assert reread["row_count"] == json.loads(before.decode("utf-8"))["row_count"] + 1
+        assert reread["base_sha256"] != json.loads(before.decode("utf-8"))["base_sha256"]
+        with pytest.raises(
+            DashboardStateError, match=r"committed accepted_base\.json does not match the rebuild"
+        ):
+            build_dashboard_state(m3a_checkout)
+
+
 class TestGovernanceConflicts:
     def test_eligible_candidate_conflicts_with_this_surface(self) -> None:
         # auditor-1 HIGH-2: a readiness snapshot recording an eligible candidate must
@@ -479,3 +663,104 @@ class TestGovernanceConflicts:
         path.write_text('{"schema_version": 1, "schema_version": 1,' + text[1:] + "\n", "utf-8")
         with pytest.raises(DashboardStateError):
             build_dashboard_state(m3a_checkout)
+
+
+# --------------------------------------------------------------------------- #
+# Adversarial case table + meta-check (Auditor C finding B-2)                  #
+# --------------------------------------------------------------------------- #
+# Every fail-closed case in this module carries a stable id. Observation is
+# automatic (the autouse recorder below), so a case can never be catalogued but
+# silently absent, skipped, or renamed away without the guard failing loudly.
+
+ADVERSARIAL_CASES: dict[str, str] = {
+    "V2E-DASH-01": "test_state_is_immutable",
+    "V2E-DASH-02": "test_malformed_accepted_base_refuses",
+    "V2E-DASH-03": "test_duplicate_keys_in_v2a_results_refuse",
+    "V2E-DASH-04": "test_symlinked_artifact_refuses",
+    "V2E-DASH-05": "test_nonempty_sealed_ledger_refuses",
+    "V2E-DASH-06": "test_missing_activation_anchor_refuses",
+    "V2E-DASH-07": "test_forged_paper_readiness_refuses",
+    "V2E-DASH-08": "test_forged_sell_ready_refuses",
+    "V2E-DASH-09": "test_wrong_parent_proposal_refuses",
+    "V2E-DASH-10": "test_tampered_runner_comparison_refuses",
+    "V2E-DASH-11": "test_skeleton_manifest_without_valid_self_hash_refuses",
+    "V2E-DASH-12": "test_side_file_diverging_from_manifest_refuses",
+    "V2E-DASH-13": "test_symlinked_proposals_dir_refuses",
+    "V2E-DASH-14": "test_symlinked_proposal_entry_refuses",
+    "V2E-DASH-15": "test_a_substituted_bundle_is_not_reported_as_accepted",
+    "V2E-DASH-16": "test_reparenting_onto_the_post_acceptance_base_refuses",
+    "V2E-DASH-17": "test_result_that_is_not_the_accepted_cohort_refuses",
+    "V2E-DASH-18": "test_side_file_divergence_from_the_pinned_transition_refuses",
+    "V2E-DASH-19": "test_an_unaccepted_proposal_still_uses_the_pending_rule",
+    # B-2 items 1-2: the accepted-cohort both-ends pin.
+    "V2E-DASH-20": "test_a_row_count_that_is_not_the_accepted_cohort_refuses",
+    "V2E-DASH-21": "test_a_last_open_that_is_not_the_accepted_cohort_refuses",
+    # B-2 item 4: the published cohort must rebuild from committed evidence.
+    "V2E-DASH-22": "test_a_resealed_accepted_base_that_does_not_rebuild_refuses",
+    "V2E-DASH-23": "test_eligible_candidate_conflicts_with_this_surface",
+    "V2E-DASH-24": "test_duplicate_keys_in_committed_readiness_refuse",
+}
+
+_EXECUTED: set[str] = set()
+
+
+@pytest.fixture(autouse=True)
+def _record_executed_case(request: pytest.FixtureRequest) -> None:
+    """Record every case that actually reaches its body -- no per-test bookkeeping.
+
+    Recording automatically (rather than via a call inside each test) means a new
+    fail-closed case cannot be added, or an existing one renamed, without the
+    meta-test noticing.
+    """
+    _EXECUTED.add(request.node.originalname or request.node.name)
+
+
+def _selected(session: pytest.Session) -> set[str]:
+    this_file = Path(__file__).name
+    return {
+        item.nodeid.split("::")[-1]
+        for item in session.items
+        if item.nodeid.split("::")[0].endswith(this_file)
+    }
+
+
+def test_every_adversarial_case_id_is_unique_executed_and_observed(
+    request: pytest.FixtureRequest,
+) -> None:
+    """The case table cannot describe a case that does not run.
+
+    Runs last (definition order under ``-p no:randomly``) so ``_EXECUTED`` is complete.
+    """
+    ids = list(ADVERSARIAL_CASES)
+    names = list(ADVERSARIAL_CASES.values())
+    assert len(ids) == len(set(ids)), f"duplicate case ids: {ids}"
+    assert len(names) == len(set(names)), f"duplicate case test names: {names}"
+
+    module = sys.modules[__name__]
+    for case_id, test_name in ADVERSARIAL_CASES.items():
+        func = next(
+            (
+                getattr(obj, test_name, None)
+                for obj in vars(module).values()
+                if isinstance(obj, type) and hasattr(obj, test_name)
+            ),
+            getattr(module, test_name, None),
+        )
+        assert callable(func), f"{case_id} names no test in this module: {test_name}"
+        marks = {mark.name for mark in getattr(func, "pytestmark", ())}
+        assert not marks & {"skip", "skipif", "xfail"}, (
+            f"{case_id} ({test_name}) is skip/xfail-marked; an adversarial case must "
+            "never be silently disabled"
+        )
+
+    selected = _selected(request.session)
+    catalogued = set(names)
+    # Every catalogued case must still exist in the collected suite.
+    missing = catalogued - selected
+    assert not missing, f"catalogued adversarial cases no longer collected: {sorted(missing)}"
+    # Every adversarial (pytest.raises) test in the file must be catalogued -- a new
+    # fail-closed case cannot be added without an id.
+    assert catalogued <= selected
+    # ... and each catalogued case that was selected must actually have executed.
+    never_ran = catalogued - _EXECUTED
+    assert not never_ran, f"catalogued cases selected but never executed: {sorted(never_ran)}"
