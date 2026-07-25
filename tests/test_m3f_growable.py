@@ -206,7 +206,7 @@ def test_shrunken_cohort_is_refused_even_with_the_anchor(accepted_growth_tree: P
     # earlier. The floor is a deeper backstop and is exercised directly below, so
     # neither guard is left resting on the other.
     with pytest.raises(
-        M3FValidationError, match="accepted_base.json does not equal the acceptance chain-head"
+        M3FValidationError, match=r"accepted_base\.json does not equal the acceptance chain-head"
     ):
         verify_honest_state(accepted_growth_tree)
 
@@ -224,6 +224,6 @@ def test_an_unaccepted_proposal_is_still_refused(accepted_growth_tree: Path) -> 
     # acceptance verifiers; here the point is that the tree is refused, early.
     with pytest.raises(
         M3FValidationError,
-        match="proposal_registry.jsonl does not equal the acceptance chain-head",
+        match=r"proposal_registry\.jsonl does not equal the acceptance chain-head",
     ):
         verify_honest_state(accepted_growth_tree)

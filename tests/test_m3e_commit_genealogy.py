@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -52,7 +51,7 @@ def clone(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture
-def patched(monkeypatch: pytest.MonkeyPatch) -> Iterator[pytest.MonkeyPatch]:
+def patched(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     """Repoint the module's source pins, as a forged pin set would."""
     return monkeypatch
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -51,10 +52,12 @@ READER_TO_PATH = {
 _INVARIANT_ID = re.compile(r"\b([A-Z]{3,5}-[0-9]{2})\b")
 
 
-def _truth_table() -> dict:
+def _truth_table() -> dict[str, Any]:
     if not TRUTH_TABLE.is_file():
         pytest.skip(f"{TRUTH_TABLE.name} is not committed in this tree")
-    return json.loads(TRUTH_TABLE.read_text())
+    payload = json.loads(TRUTH_TABLE.read_text())
+    assert isinstance(payload, dict)
+    return payload
 
 
 # --- shape -----------------------------------------------------------------
@@ -94,9 +97,9 @@ def test_json_rendering_agrees_with_the_catalog() -> None:
     payload = as_json()
     assert payload["invariant_count"] == len(CATALOG)
     assert payload["fully_covered_count"] == len(CATALOG) - len(coverage_gaps())
-    assert [i["invariant_id"] for i in payload["invariants"]] == [
-        inv.invariant_id for inv in CATALOG
-    ]
+    rendered = payload["invariants"]
+    assert isinstance(rendered, list)
+    assert [dict(i)["invariant_id"] for i in rendered] == [inv.invariant_id for inv in CATALOG]
 
 
 def test_every_path_enforces_something() -> None:
