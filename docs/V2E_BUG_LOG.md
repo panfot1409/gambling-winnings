@@ -321,3 +321,60 @@ is a defence-ordering observation rather than a hole — the attack is refused
 everywhere, and `GEN-04` is probed directly in
 `tests/test_m3e_commit_genealogy.py`. It is recorded as
 `REFUSED_BY_ANOTHER_GUARD` rather than counted as a catch.
+
+## G-1 (Class B, OPEN — architectural, needs a governance decision)
+
+### The GA release baseline and the V2D growable cohort contradict each other
+
+Four full-suite failures on this branch share one root cause, and it is not test
+staleness:
+
+* `test_ga_release_artifacts::test_release_evidence_is_current`
+* `test_ga_release_artifacts::test_ga_hardening_changed_no_governed_artifact`
+* `test_private_release::test_check_passes_and_mutates_nothing`
+* `test_private_release::test_committed_manifest_source_fields_reproduce`
+
+`tools/release_evidence.governed_baseline_digest()` hashes **every file under
+`research/` except** `research/v2a/`, `research/v2b/`, `research/v2/` and
+`research/v2ab/`. That digest is pinned into the frozen v1.1.0 release evidence
+(`required_governed_state_digest` in the private distribution policy, and
+`governed_state_digest` in the release and private-release manifests), and the
+tests assert it still reproduces from the tree.
+
+The exclusion list encodes an assumption that was true when it was written: after
+GA, only V2A/V2B research would move, so everything else under `research/` could
+be treated as frozen released evidence.
+
+V2D falsified that assumption. It activated a **growable** prospective cohort
+whose entire purpose is to append to `research/m3d/` and `research/m3e/` on a
+schedule, under governed acceptance. This branch is simply the first time that
+growth has actually landed, so it is the first time the contradiction is visible.
+
+**This is not a stale fixture and must not be fixed by relaxing an assertion.**
+The digest is doing exactly what it was built to do; the surface it was pointed at
+stopped being frozen.
+
+Two candidate resolutions, with the trade-off stated honestly:
+
+1. **Narrow the baseline to what is actually frozen.** Add the specific growable
+   prospective paths to `_POST_BASELINE_PREFIXES`, exactly as V2A/V2B research
+   already is. This keeps the invariant's purpose — released artifacts have not
+   been tampered with — while acknowledging that the cohort is designed to grow.
+   The excluded surface is *not* left unguarded: the acceptance chain,
+   `m3f.growable` and the stdlib verifier all bind those same paths, and the probe
+   truth table measures that they do. The exclusion moves the surface to the guard
+   that understands its lifecycle rather than removing a guard.
+2. **Rebuild the frozen release evidence to the new digest.** Rejected. The v1.1.0
+   release evidence would then change every time a scheduled cohort update lands,
+   which does not weaken the invariant so much as delete it.
+
+Resolution 1 is the primary agent's recommendation, but it changes the meaning of
+a released artifact's provenance claim, so it is recorded here as OPEN pending
+independent review rather than applied unilaterally. Whichever is chosen, the
+exclusion must be narrow — the specific growable paths, not all of
+`research/m3d/` — and a test must assert that every excluded path is covered by
+the acceptance-layer guards instead.
+
+Recorded during V2F §1 preflight; the failures were found by running the full
+suite from an immutable worktree rather than the targeted subsets prior
+checkpoints on this branch had relied on.
