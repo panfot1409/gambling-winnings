@@ -658,6 +658,31 @@ pre-registered 365-row floor (and maturity is not evaluation authorization), the
 partitions stay byte-empty, and the paper-readiness gate still derives every flag false. See
 [docs/V2D_PLAN.md](docs/V2D_PLAN.md).
 
+## Operating a paper run, and watching it (Nardis Cockpit)
+
+`python -m eth_research.operate` runs the accepted signal-only shadow platform as a **paced
+process** rather than a single-pass function: one bar per iteration, on the operator's own
+schedule, driving a pre-registered candidate's causal signal oracle through the platform's own risk
+clamp, latching kill switch, paper accounting, monitoring and hash-chained journal. It modifies no
+byte of `eth_research.shadow` — the V2C qualification source freeze pins those modules — and it
+places no order, holds no venue credential, connects to no exchange, and moves no money. The V2E
+paper-activation gate still derives `paper_activation_authorized = false`.
+
+That process can optionally report itself to **Nardis Cockpit**, a self-hosted read-only dashboard.
+The integration is observational in the strict sense: every reporting function returns `None`, so
+no strategy, limit, size, or accounting step has anything to branch on; every reporting function
+swallows every failure; and liveness comes from an independent daemon-thread heartbeat rather than
+from the bar loop, which may legitimately idle longer than Cockpit's offline threshold.
+
+Cockpit's client is an **optional** dependency installed alongside the package, never a dependency
+of it: the locked dependency inventory (`eth_research.m3f.dependency_inventory`) fails closed on a
+non-registry package source, and the default install stays network-free — `eth_research.cockpit`
+imports `nardis_telemetry` and nothing else, so no networking import enters the AST-scanned tree.
+With the client absent, or with no `NARDIS_BOT_API_KEY` in the environment, the loop is the same
+loop and reports nothing. `tests/test_cockpit_integration.py` proves an enabled run and a disabled
+run produce a byte-identical journal, checkpoint, fill sequence and account. See
+[docs/COCKPIT_TELEMETRY.md](docs/COCKPIT_TELEMETRY.md).
+
 ## Roadmap
 
 See [docs/PLAN.md](docs/PLAN.md) for the milestone plan,
