@@ -825,3 +825,58 @@ def test_the_cli_will_not_even_parse_a_live_mode() -> None:
     """argparse refuses it before any trading code runs; the domain would refuse it again."""
     with pytest.raises(SystemExit):
         operate_main(["--mode", "live"])
+
+
+# --------------------------------------------------------------------------- #
+# Complexity: the reporter's per-bar work must not grow with the run
+# --------------------------------------------------------------------------- #
+def test_reporting_work_per_bar_does_not_grow_with_the_run() -> None:
+    """The reporter reads the journal through a watermark, and must keep doing so.
+
+    The operator re-derives the whole run each bar, so the journal it is handed grows linearly.
+    `BarReporter` only looks at what is new since last time. If someone replaced that with a scan
+    of the whole journal — an easy, innocent-looking change — telemetry would quietly become
+    quadratic alongside the engine, and the symptom would be a slow trader rather than a failing
+    test. Emitted-events-per-bar is the observable proxy: it is bounded by what happened at that
+    bar, never by how many bars came before it.
+    """
+    client = RecordingClient()
+    config = OperatorConfig(max_bars=60, backfill_bars=60, interval_seconds=0.0)
+    reporter = _reporter(client)
+    source = build_signal_source(config.candidate_id)
+    steps = build_steps(config, source)
+    shadow_config = config.shadow_config()
+
+    cursor = BarReporter(reporter)
+    per_bar: list[int] = []
+    for index in range(len(steps)):
+        before = len(client.calls)
+        cursor.report(run_shadow(shadow_config, steps[: index + 1]), steps[index])
+        per_bar.append(len(client.calls) - before)
+
+    # A bar emits: one signal, one equity, and at most one trade and one position.
+    assert max(per_bar) <= 4, f"a single bar emitted {max(per_bar)} events: {per_bar}"
+    # And the tail is no busier than the head — the giveaway for a whole-journal rescan.
+    assert sum(per_bar[-10:]) <= sum(per_bar[:10]) + 10, per_bar
+    assert sum(per_bar) == len(client.calls)
+
+
+def test_each_bar_costs_exactly_one_engine_derivation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One `run_shadow` per bar, not one per bar per anything else."""
+    calls = 0
+    real = run_shadow  # the same object paper.py holds; imported here for typing
+
+    def counting(*args: Any, **kwargs: Any) -> ShadowRunResult:
+        nonlocal calls
+        calls += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(operate_paper, "run_shadow", counting)
+    outcome = run_operator(
+        OperatorConfig(max_bars=25, backfill_bars=25, interval_seconds=0.0),
+        CockpitReporter.disabled(),
+        threading.Event(),
+    )
+
+    assert outcome.bars_processed == 25
+    assert calls == 25, f"{calls} engine derivations for 25 bars"
