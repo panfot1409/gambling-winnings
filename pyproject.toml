@@ -132,3 +132,13 @@ pretty = true
 [[tool.mypy.overrides]]
 module = ["pyarrow.*"]
 ignore_missing_imports = true
+
+# The Nardis Cockpit telemetry client is an *optional* integration dependency and is deliberately
+# absent from the dependency graph above: the locked dependency inventory
+# (eth_research.m3f.dependency_inventory) fails closed on any non-registry package source, and this
+# package's default install stays network-free. An operator who wants Cockpit installs the pinned
+# client alongside it (docs/COCKPIT_TELEMETRY.md); when it is installed, mypy type-checks against
+# its real py.typed signatures, and when it is not, eth_research.cockpit still type-checks.
+[[tool.mypy.overrides]]
+module = ["nardis_telemetry.*"]
+ignore_missing_imports = true

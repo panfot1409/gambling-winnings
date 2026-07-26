@@ -54,6 +54,7 @@
     "src/eth_research/m4a/cli_reference.py",
     "src/eth_research/m4a/public_api.py",
     "src/eth_research/m4a/release.py",
+    "src/eth_research/operate/__main__.py",
     "src/eth_research/portfolio/cli.py",
     "src/eth_research/portfolio/cli_reference.py",
     "src/eth_research/portfolio/public_api.py",
@@ -159,6 +160,11 @@
     "src/eth_research/buyer/scorecard.py",
     "src/eth_research/cli/__init__.py",
     "src/eth_research/cli/app.py",
+    "src/eth_research/cockpit/__init__.py",
+    "src/eth_research/cockpit/client.py",
+    "src/eth_research/cockpit/config.py",
+    "src/eth_research/cockpit/heartbeat.py",
+    "src/eth_research/cockpit/reporter.py",
     "src/eth_research/costs.py",
     "src/eth_research/data/__init__.py",
     "src/eth_research/data/acquire_runner.py",
@@ -307,6 +313,9 @@
     "src/eth_research/m4a/release.py",
     "src/eth_research/methodology_v2.py",
     "src/eth_research/metrics.py",
+    "src/eth_research/operate/__init__.py",
+    "src/eth_research/operate/__main__.py",
+    "src/eth_research/operate/paper.py",
     "src/eth_research/portfolio/__init__.py",
     "src/eth_research/portfolio/_time.py",
     "src/eth_research/portfolio/accounting.py",
@@ -563,8 +572,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "fcbc8aa09a43ae4c7a5add6bbe5fc2260aa6881073fda05b6469a98ef5fb75c2",
-  "tracked_file_count": 1042,
+  "surface_digest": "22647fa94c7ef115766057ac2bfab9c69169413a6bca46666e01d4a62188b6a9",
+  "tracked_file_count": 1052,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
