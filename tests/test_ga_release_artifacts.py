@@ -13,6 +13,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 import eth_research
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
@@ -39,6 +41,64 @@ def test_release_evidence_is_current() -> None:
 def test_ga_hardening_changed_no_governed_artifact() -> None:
     # The pre-GA governed-state baseline (every research/ artifact) must reproduce byte-for-byte.
     assert _TOOL.governed_baseline_digest(REPO_ROOT) == _TOOL.GOVERNED_BASELINE_DIGEST  # type: ignore[attr-defined]
+
+
+def test_the_repository_has_moved_past_the_frozen_release_version() -> None:
+    """Documents why the historical path below is the one that runs here, not a hypothetical."""
+    assert _TOOL._active_version(REPO_ROOT) != _TOOL.VERSION  # type: ignore[attr-defined]
+
+
+def _stub_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Swap the artifact table for trivial builders.
+
+    These tests are about which artifacts ``write`` chooses to rebuild, not about what the real
+    builders produce. Stubbing keeps them from needing a whole repository under ``tmp_path`` — and,
+    more importantly, from writing into the checkout and leaving it dirty for the suites that
+    assert a clean tree.
+    """
+    monkeypatch.setattr(
+        _TOOL,
+        "_ARTIFACTS",
+        {name: (lambda _root: {"stub": True}) for name in _TOOL._ARTIFACTS},  # type: ignore[attr-defined]
+    )
+
+
+def test_write_keeps_the_historical_manifest_under_a_later_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--write`` must not rebuild the v1.1.0 manifest from a tree that is no longer v1.1.0.
+
+    ``check`` stops reproducing the manifest once the active version moves past the frozen release
+    and validates its recorded identity instead. ``write`` has to make the same distinction, or the
+    command that ``check``'s own "regenerate with --write" message points at would replace a v1.1.0
+    record with one that still claims 1.1.0 while listing a later tree's files.
+    """
+    monkeypatch.setattr(_TOOL, "_active_version", lambda _root: "2.0.0.dev2")
+    _stub_artifacts(monkeypatch)
+    outdir = tmp_path / _TOOL.RELDIR  # type: ignore[attr-defined]
+    outdir.mkdir(parents=True)
+    manifest = outdir / "release_manifest.json"
+    historical = b'{"version":"1.1.0","recorded":"from the v1.1.0 tree"}'
+    manifest.write_bytes(historical)
+
+    written = _TOOL.write(tmp_path)  # type: ignore[attr-defined]
+
+    assert "release_manifest.json" not in written
+    assert set(written) == {"sbom.cdx.json", "release_state.json"}
+    assert manifest.read_bytes() == historical, "the historical manifest was rewritten"
+
+
+def test_write_rebuilds_everything_at_the_release_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """At the release version itself nothing is historical, so the manifest is rebuilt too."""
+    monkeypatch.setattr(_TOOL, "_active_version", lambda _root: _TOOL.VERSION)  # type: ignore[attr-defined]
+    _stub_artifacts(monkeypatch)
+
+    written = _TOOL.write(tmp_path)  # type: ignore[attr-defined]
+
+    assert set(written) == {"release_manifest.json", "sbom.cdx.json", "release_state.json"}
+    assert (tmp_path / _TOOL.RELDIR / "release_manifest.json").is_file()  # type: ignore[attr-defined]
 
 
 def test_manifest_identity() -> None:

@@ -249,11 +249,26 @@ _ARTIFACTS: dict[str, Callable[[Path], dict[str, object]]] = {
 }
 
 
-def write(repo_root: Path) -> None:
+def write(repo_root: Path) -> list[str]:
+    """Regenerate the release evidence; return the artifact names actually written.
+
+    Under a later development version this deliberately leaves ``release_manifest.json`` alone,
+    for the same reason :func:`check` stops reproducing it: the v1.1.0 manifest is a record of the
+    v1.1.0 *source tree*, and rebuilding it from a diverged tree would produce an artifact that
+    still claims version 1.1.0 while listing today's files — a false record, written by the very
+    command ``check``'s "regenerate with --write" message sends an operator to. The sbom and the
+    release state are version-independent and are always rebuilt.
+    """
     outdir = repo_root / RELDIR
     outdir.mkdir(parents=True, exist_ok=True)
+    historical = _active_version(repo_root) != VERSION
+    written: list[str] = []
     for name, builder in _ARTIFACTS.items():
+        if historical and name == "release_manifest.json":
+            continue
         (outdir / name).write_bytes(_canonical_json(builder(repo_root)))
+        written.append(name)
+    return written
 
 
 def _active_version(repo_root: Path) -> str:
@@ -341,8 +356,14 @@ def main(argv: list[str] | None = None) -> int:
     ns = ap.parse_args(argv)
     root = Path(ns.repo_root).resolve()
     if ns.write:
-        write(root)
-        print(f"wrote release evidence under {RELDIR}/")
+        written = write(root)
+        print(f"wrote {', '.join(written)} under {RELDIR}/")
+        skipped = sorted(set(_ARTIFACTS) - set(written))
+        if skipped:
+            print(
+                f"kept the historical {', '.join(skipped)} "
+                f"(active version {_active_version(root)} has moved past the frozen {VERSION})"
+            )
         return 0
     problems = check(root)
     if problems:
