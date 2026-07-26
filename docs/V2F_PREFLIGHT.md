@@ -133,7 +133,7 @@ matched text masked — no value was printed, logged or recorded anywhere:
 
 | detector | path | classification |
 | --- | --- | --- |
-| `pem_private_key` | `tests/test_buyer_boundary.py` | bare `-----BEGIN RSA PRIVATE KEY-----` header, **no key material** |
+| `pem_private_key` | `tests/test_buyer_boundary.py` | a bare dash-wrapped `BEGIN RSA PRIVATE KEY` header line, **no key material** |
 | `aws_access_key_id` | `tests/test_buyer_boundary.py` | `"AKIA"` + hand-written placeholder |
 | `secret_assignment` | `tests/test_buyer_boundary.py` | `api_key = 'abcd…'` placeholder |
 | `pem_private_key` | `tests/test_m3e_file_policy.py` | bare PEM header with body `AAAA` |
