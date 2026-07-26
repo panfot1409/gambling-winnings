@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import signal
 import threading
 import time
 from dataclasses import dataclass, field
@@ -37,6 +38,7 @@ from eth_research.cockpit.config import (
 from eth_research.cockpit.heartbeat import HeartbeatWorker
 from eth_research.cockpit.reporter import RUN_FAILED_CODE, CockpitReporter
 from eth_research.operate import paper as operate_paper
+from eth_research.operate.__main__ import main as operate_main
 from eth_research.operate.paper import (
     BarReporter,
     OperatorConfig,
@@ -773,3 +775,34 @@ def test_reporter_failures_are_logged_not_raised(caplog: pytest.LogCaptureFixtur
     with caplog.at_level(logging.WARNING, logger="eth_research.cockpit"):
         reporter.report_equity(equity=1.0, as_of=_ts(0))
     assert any("telemetry equity failed" in record.message for record in caplog.records)
+
+
+# --------------------------------------------------------------------------- #
+# The process entry point
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def _restore_signal_handlers() -> Any:
+    """``main`` installs SIGINT/SIGTERM handlers; put pytest's back afterwards."""
+    saved = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
+    yield
+    for sig, handler in saved.items():
+        signal.signal(sig, handler)
+
+
+@pytest.mark.usefixtures("_restore_signal_handlers")
+def test_the_cli_runs_a_whole_series_without_cockpit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(BOT_API_KEY_ENV, raising=False)
+    monkeypatch.delenv("NARDIS_COCKPIT_URL", raising=False)
+    assert operate_main(["--interval", "0", "--bars", "6", "--backfill", "6"]) == 0
+
+
+@pytest.mark.usefixtures("_restore_signal_handlers")
+def test_the_cli_refuses_an_impossible_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(BOT_API_KEY_ENV, raising=False)
+    assert operate_main(["--bars", "5", "--backfill", "50"]) == 2
+
+
+def test_the_cli_will_not_even_parse_a_live_mode() -> None:
+    """argparse refuses it before any trading code runs; the domain would refuse it again."""
+    with pytest.raises(SystemExit):
+        operate_main(["--mode", "live"])

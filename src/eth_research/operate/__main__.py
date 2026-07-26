@@ -160,7 +160,10 @@ def main(argv: list[str] | None = None) -> int:
         heartbeat.stop()
         reporter.close()
 
-    return 0 if outcome.bars_processed > 0 else 1
+    # A run that was asked to stop before its first bar stopped cleanly, and says so with a zero
+    # exit: shutting down on request is not a failure.
+    log.info("exiting after %d bar(s)", outcome.bars_processed)
+    return 0
 
 
 if __name__ == "__main__":
