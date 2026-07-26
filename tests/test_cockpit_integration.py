@@ -17,6 +17,7 @@ from __future__ import annotations
 import inspect
 import logging
 import signal
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -151,6 +152,25 @@ class ExplodingClient:
 
 def _reporter(client: Any) -> CockpitReporter:
     return CockpitReporter(client, symbol="eth_usd")
+
+
+@pytest.fixture
+def shipped_client() -> Any:
+    """Borrow the real ``nardis_telemetry`` for one test, then put ``sys.modules`` back.
+
+    The client brings ``httpx`` in with it, and ``eth-research doctor`` reports — correctly, and
+    in-process — that a network client is imported whenever it finds one in ``sys.modules``. This
+    integration is optional and sits outside the offline platform's import closure, so a test that
+    borrows the client must not leave it behind for the rest of the session to trip over. (The same
+    snapshot-and-restore pattern the platform's own closure tests use.)
+    """
+    before = set(sys.modules)
+    module = pytest.importorskip("nardis_telemetry")
+    try:
+        yield module
+    finally:
+        for name in set(sys.modules) - before:
+            del sys.modules[name]
 
 
 # --------------------------------------------------------------------------- #
@@ -682,7 +702,6 @@ def test_signals_are_causal_by_construction() -> None:
 # --------------------------------------------------------------------------- #
 def _slow_client(delay: float) -> Any:
     """The shipped client, wired to a transport that takes `delay` seconds to answer anything."""
-    pytest.importorskip("nardis_telemetry")
     from nardis_telemetry import TelemetryClient, TelemetryConfig
     from nardis_telemetry.transport import Response
 
@@ -698,6 +717,7 @@ def _slow_client(delay: float) -> Any:
     return TelemetryClient(config, transport=GlacialTransport())
 
 
+@pytest.mark.usefixtures("shipped_client")
 def test_a_glacial_cockpit_does_not_slow_the_trading_loop() -> None:
     client = _slow_client(2.0)
     try:
@@ -717,8 +737,8 @@ def test_a_glacial_cockpit_does_not_slow_the_trading_loop() -> None:
     assert outcome.slowest_report_seconds < 0.5
 
 
+@pytest.mark.usefixtures("shipped_client")
 def test_an_unreachable_cockpit_does_not_stop_the_trader() -> None:
-    pytest.importorskip("nardis_telemetry")
     from nardis_telemetry import TelemetryClient, TelemetryConfig
 
     # Port 1 on loopback: connection refused, immediately and repeatedly.
@@ -751,10 +771,9 @@ def test_an_unreachable_cockpit_does_not_stop_the_trader() -> None:
     assert outcome.kill_tripped == silent.kill_tripped
 
 
-def test_the_shipped_client_satisfies_the_surface_the_reporter_calls() -> None:
+def test_the_shipped_client_satisfies_the_surface_the_reporter_calls(shipped_client: Any) -> None:
     """If the client's API ever moves, this fails here rather than silently in production."""
-    pytest.importorskip("nardis_telemetry")
-    from nardis_telemetry import TelemetryClient
+    TelemetryClient = shipped_client.TelemetryClient
 
     for name in (
         "register",
