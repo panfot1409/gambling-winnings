@@ -142,13 +142,30 @@ default 1200-bar budget the engine's worst iteration is a small fraction of one 
 
 ## What is proved, and where
 
-`tests/test_cockpit_integration.py` proves, on every CI run:
+`tests/test_cockpit_integration.py` proves, on every run of the suite:
 
+- re-deriving the run each bar extends the journal rather than diverging from it — asserted over
+  the chained entry hashes, on a quiet run and on one that trips the kill switch. Everything the
+  reporter says about position and equity rests on this, and a freeze pins the runner's bytes but
+  not this semantic;
 - an enabled run and a disabled run produce a byte-identical journal, checkpoint, fills and account;
 - a client whose every method raises changes neither the outcome nor the control flow;
-- a transport that takes two seconds per request does not slow the loop;
-- an unreachable Cockpit leaves bars, equity and kill-switch state identical to a silent run;
 - signal, trade, position and equity payloads equal the platform's own values;
 - staleness, drawdown, risk-breach and engine-failure events come from the real code paths;
 - the heartbeat starts, beats, stops, refuses to double-start, and runs as a daemon;
-- every reporting method is annotated `-> None`, so nothing can branch on monitoring.
+- every reporting method is annotated `-> None`, so nothing can branch on monitoring;
+- reporting work per bar stays bounded by what happened at that bar, and the engine is derived
+  exactly once per bar — counted rather than timed, so they cannot flake.
+
+Three of them drive the shipped client rather than a double, because "a slow Cockpit does not
+block the loop" is only worth asserting against the thing that would actually block:
+
+- a transport that takes two seconds per request does not slow the loop;
+- an unreachable Cockpit leaves bars, equity and kill-switch state identical to a silent run;
+- the client still exposes the surface the reporter calls.
+
+**These three skip in CI**, and it is worth being plain about why: `nardis-telemetry` is an optional
+install and is deliberately absent from `uv.lock`, so CI has no client to borrow. They run for a
+developer who followed the install instructions above. If that trade ever stops being acceptable,
+the fix is to make the client available to CI — not to weaken the tests into something a mock could
+satisfy.
