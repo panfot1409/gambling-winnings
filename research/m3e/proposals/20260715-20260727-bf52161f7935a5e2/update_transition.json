@@ -1,0 +1,16 @@
+{
+  "is_append_only": true,
+  "new_window_fingerprint": "898f5fb470b504ab235bd48fa159ed552fedde2c1aec683ef6aae8516f96815d",
+  "new_window_first_open": "2026-07-15T00:00:00Z",
+  "new_window_last_open": "2026-07-26T00:00:00Z",
+  "new_window_row_count": 12,
+  "old_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+  "old_first_open": "2026-07-12T00:00:00Z",
+  "old_last_open": "2026-07-14T00:00:00Z",
+  "old_row_count": 3,
+  "proposed_cohort_fingerprint": "7545fb1739ae39c8935cb069a2e3ee2431e94626e27d30069f4a2f9c686be8d1",
+  "proposed_first_open": "2026-07-12T00:00:00Z",
+  "proposed_last_open": "2026-07-26T00:00:00Z",
+  "proposed_row_count": 15,
+  "transition_sha256": "95ffca844aa85de70b33251bd1e080ba317f76f55c93a4217050d7b51a2670f1"
+}

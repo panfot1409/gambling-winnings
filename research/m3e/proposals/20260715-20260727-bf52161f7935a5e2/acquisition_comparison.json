@@ -1,0 +1,23 @@
+{
+  "canonical_content_match": true,
+  "comparison_sha256": "d59ef3e46772ac04a17f916c199fc157675d25c5f27af01d018a6f40267b0d87",
+  "first_open": "2026-07-15T00:00:00Z",
+  "idempotency_key": "bf52161f7935a5e20a5f35c2b6e1195debfb1d3d3955c3e2fe18364806ece605",
+  "last_open": "2026-07-26T00:00:00Z",
+  "new_window_fingerprint": "898f5fb470b504ab235bd48fa159ed552fedde2c1aec683ef6aae8516f96815d",
+  "plan_sha256": "fa25293002b7ccdeab9f04f91c12c122bc142edc884e98ff43b83ae7c9ed4ac8",
+  "row_count": 12,
+  "runner_a_identity": [
+    "f42e5b5c8886128878e5e9daa45f10566c7426eb",
+    "30270242877",
+    "github-hosted-runner-a-30270242877"
+  ],
+  "runner_a_label": "a",
+  "runner_b_identity": [
+    "f42e5b5c8886128878e5e9daa45f10566c7426eb",
+    "30270242877",
+    "github-hosted-runner-b-30270242877"
+  ],
+  "runner_b_label": "b",
+  "runners_isolated": true
+}

@@ -1,0 +1,56 @@
+{
+  "accepted_base_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+  "accepted_base_sha256": "c7af0ecc3c3e2f3b838a405e1bc017e7e0b183639302d2eb7654d4299426373f",
+  "comparison": {
+    "comparison_sha256": "d59ef3e46772ac04a17f916c199fc157675d25c5f27af01d018a6f40267b0d87",
+    "runner_a_identity": [
+      "f42e5b5c8886128878e5e9daa45f10566c7426eb",
+      "30270242877",
+      "github-hosted-runner-a-30270242877"
+    ],
+    "runner_b_identity": [
+      "f42e5b5c8886128878e5e9daa45f10566c7426eb",
+      "30270242877",
+      "github-hosted-runner-b-30270242877"
+    ],
+    "runners_isolated": true
+  },
+  "governance_flags": {
+    "candidate_declared": false,
+    "money_moved": false,
+    "performance_metrics_computed": false,
+    "promotion_decision_exists": false,
+    "strategy_evaluated": false
+  },
+  "idempotency_key": "bf52161f7935a5e20a5f35c2b6e1195debfb1d3d3955c3e2fe18364806ece605",
+  "kind": "prospective_update_proposal",
+  "lease_id": "6937ca14f554c3ec8af38c6b856104066aa87008b1624a92f724db6f8975d556",
+  "manifest_sha256": "358c54ec3153e88b44a0a5580ce9d44dabb813f2251763626f26b1a927aef1f9",
+  "new_window": {
+    "fingerprint": "898f5fb470b504ab235bd48fa159ed552fedde2c1aec683ef6aae8516f96815d",
+    "first_open": "2026-07-15T00:00:00Z",
+    "last_open": "2026-07-26T00:00:00Z",
+    "row_count": 12
+  },
+  "package_version": "0.8.0",
+  "proposal_branch": "bot/m3e-prospective-update/20260715-20260727-bf52161f7935a5e2",
+  "review_policy": {
+    "auto_merge_forbidden": true,
+    "draft_required": true,
+    "human_review_required": true,
+    "modifies_accepted_branch": false,
+    "retarget_forbidden": true
+  },
+  "schema_version": 1,
+  "transition": {
+    "is_append_only": true,
+    "new_window_row_count": 12,
+    "old_last_open": "2026-07-14T00:00:00Z",
+    "old_row_count": 3,
+    "proposed_cohort_fingerprint": "7545fb1739ae39c8935cb069a2e3ee2431e94626e27d30069f4a2f9c686be8d1",
+    "proposed_last_open": "2026-07-26T00:00:00Z",
+    "proposed_row_count": 15,
+    "transition_sha256": "95ffca844aa85de70b33251bd1e080ba317f76f55c93a4217050d7b51a2670f1"
+  },
+  "update_plan_sha256": "fa25293002b7ccdeab9f04f91c12c122bc142edc884e98ff43b83ae7c9ed4ac8"
+}
