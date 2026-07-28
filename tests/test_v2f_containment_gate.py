@@ -31,7 +31,8 @@ def _load(name: str, path: Path) -> ModuleType:
     # loading by file location keeps these scripts runnable with a bare
     # interpreter, which is what the workflow does before any environment sync.
     spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
