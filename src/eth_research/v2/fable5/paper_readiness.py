@@ -1,13 +1,34 @@
 """Paper-readiness derivation — a pure, machine-readable gate with no forcing literal.
 
-Paper trading may begin only when *every* gate below holds. Each gate is **derived from committed
-bytes** under a repository root; none is a stored settable flag trusted on its own, and there is no
-literal / environment variable / CLI flag / monkeypatchable setting / alternate builder that can
-force ``paper_activation_authorized`` (or ``paper_trading_active`` or ``sell_ready``) true. The
-load-bearing gate is ``eligible_paper_candidate_present``: it is read from the committed V2A and V2B
-decision artifacts, both of which nominate zero candidates (``nominated_candidate_id == null``,
-``eligible_candidate_ids == []``), so it derives **false** and cannot be flipped without a genuine,
-separately-governed nomination. A rejected or null-result candidate is not eligible.
+Paper trading may begin only when *every* gate below holds. Each gate is derived from **bytes on
+disk** under a repository root; none is a stored settable flag trusted on its own, and no literal,
+environment variable or CLI flag can force ``paper_activation_authorized`` (or
+``paper_trading_active`` or ``sell_ready``) true.
+
+Two limits on that sentence, both established by a read-only refuter against a running copy and
+recorded here because the sentence previously overstated them:
+
+* **"committed bytes" is really "working tree".** Nothing here consults git. A ``.gitignore``d,
+  never-committed file that ``git status`` does not show will satisfy a presence gate. What
+  actually binds these artifacts to the repository is the Fable 5 governed inventory (byte pins
+  plus an added/unclassified check) and the source freeze — not this module.
+* **"monkeypatchable" was too strong.** Rebinding a module-level name in a live interpreter does
+  move the result: reassigning ``PAPER_ACTIVATION_GATES`` to ``()`` makes ``all(...)`` vacuously
+  true, and reassigning ``ReadinessInputs`` flips ``sell_ready``. That requires code execution
+  inside the process, which is a strictly larger capability than writing files, so it is not a
+  gate bypass — but the module should not claim immunity it does not have.
+
+``sell_ready`` is additionally **not** derived from ``repo_root`` at all: it comes from
+``ReadinessInputs.current()``, a fixed constructor. It is ``False`` for an empty directory, for the
+real repository, and for a fully forged tree alike. That is the safe direction, and it is stated
+rather than left to look like a derivation.
+
+The load-bearing gate is ``eligible_paper_candidate_present``: it is read from the committed V2A
+and V2B decision artifacts, both of which nominate zero candidates (``nominated_candidate_id ==
+null``, ``eligible_candidate_ids == []``), so it derives **false** and cannot be flipped without a
+genuine, separately-governed nomination. A rejected or null-result candidate is not eligible — and
+that is now enforced rather than assumed: an id must be a non-empty string, because ``[null]`` once
+satisfied a bare length check and flipped three gates.
 
 Given the accepted V2 state (zero nominated candidates; sealed ledgers byte-empty; no paper-release
 freeze; no human activation approval; no paper record), the derived state is:
@@ -159,16 +180,29 @@ def _path_exists(root: Path, rel: str) -> bool:
     report "not trading". Gates that must be *earned* keep the strict reader.
 
     Implemented with ``os.lstat`` rather than ``Path.exists() or Path.is_symlink()``,
-    because both of those swallow a fixed set of errnos including **ELOOP**. An auditor
-    built a 40-deep symlink chain on a parent component and got ``paper_trading_active
-    = False`` with ``{"paper_trading": "ACTIVE"}`` sitting readable on disk — the exact
-    inversion this function exists to prevent. Only "the file is definitively not
-    there" (``FileNotFoundError``) counts as absent; every other ``OSError`` means we
-    could not establish absence, and unestablished absence is reported as presence.
+    because both of those swallow a fixed set of errnos (``ENOENT``, ``ENOTDIR``,
+    ``EBADF``, ``ELOOP``) and so cannot distinguish "absent" from "could not tell".
+    ``lstat`` not ``stat``, so a broken symlink still counts as present.
+
+    Only the two errnos that genuinely mean *nothing can be there* count as absent:
+    ``ENOENT``, and ``ENOTDIR`` (a parent component is a regular file, so no child can
+    exist). Every other ``OSError`` — ``ELOOP``, ``EACCES``, ``ENAMETOOLONG`` — means we
+    failed to establish absence, and unestablished absence is reported as presence.
+
+    Provenance, since it bears on how much this is worth: an auditor reported a 40-deep
+    symlink chain making this return ``False`` "with the record readable on disk". A
+    refuter showed the substance was wrong — at that chain length the record is not
+    readable *through this path* either, and the realistic version of the attack
+    collapses three other gates and is refused by the inventory's symlink check. So this
+    is a correctness repair on an inverted-safety reader, not the closure of a live
+    inversion. It is worth having anyway: a reader that cannot tell absence from failure
+    should say so, and the cost is that an unreadable path now derives
+    ``paper_trading_active = True``, which makes ``verify_paper_readiness`` fail loudly
+    rather than pass quietly.
     """
     try:
         os.lstat(root / rel)
-    except FileNotFoundError:
+    except (FileNotFoundError, NotADirectoryError):
         return False
     except OSError:
         return True
@@ -198,8 +232,13 @@ def _eligible_candidate_present(root: Path) -> bool:
     v2b_decision = _nested_dict(_nested_dict(v2b, "result"), "decision")
     v2b_nominee = v2b_decision.get("nominated_candidate_id")
     v2b_eligible = v2b_decision.get("eligible_candidate_ids")
+    # Elements must be non-empty strings. `len(list) > 0` alone counted `[null]`,
+    # `[false]`, `[0]` and `[""]` as eligible candidates — which is precisely the
+    # "null-result candidate is not eligible" rule this module's docstring states,
+    # broken by the module itself. A padding or placeholder list flipped three gates.
     eligible_list = v2b_eligible if isinstance(v2b_eligible, list) else []
-    return bool(v2a_nominee) or bool(v2b_nominee) or len(eligible_list) > 0
+    named = [c for c in eligible_list if isinstance(c, str) and c.strip()]
+    return bool(v2a_nominee) or bool(v2b_nominee) or len(named) > 0
 
 
 def _remediation_resolved(root: Path) -> tuple[bool, bool]:
@@ -233,13 +272,14 @@ def _sealed_untouched(root: Path) -> bool:
     guards the partition whose whole purpose is to be provably unopened.
     """
     for rel in _SEALED_LEDGERS:
-        path = _unlinked_regular_file(root, rel)
-        if path is None:
-            return False
         try:
-            if path.stat().st_size != 0:
+            path = _unlinked_regular_file(root, rel)
+            if path is None or path.stat().st_size != 0:
                 return False
         except OSError:
+            # Inspecting the path can itself fail (an unsearchable parent directory).
+            # The resolution used to sit outside this try, so that raised out of a
+            # function whose whole contract is to return a bool.
             return False
     return True
 

@@ -199,6 +199,39 @@ The general lesson, stated because it caused both defects: **checking that good 
 present says nothing about whether bad text is also present.** A whitelist has to
 compare the whole region, not search it.
 
+### What the refuter changed
+
+Every Class A/B/D finding was handed to a second agent instructed to **refute** it. That pass is
+recorded here because it did not merely confirm — it moved two conclusions, and the record would be
+misleading without them.
+
+* **The ELOOP finding was overstated, by me.** It was reported as `paper_trading_active` returning
+  `false` "while a readable record with real content exists". The refuter swept chain lengths 1–45
+  and showed the reader never disagrees with readability *at the governed path*: at the length where
+  the check returns false, the record cannot be read through that path either. The realistic version
+  of the attack also collapses three other gates and is refused by the inventory's symlink check. The
+  reader was still repaired — a function that cannot distinguish "absent" from "could not tell"
+  should say so — but it closed a correctness gap, not a live inversion.
+* **The EACCES finding was half wrong.** `PermissionError` is an `OSError`, so an unreadable *file*
+  already returned `None` as documented. Only an unreadable *parent directory* escaped, and git does
+  not track directory permissions, so it cannot arrive through a clone.
+* **The parent-directory symlink is real but was already caught** by `fable5 verify`, which runs on
+  every push and PR. Fixing the reader is defence in depth, not the only line.
+
+The refuter also found three things the first auditors missed, all now fixed: `_sealed_untouched`
+resolved its path outside the `try`, so an unreadable parent raised out of a function contracted to
+return a bool; `_path_exists` treated `ENOTDIR` as presence when a regular-file parent means nothing
+can be there; and `eligible_candidate_ids: [null]` satisfied a bare length check, flipping three
+gates and contradicting this module's own "a null-result candidate is not eligible".
+
+Two documented claims were withdrawn as false rather than defended: the module said its gates derive
+from *committed* bytes (nothing consults git — a `.gitignore`d file satisfies a presence gate) and
+that no *monkeypatchable* setting could force a result (rebinding `PAPER_ACTIVATION_GATES` or
+`ReadinessInputs` does). Both now state the limit instead of the claim.
+
+Not fixed, recorded: `tools/m3f_independent_verify.py:150` has the same final-component-only symlink
+pattern. It is outside this containment change and belongs with the governance repair.
+
 ### Findings raised against this change and deliberately NOT fixed
 
 Three independent read-only auditors reviewed the containment change in disposable

@@ -28,7 +28,7 @@
     "src/eth_research/v2/fable5/__main__.py": "ff37771c94fa72ed694bc6c83debd64faf4c6bbd7170f479e672274984b53645",
     "src/eth_research/v2/fable5/freeze.py": "0cdd0553915ddb277aec4c23dd01931354736aa5f33db460a60acc1506ba338c",
     "src/eth_research/v2/fable5/inventory.py": "9dd9b2cdb21066118045d4742f69bcfcb628a4b81f688341e01fd4fa67a69847",
-    "src/eth_research/v2/fable5/paper_readiness.py": "e44ede7f4f160af5ec3f6a0ed02764c3d188a6841b35a0916159b857d8de2850",
+    "src/eth_research/v2/fable5/paper_readiness.py": "c9e004a2ec4124ff6026c24cda1944ff50ecab88072e7e68f90051084db63248",
     "src/eth_research/v2ab/commercial_truth.py": "a3241244307395f930e032328b6bec0a270f59967d736ef37d7619e963bbce31"
   },
   "schema_version": 1
