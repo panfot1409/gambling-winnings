@@ -87,7 +87,7 @@ def test_restoring_the_cron_fails() -> None:
     )
     assert mutated != _workflow(), "mutation did not apply"
     found = _violations(mutated)
-    assert "the on: block is not exactly" in found
+    assert "the on: region is" in found
 
 
 def test_commenting_the_cron_out_is_not_containment() -> None:
@@ -103,7 +103,7 @@ def test_commenting_the_cron_out_is_not_containment() -> None:
     )
     assert containment_violations(mutated) == []
     live = mutated.replace('  #   - cron: "17 2 * * 1"', '    - cron: "17 2 * * 1"')
-    assert "the on: block is not exactly" in _violations(live)
+    assert "the on: region is" in _violations(live)
 
 
 def test_removing_one_jobs_gate_fails() -> None:
@@ -132,7 +132,7 @@ def test_moving_a_gate_after_the_network_step_fails() -> None:
 def test_removing_workflow_dispatch_is_also_reported() -> None:
     """Containment suspends the schedule; it does not delete the mechanism."""
     mutated = _workflow().replace("on:\n  workflow_dispatch:", "on:\n  push:\n    branches: [x]")
-    assert "the on: block is not exactly" in _violations(mutated)
+    assert "the on: region is" in _violations(mutated)
 
 
 NEW_UNGATED_JOB = """
@@ -156,7 +156,7 @@ def test_adding_a_new_ungated_job_fails() -> None:
     """
     mutated = _workflow() + NEW_UNGATED_JOB
     found = _violations(mutated)
-    assert "job runner_c checks out the repository but has no containment gate" in found
+    assert "job runner_c step 2 is not the containment gate" in found
 
 
 def test_a_new_job_that_gates_is_accepted() -> None:
@@ -198,7 +198,7 @@ def test_removing_the_pr_opening_gate_fails() -> None:
     assert pr_gate in text, "the open_draft_pr gate is missing from the committed workflow"
     found = _violations(text.replace(pr_gate, "", 1))
     assert "open_draft_pr has no containment gate" in found
-    assert "job open_draft_pr checks out the repository but has no containment gate" in found
+    assert "job open_draft_pr step 2 is not the containment gate" in found
 
 
 # --- visibility surface ----------------------------------------------------
@@ -355,6 +355,179 @@ def test_a_classifier_only_tree_is_not_private(tmp_path: Path) -> None:
 def test_the_classifier_remains_the_packaging_kill_switch() -> None:
     """Separation in both directions: packaging prohibition survives the fix."""
     assert "Private :: Do Not Upload" in (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+
+# --- the bypasses a second auditor found in the checker itself --------------
+#
+# Every case below returned NO VIOLATION against the previously committed checker.
+# They are grouped here because they share one root cause: a byte/line scanner was
+# guarding a file whose danger is defined by YAML semantics it cannot see. The
+# primary control is now the whole-file digest below; these keep the secondary
+# structural checks honest for the day containment is lifted.
+
+_CHECKOUT_STEP = (
+    "      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n"
+)
+_GATE = f"      - name: V2F-R containment gate (fail-closed)\n        {GATE_STEP}\n"
+_FETCH = '      - name: Fetch\n        run: bash tools/m3e_fetch_window.sh "$T/p" "$T/s" c\n'
+
+
+def test_a_cron_appended_after_workflow_dispatch_fails() -> None:
+    """The bypass that broke the headline claim.
+
+    The trigger test was ``TRIGGER_BLOCK not in directives`` under a comment saying it
+    "pinned the whole trigger block". ``in`` is substring containment: appending the
+    schedule AFTER ``workflow_dispatch`` left the pinned substring perfectly intact and
+    restored a live weekly Coinbase fetch with nothing reported.
+    """
+    mutated = _workflow().replace(
+        "on:\n  workflow_dispatch:\n",
+        'on:\n  workflow_dispatch:\n  schedule:\n    - cron: "17 2 * * 1"\n',
+        1,
+    )
+    assert mutated != _workflow(), "mutation did not apply"
+    assert "the on: region is" in _violations(mutated)
+
+
+def test_a_job_header_with_trailing_space_or_comment_is_still_a_job() -> None:
+    """``^  name:$`` required the line to end at the colon; valid YAML need not."""
+    for suffix in (" ", "  ", " # third isolated runner"):
+        mutated = f"{_workflow()}\n  runner_c:{suffix}\n    steps:\n{_CHECKOUT_STEP}{_FETCH}"
+        found = _violations(mutated)
+        assert "runner_c" in found, f"job header {suffix!r} parsed as no job at all"
+
+
+def test_steps_indented_differently_are_still_steps() -> None:
+    """Anchoring on exactly six spaces made an eight-space job parse as zero steps.
+
+    With no parsed steps, step-integrity and ordering never ran, so an inert gate
+    (``continue-on-error``) satisfied every remaining check.
+    """
+    mutated = (
+        f"{_workflow()}\n  runner_d:\n    steps:\n"
+        "        - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n"
+        "        - name: V2F-R containment gate\n"
+        "          continue-on-error: true\n"
+        f"          {GATE_STEP}\n"
+        '        - name: Fetch\n          run: bash tools/m3e_fetch_window.sh "$T/p" "$T/s" c\n'
+    )
+    assert "continue-on-error: true" in _violations(mutated)
+
+
+def test_a_job_that_never_checks_out_must_still_gate() -> None:
+    """ "Every job that checks out must gate" made gating optional: skip the checkout.
+
+    The job below curls directly. It touches neither the workflow's gate nor the fetch
+    script's own gate, so under the old rule nothing required it to be contained.
+    """
+    mutated = (
+        f"{_workflow()}\n  runner_e:\n    steps:\n"
+        "      - name: Collect\n        run: curl -sS https://example/candles -o out.json\n"
+    )
+    assert "step 1 is not" in _violations(mutated)
+
+
+def test_a_job_that_delegates_its_work_elsewhere_fails() -> None:
+    """A job-level ``uses:`` moves the egress into a file this checker never reads."""
+    mutated = f"{_workflow()}\n  runner_f:\n    uses: ./.github/workflows/helper.yml\n"
+    assert "job-level 'uses:'" in _violations(mutated)
+
+
+def test_redirecting_the_gate_with_job_defaults_fails() -> None:
+    """``defaults.run.working-directory`` points the byte-identical gate at a forged tree.
+
+    An auditor staged an ``active: false`` record in ``$RUNNER_TEMP/forged`` and ran the
+    exact pinned command there; it printed "containment lifted" and exited 0. The gate's
+    *text* was untouched, so no text check could have seen it.
+    """
+    mutated = _workflow().replace(
+        "  open_draft_pr:\n    needs:",
+        "  open_draft_pr:\n    defaults:\n      run:\n        working-directory: /tmp/forged\n"
+        "    needs:",
+        1,
+    )
+    assert "job-level 'defaults:'" in _violations(mutated)
+
+
+def test_a_decoy_gate_string_in_job_env_fails() -> None:
+    """Job-level ``env:`` sits before the first step, defeating first-index ordering."""
+    mutated = _workflow().replace(
+        "  open_draft_pr:\n    needs:",
+        f'  open_draft_pr:\n    env:\n      DECOY: "{GATE_STEP}"\n    needs:',
+        1,
+    )
+    assert "job-level 'env:'" in _violations(mutated)
+
+
+def test_nothing_may_run_between_checkout_and_the_gate() -> None:
+    """A pre-gate step can shim ``python3`` on $GITHUB_PATH so the gate is a no-op.
+
+    No text check can see what a previous step did to the environment. Leaving no room
+    for a preceding step is the part a text check *can* enforce.
+    """
+    mutated = _workflow().replace(
+        f"{_CHECKOUT_STEP}      - name: V2F-R containment gate (fail-closed, before this job's",
+        f"{_CHECKOUT_STEP}      - name: Prime the runner cache\n"
+        '        run: echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"\n'
+        "      - name: V2F-R containment gate (fail-closed, before this job's",
+        1,
+    )
+    assert mutated != _workflow(), "mutation did not apply"
+    assert "step 2 is not the containment gate" in _violations(mutated)
+
+
+def test_control_a_correctly_gated_new_job_is_accepted() -> None:
+    """Without this, every refusal above could be a checker that rejects everything."""
+    accepted = f"{_workflow()}\n  runner_g:\n    steps:\n{_CHECKOUT_STEP}{_GATE}{_FETCH}"
+    assert containment_violations(accepted) == []
+
+
+# --- the suspended workflow is pinned whole --------------------------------
+
+
+def test_the_suspended_workflow_is_pinned_by_digest() -> None:
+    """The PRIMARY control, and the reason the structural checks are only secondary.
+
+    Two independent auditors broke the structural checks — the first with YAML
+    spellings the trigger scan did not enumerate, the second by exploiting that the
+    replacement was substring containment, that job/step regexes assume fixed
+    indentation, and that no text check can see runtime behaviour. PyYAML is
+    deliberately not a dependency, so a hand-written parser would relocate those blind
+    spots rather than remove them.
+
+    A digest has neither a parser nor a blind spot. While containment is active the
+    workflow must not change at all, so any edit — in any spelling, in any position —
+    fails here and has to be argued for in a governance diff a human reads.
+    """
+    record = json.loads((REPO_ROOT / "governance/v2f/containment.json").read_text())
+    pinned = record["suspended_workflow_sha256"]
+    assert set(pinned) == {".github/workflows/m3e-prospective-update.yml"}
+    for relpath, expected in pinned.items():
+        live = hashlib.sha256((REPO_ROOT / relpath).read_bytes()).hexdigest()
+        assert live == expected, f"{relpath} drifted from its pin in the containment record"
+
+
+def test_the_digest_pin_catches_every_structural_bypass() -> None:
+    """The pin's whole value is that it does not care *how* the file changed."""
+    committed = _workflow()
+    pinned = json.loads((REPO_ROOT / "governance/v2f/containment.json").read_text())[
+        "suspended_workflow_sha256"
+    ][".github/workflows/m3e-prospective-update.yml"]
+    assert hashlib.sha256(committed.encode()).hexdigest() == pinned, "control: pin matches"
+
+    for label, mutant in (
+        (
+            "cron appended",
+            committed.replace(
+                "workflow_dispatch:", 'workflow_dispatch:\n  schedule:\n    - cron: "0 0 * * 0"', 1
+            ),
+        ),
+        ("trailing-space job", f"{committed}\n  runner_c: \n    steps:\n{_CHECKOUT_STEP}"),
+        ("eight-space steps", f"{committed}\n  runner_d:\n    steps:\n        - uses: x\n"),
+        ("no-checkout curl job", f"{committed}\n  runner_e:\n    steps:\n      - run: curl x\n"),
+        ("one added space", committed.replace("permissions:", "permissions: ", 1)),
+    ):
+        assert hashlib.sha256(mutant.encode()).hexdigest() != pinned, label
 
 
 # --- enforcement scripts are pinned ----------------------------------------

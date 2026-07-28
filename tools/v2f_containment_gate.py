@@ -46,14 +46,29 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return seen
 
 
-def _load(record_path: Path) -> dict[str, Any]:
+def _load(record_path: Path, repo_root: Path) -> dict[str, Any]:
     # A symlink is refused rather than followed: the record is hash-pinned in the
     # governed inventory, and a symlink lets the pinned path keep its digest while
     # the bytes actually read come from somewhere unpinned.
-    if record_path.is_symlink():
-        raise ContainmentRefusal(
-            f"{RECORD_RELPATH} is a symlink; the containment record must be a regular file"
-        )
+    #
+    # Checked on EVERY component, not just the final one. `record_path.is_symlink()`
+    # alone tests the last component, so an auditor made `governance/v2f` a symlink to
+    # a directory holding `{"active": false, ...}`: the final component was then an
+    # ordinary regular file, the check passed, and the gate OPENED. Refusing an
+    # unreadable component too — this is a fail-closed gate, so an error establishing
+    # the path's nature is a refusal, never a pass.
+    current = repo_root
+    for part in Path(RECORD_RELPATH).parts:
+        current = current / part
+        try:
+            is_link = current.is_symlink()
+        except OSError as exc:
+            raise ContainmentRefusal(f"{RECORD_RELPATH}: cannot inspect {current}: {exc}") from exc
+        if is_link:
+            raise ContainmentRefusal(
+                f"{RECORD_RELPATH}: {current} is a symlink; no component of the path to "
+                f"the containment record may be a symlink"
+            )
     if not record_path.is_file():
         raise ContainmentRefusal(
             f"{RECORD_RELPATH} is absent. Absence is refused, not permitted: removing "
@@ -74,7 +89,7 @@ def _load(record_path: Path) -> dict[str, Any]:
 
 def check(repo_root: Path) -> str:
     """Return the reason the gate opened, or raise ``ContainmentRefusal``."""
-    payload = _load(repo_root / RECORD_RELPATH)
+    payload = _load(repo_root / RECORD_RELPATH, repo_root)
 
     if payload.get("kind") != "v2f_containment":
         raise ContainmentRefusal(

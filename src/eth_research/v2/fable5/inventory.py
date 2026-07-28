@@ -76,6 +76,12 @@ def _require_confined(root: Path, path: Path) -> None:
 
 def _iter_files(root: Path, rel: str) -> Iterable[Path]:
     base = root / rel
+    # The scanned root itself must not be a symlink. `rglob` starts INSIDE the target,
+    # so if `governance` is the symlink, no entry it yields is one and the per-entry
+    # check below never fires — an auditor passed the whole inventory that way. This is
+    # the same last-component blind spot as the record readers, one layer out.
+    if base.is_symlink():
+        raise Fable5InventoryError(f"symlink is not permitted in the audited tree: {base}")
     if not base.exists():
         return
     for path in sorted(base.rglob("*")):

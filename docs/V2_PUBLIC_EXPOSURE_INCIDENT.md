@@ -76,18 +76,27 @@ carrying no market data.
 
 **Ref-dependence, stated explicitly.** Two unmerged refs — the bot branch
 `bot/m3e-prospective-update/20260715-20260724-315846f9ec5196b4` and the working branch
-`claude/v2e-proposal-acceptance-001` that merged it — additionally carry
-`research/m3d/raw/coinbase/…prospective-update-20260715-20260723-…` (**9 rows across 3
-files**), for **12,118 rows across 57 files** on those refs. Both were public while the
-repository was public, so the exposed maximum is 12,118 rows even though `main` carries
-12,109.
+`claude/v2e-proposal-acceptance-001` that merged it — additionally carry a
+prospective-update acquisition of **9 candle rows**. That acquisition adds **3 files**,
+of which exactly **one** is candle-bearing
+(`coinbase-eth-usd-1d-update_0000_20260715_20260724.json`); the other two are an
+acquisition plan and a receipt. Those refs therefore carry **12,118 rows in 46
+candle-bearing files, of 57 files total**. Both were public while the repository was
+public, so the exposed maximum is 12,118 rows even though `main` carries 12,109.
 
-> **Erratum, 2026-07-28.** An earlier revision of this section reported "12,118 rows
+> **Erratum 1, 2026-07-28.** An earlier revision of this section reported "12,118 rows
 > across 57 raw JSON files" as the figure for this branch. That total is correct for the
 > two unmerged refs above, not for `main` or for the branch carrying this document, and
-> the "57 files" count silently included 9 non-candle receipt/plan files. Corrected
-> above. Found by an independent read-only auditor re-deriving the figure rather than
-> reading it.
+> the "57 files" count silently included non-candle receipt/plan files. Corrected above.
+> Found by an independent read-only auditor re-deriving the figure rather than reading it.
+
+> **Erratum 2, 2026-07-28.** The correction above then repeated the very conflation it
+> apologised for. It said the extra rows sat "across 3 files", counting the plan and
+> receipt as if they carried market data, and gave no candle-bearing count for those
+> refs at all. A second independent auditor caught it; both figures are re-derived above
+> by parsing every blob at `779df6bb` rather than by counting filenames. The lesson is
+> recorded rather than quietly fixed: a file count and a *data-bearing* file count are
+> different numbers, and writing an erratum is not a guarantee of getting it right.
 
 Provider: Coinbase Exchange public market data. Derived datasets, cohort manifests and
 proposal bundles carry the same values onward, so the raw candle-row count is a **lower
@@ -162,6 +171,33 @@ No workflow run was queued or in progress at verification time.
 Disabling the workflow in the Actions UI and removing its schedule from the default
 branch are **independent** controls, and both are now in force. Either alone would stop
 the timer; together, re-enabling requires both a UI action and a reviewed commit.
+
+### Correction: two committed claims about these controls were false
+
+Recorded here because commit messages cannot be rewritten without a history rewrite,
+which is not authorized, and because a false security claim left standing is worse than
+the defect it describes.
+
+Commit `e111788` said the trigger check was "pinned by **EXACT MATCH** — a whitelist,
+not a blacklist", and commit `5a06788` said "step integrity applies to every gate in
+every job, including jobs added later". **Neither was true of the code it shipped.**
+
+* The trigger check was `TRIGGER_BLOCK not in directives`. `in` is *substring
+  containment*, not equality: appending `schedule:` **after** `workflow_dispatch:` left
+  the pinned substring intact and restored a live weekly Coinbase fetch with no
+  violation reported. Two independent auditors found this separately.
+* "Every job" held only for jobs whose header line ended exactly at the colon and whose
+  steps sat at exactly six spaces. A trailing space, a trailing comment, or eight-space
+  indentation made a job invisible to every job-level rule while GitHub ran it.
+
+Both are fixed, and the fix is not a better scanner: the whole suspended workflow is now
+pinned by SHA-256 in `governance/v2f/containment.json`. The structural checks are
+retained as a secondary control and were corrected, but the reason to trust the
+suspension is the digest, which has no parser and therefore no blind spot.
+
+The general lesson, stated because it caused both defects: **checking that good text is
+present says nothing about whether bad text is also present.** A whitelist has to
+compare the whole region, not search it.
 
 ### Findings raised against this change and deliberately NOT fixed
 

@@ -1,11 +1,11 @@
 {
   "active": true,
-  "authorized_by": "repository owner \u2014 MILESTONE V2F-R decision 4, reaffirmed in V2F-R2 decision 4",
+  "authorized_by": "repository owner — MILESTONE V2F-R decision 4, reaffirmed in V2F-R2 decision 4",
   "authorized_on": "2026-07-28",
   "enforcement_scripts_note": "The scripts that actually enforce containment are pinned here because the governed inventory only walks governance/ and release/, so tools/ carries no hash of its own. This record IS in governed_artifacts, so editing an enforcement script without updating this map fails tests/test_v2f_containment_mutations.py, and updating this map changes the record's hash and so fails `fable5 verify` until the inventory is rebuilt. Neither half is a self-hash: each is pinned by the other.",
   "enforcement_scripts_sha256": {
     "tools/m3e_fetch_window.sh": "f8eca934a0cfb1e419c5cb155a43a941a2bcb870d237899348b194e1ea5d495c",
-    "tools/v2f_containment_gate.py": "50ebe7887bcf314ba859332812c9584df1ef1e5484cb85d6d52fbbc9f3b6372b"
+    "tools/v2f_containment_gate.py": "220836c7d4a7287823a16a2d00a66c9f89fbf157b942a3e35ceeb2303a1fbbd2"
   },
   "kind": "v2f_containment",
   "lift_requires": [
@@ -32,6 +32,10 @@
     "repository_was_public": true,
     "workflow_disabled_in_actions_ui": true,
     "workflow_disabled_observed_at": "2026-07-28T11:31:40Z"
+  },
+  "suspended_workflow_note": "The PRIMARY control on the suspended workflow is this whole-file digest, not the structural checks in tests/test_m3e_workflow_security.py. Those checks scan text; a read-only auditor broke four of them with valid YAML that GitHub honours - a cron placed AFTER workflow_dispatch (the trigger test was substring containment, not the exact match its comment claimed), a job header carrying a trailing space or comment (invisible to the job regex), steps indented eight spaces instead of six (parsed as zero steps, hiding an inert gate), and a job with no checkout that curls directly. PyYAML is deliberately not a dependency, so a hand-written parser would only relocate those blind spots: the checker cannot see YAML semantics, and it can never see runtime behaviour at all (PATH, working-directory, what a `uses:` does). A digest has no parser and no blind spot. While containment is active the workflow is suspended and must not change AT ALL, so any edit - however spelled - fails this pin and must be argued for in a governance diff a human reads. The structural checks are retained, and fixed, as a secondary explanatory control for the day containment is lifted and the file legitimately changes.",
+  "suspended_workflow_sha256": {
+    ".github/workflows/m3e-prospective-update.yml": "4430f8b323c3b36b1a9bcc9b361f9ddf7a30dd27fad651a2bf64f5fce7f360c0"
   },
   "suspends_workflow_basename": "m3e-prospective-update.yml"
 }

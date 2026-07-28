@@ -46,8 +46,19 @@ def _uncommented(text: str) -> str:
 
 
 def _step_blocks(job_body: str) -> list[str]:
-    """Split a job body into its individual ``- name:`` steps."""
-    starts = [m.start() for m in re.finditer(r"^      - ", job_body, re.MULTILINE)]
+    """Split a job body into its individual steps, at whatever indent they use.
+
+    This used to anchor on exactly six spaces (``^      - ``). An auditor indented a
+    job's steps by eight — valid YAML, honoured by GitHub — and the job parsed as
+    **zero** steps, so step-integrity and ordering never ran while the block still
+    contained the gate text. The indent is therefore taken from the first list item
+    found rather than assumed.
+    """
+    first = re.search(r"^(\s+)- ", job_body, re.MULTILINE)
+    if first is None:
+        return []
+    marker = rf"^{first.group(1)}- "
+    starts = [m.start() for m in re.finditer(marker, job_body, re.MULTILINE)]
     return [
         job_body[s : (starts[i + 1] if i + 1 < len(starts) else len(job_body))]
         for i, s in enumerate(starts)
@@ -59,8 +70,21 @@ def _job_blocks(text: str) -> dict[str, str]:
 
     Ordering assertions are worthless if a job's "body" runs to end-of-file,
     because a later job's step then satisfies an earlier job's requirement.
+
+    Scoped to the region after the top-level ``jobs:`` key. Two-space-indented keys
+    also occur under ``on:`` and ``permissions:``, so an unscoped scan reported
+    ``workflow_dispatch`` as a job with no steps.
+
+    The header pattern tolerates trailing whitespace and a trailing comment. It
+    previously required the line to END at the colon, so ``runner_c:`` followed by a
+    single space — or by ``# third runner`` — parsed as no job at all, and every
+    job-level rule silently skipped it while GitHub ran it.
     """
-    headers = list(re.finditer(r"^  ([A-Za-z_][A-Za-z0-9_-]*):$", text, re.MULTILINE))
+    start = re.search(r"^jobs:[ \t]*(?:#.*)?$", text, re.MULTILINE)
+    if start is None:
+        return {}
+    text = text[start.end() :]
+    headers = list(re.finditer(r"^  ([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(?:#.*)?$", text, re.MULTILINE))
     blocks: dict[str, str] = {}
     for i, match in enumerate(headers):
         end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
@@ -88,6 +112,34 @@ GUARDED_JOBS = (
 #: The marker every job that obtains the repository carries.
 CHECKOUT = "uses: actions/checkout@"
 
+#: Job-level keys that redirect or precede the gate without being steps. An auditor
+#: pointed `defaults.run.working-directory` at a forged tree carrying an `active:false`
+#: record, leaving the gate's pinned command byte-identical while it opened; and hid a
+#: decoy copy of the gate text in a job-level `env:` value, which sits before the first
+#: step marker and so defeated the first-occurrence ordering test.
+FORBIDDEN_JOB_KEYS = ("defaults:", "env:", "uses:", "container:", "with:")
+
+
+def _trigger_region(directives: str) -> str | None:
+    """Return the entire top-level ``on:`` block, or ``None`` if there is not one.
+
+    Everything from the ``on:`` line up to the next line starting in column zero is
+    the trigger set. Returning the whole region — rather than asking whether some
+    known-good substring appears somewhere inside it — is what makes an appended
+    ``schedule:`` visible.
+    """
+    lines = directives.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if not line.startswith("on:"):
+            continue
+        region = [line]
+        for following in lines[index + 1 :]:
+            if following.strip() and not following[:1].isspace():
+                break
+            region.append(following)
+        return "".join(region).rstrip("\n") + "\n"
+    return None
+
 
 def containment_violations(text: str) -> list[str]:
     """Return every containment violation in ``text``, or an empty list.
@@ -100,20 +152,27 @@ def containment_violations(text: str) -> list[str]:
     violations: list[str] = []
     directives = _uncommented(text)
 
-    # Trigger check by EXACT MATCH, not by scanning for forbidden tokens.
+    # Trigger check over the WHOLE `on:` region, not by substring containment.
     #
-    # The previous version asked "is the substring 'cron:' present?". A read-only
-    # auditor broke it eight ways in one pass — `"schedule":` with quoted keys,
-    # `schedule :` with a space before the colon, and flow style all parse to a live
-    # weekly trigger while containing neither `schedule:` nor `cron:` as literal
-    # bytes, and every one is visually indistinguishable from the contained form in
-    # a review diff. Enumerating spellings is a losing game; pinning the whole
-    # trigger block is not. PyYAML is deliberately not a dependency here, so this
-    # compares bytes rather than parsing.
-    if TRIGGER_BLOCK not in directives:
+    # History, because it is the point. Version 1 asked "is the substring 'cron:'
+    # present?"; an auditor broke it eight ways with quoted keys, a space before the
+    # colon, and flow style. Version 2 replaced that with `TRIGGER_BLOCK not in
+    # directives` and a comment claiming it "pinned the whole trigger block". It did
+    # not: `x in y` is substring containment, so putting the cron AFTER
+    # workflow_dispatch left the pinned substring perfectly intact and restored a
+    # live weekly trigger with NO violation reported. Two different auditors, two
+    # bypasses, same root cause — checking for the presence of good text says nothing
+    # about the absence of bad text.
+    #
+    # The region is now extracted and compared in full. Anything between `on:` and the
+    # next top-level key is part of the trigger set, wherever it sits in that block.
+    region = _trigger_region(directives)
+    if region is None:
+        violations.append("schedule_suspended: no top-level 'on:' block found")
+    elif region != TRIGGER_BLOCK:
         violations.append(
-            "schedule_suspended: the on: block is not exactly "
-            f"{TRIGGER_BLOCK.strip()!r} — any other trigger set is refused"
+            f"schedule_suspended: the on: region is {region!r}, not exactly "
+            f"{TRIGGER_BLOCK!r} — any other trigger set is refused"
         )
 
     # Gate-step integrity. Presence and ordering are not enough: a step can be
@@ -154,16 +213,44 @@ def containment_violations(text: str) -> list[str]:
                     f"not exactly [{GATE_STEP!r}]"
                 )
 
-    # Enforce at the boundary, not against a fixed list. GUARDED_JOBS names the jobs
-    # that exist today, so on its own it is a blacklist: adding `runner_c` with a
-    # checkout and a fetch passes every check above. Any job that obtains the
-    # repository can run the egress script or push, so every such job must gate —
-    # and a new one has to be added here consciously rather than by omission.
+    # Every job in this file must check out and then gate, as its first two steps.
+    #
+    # The previous rule was "every job that CHECKS OUT must gate", keyed on the
+    # checkout substring. An auditor wrote a job with no checkout at all that simply
+    # curled the endpoint, and another that delegated the work to a reusable workflow
+    # via a job-level `uses:` — neither had to gate, because neither checked out.
+    # Keying on checkout made it optional; requiring it makes it a precondition.
+    #
+    # Requiring the gate to be step 2 (immediately after checkout) also closes the
+    # whole class of attacks that run something BEFORE the gate: an auditor prepended
+    # a step that put a fake `python3` on $GITHUB_PATH, and another that staged a
+    # forged containment record for `defaults.run.working-directory` to point at. A
+    # text scanner cannot see either of those; leaving no room for a preceding step is
+    # what it can do.
     for name, block in sorted(blocks.items()):
-        if CHECKOUT in block and GATE_STEP not in block:
+        for key in FORBIDDEN_JOB_KEYS:
+            if re.search(rf"^    {re.escape(key)}", block, re.MULTILINE):
+                violations.append(
+                    f"containment_gate_first: job {name} declares job-level {key!r}; "
+                    f"while suspended this workflow may not redirect, delegate or "
+                    f"pre-seed anything around the gate"
+                )
+        steps = _step_blocks(block)
+        if not steps:
             violations.append(
-                f"containment_gate_first: job {name} checks out the repository but has no "
-                f"containment gate; every checkout job must gate, not only the known ones"
+                f"containment_gate_first: job {name} has no parsable steps; a job that "
+                f"does its work without steps cannot be gated"
+            )
+            continue
+        if CHECKOUT not in steps[0]:
+            violations.append(
+                f"containment_gate_first: job {name} step 1 is not {CHECKOUT!r}; every job "
+                f"must obtain the repository first so the gate it runs is the real one"
+            )
+        if len(steps) < 2 or GATE_STEP not in steps[1]:
+            violations.append(
+                f"containment_gate_first: job {name} step 2 is not the containment gate; "
+                f"nothing may run between checkout and the gate"
             )
 
     for job, guarded_step in GUARDED_JOBS:

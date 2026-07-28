@@ -20,6 +20,7 @@ This module reads only bytes; it evaluates no strategy, opens no sealed value, a
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -52,6 +53,9 @@ _PAPER_TRADING_RECORD = "governance/v2/paper_trading_record.json"
 _REPOSITORY_VISIBILITY = "governance/v2f/repository_visibility.json"
 _EXPECTED_REPOSITORY = "panfot1409/gambling-winnings"
 _VISIBILITY_SCHEMA_VERSION = 1
+#: The repository's GitHub creation instant, from the REST API. A visibility
+#: observation cannot predate the repository it claims to describe.
+_REPOSITORY_CREATED = datetime.fromisoformat("2026-07-11T00:22:16+00:00")
 
 #: The gates whose conjunction IS paper-activation authorization, in fixed order.
 PAPER_ACTIVATION_GATES: tuple[str, ...] = (
@@ -95,27 +99,51 @@ class PaperReadinessState:
         }
 
 
+def _unlinked_regular_file(root: Path, rel: str) -> Path | None:
+    """Return ``root/rel`` only if NO component of ``rel`` is a symlink and it is a file.
+
+    Checking ``Path.is_symlink()`` on the assembled path tests the **final component
+    only**. An auditor made ``governance/v2f`` a symlink to a directory elsewhere: the
+    final component was then a perfectly ordinary regular file, the guard passed, and
+    the gate read bytes from a path nobody reviews — ``git log`` on the governed path
+    is empty, because the governed path is not where the bytes live. The attack is
+    committable, too: git stores the directory as a mode-120000 entry.
+
+    So every component is checked, from ``root`` down. ``root`` itself is not checked:
+    the caller chose the tree, and repositories legitimately live under symlinked
+    paths. What must not happen is a component *inside* the tree redirecting elsewhere.
+    """
+    current = root
+    for part in Path(rel).parts:
+        current = current / part
+        if current.is_symlink():
+            return None
+    return current if current.is_file() else None
+
+
 def _read_json(root: Path, rel: str) -> dict[str, object] | None:
-    """Read a governance artifact as a JSON object, or ``None`` — strictly, and no symlinks.
+    """Read a governance artifact as a JSON object, or ``None`` — strictly, no symlinks.
 
     Two hardening rules, both reproduced as live attacks before being fixed and both
     already standard elsewhere in this tree (``v2e/paper.py``, ``v2e/state.py``,
     ``m3f/validation.py``); this module was the outlier:
 
-    * **A symlink is not the artifact.** ``Path.is_file()`` follows symlinks, so a
-      ``repository_visibility.json`` pointing anywhere on disk read as a committed
-      record. A governed artifact must be a regular file whose bytes are in the tree.
+    * **A symlink is not the artifact**, at any depth — see
+      :func:`_unlinked_regular_file`.
     * **Strict decoding.** ``json.loads`` silently keeps the *last* of duplicate keys,
       so ``{"observed_private": false, "observed_private": true}`` parsed as private.
       That is the same duplicate-key bypass that opened the containment gate;
       :func:`strict_json_loads` rejects it, along with non-finite numbers.
 
-    Every rejection returns ``None``, which fails the reading gate closed.
+    Every rejection returns ``None``, which fails the reading gate closed — including
+    an unreadable file. ``OSError`` is caught around the path inspection too, not only
+    around the read: a permission error while *stat-ing* the path used to propagate out
+    of a function documented as never raising.
     """
-    path = root / rel
-    if path.is_symlink() or not path.is_file():
-        return None
     try:
+        path = _unlinked_regular_file(root, rel)
+        if path is None:
+            return None
         data = strict_json_loads(path.read_bytes())
     except (StrictJSONError, OSError):
         return None
@@ -129,8 +157,22 @@ def _path_exists(root: Path, rel: str) -> bool:
     record. Presence of that record makes ``paper_trading_active`` **true**, so the
     conservative direction is inverted: corrupting the record must not be a way to
     report "not trading". Gates that must be *earned* keep the strict reader.
+
+    Implemented with ``os.lstat`` rather than ``Path.exists() or Path.is_symlink()``,
+    because both of those swallow a fixed set of errnos including **ELOOP**. An auditor
+    built a 40-deep symlink chain on a parent component and got ``paper_trading_active
+    = False`` with ``{"paper_trading": "ACTIVE"}`` sitting readable on disk — the exact
+    inversion this function exists to prevent. Only "the file is definitively not
+    there" (``FileNotFoundError``) counts as absent; every other ``OSError`` means we
+    could not establish absence, and unestablished absence is reported as presence.
     """
-    return (root / rel).exists() or (root / rel).is_symlink()
+    try:
+        os.lstat(root / rel)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    return True
 
 
 def _nested_dict(obj: dict[str, object] | None, key: str) -> dict[str, object]:
@@ -166,16 +208,38 @@ def _remediation_resolved(root: Path) -> tuple[bool, bool]:
     manifest = _read_json(root, _AUDIT_MANIFEST)
     if state is None or manifest is None:
         return False, False
-    unresolved = state.get("unresolved_class_abd_count", 1)
-    all_resolved = state.get("all_findings_resolved", False)
-    no_unresolved = isinstance(unresolved, int) and unresolved == 0
-    return bool(all_resolved), no_unresolved
+
+    # Both fields are type-checked, and `bool` is excluded from the integer check.
+    # Without this, a record whose literal text reads
+    #   {"all_findings_resolved": "false", "unresolved_class_abd_count": false}
+    # derived BOTH gates true: `bool("false")` is True, and `isinstance(False, int)`
+    # is True with `False == 0`. A human reading that JSON would conclude the exact
+    # opposite of what the code concluded. `_repository_private` already guarded
+    # against this conflation; these two fields did not.
+    all_resolved = state.get("all_findings_resolved")
+    unresolved = state.get("unresolved_class_abd_count")
+    no_unresolved = (
+        isinstance(unresolved, int) and not isinstance(unresolved, bool) and unresolved == 0
+    )
+    return all_resolved is True, no_unresolved
 
 
 def _sealed_untouched(root: Path) -> bool:
+    """True only if all three sealed ledgers are byte-empty regular files, no symlinks.
+
+    This used ``is_file()``/``stat()``, both of which follow symlinks — so replacing
+    the ledgers with symlinks to one shared empty file reported them untouched. It is
+    the same defect ``_read_json`` was hardened against, in the same module, and it
+    guards the partition whose whole purpose is to be provably unopened.
+    """
     for rel in _SEALED_LEDGERS:
-        path = root / rel
-        if not path.is_file() or path.stat().st_size != 0:
+        path = _unlinked_regular_file(root, rel)
+        if path is None:
+            return False
+        try:
+            if path.stat().st_size != 0:
+                return False
+        except OSError:
             return False
     return True
 
@@ -207,7 +271,14 @@ def _repository_private(root: Path) -> bool:
         return False
     if record.get("kind") != "v2f_repository_visibility":
         return False
-    if record.get("schema_version") != _VISIBILITY_SCHEMA_VERSION:
+    # `!= 1` alone accepts True and 1.0, since both compare equal to 1. Same bool/int
+    # conflation the observed_private check already guards against.
+    schema_version = record.get("schema_version")
+    if (
+        not isinstance(schema_version, int)
+        or isinstance(schema_version, bool)
+        or schema_version != _VISIBILITY_SCHEMA_VERSION
+    ):
         return False
     if record.get("repository") != _EXPECTED_REPOSITORY:
         return False
@@ -220,21 +291,30 @@ def _repository_private(root: Path) -> bool:
     if record.get("observed_visibility") != "private":
         return False
 
+    # Attribution must be a real name, not a space. "an unattributed record is
+    # indistinguishable from a wish" was the stated reason for these fields, and a
+    # truthiness check let `observed_by=" "` satisfy it.
     if not all(
-        isinstance(record.get(field), str) and record.get(field)
+        isinstance(record.get(field), str) and len(str(record.get(field)).strip()) >= 2
         for field in ("observed_at", "observed_via", "observed_by")
     ):
         return False
 
-    # ``observed_at`` is the whole claim to freshness, so it must be a real instant and
-    # not the string "soon". Parsed, not merely non-empty; an unparseable stamp is a
-    # record that cannot be reasoned about and fails closed.
+    # ``observed_at`` is the whole claim to freshness, so it must be a real instant —
+    # not the string "soon", and not a date-shaped string from year 1. Parsing alone
+    # accepted "0001-01-01", "2026-W30-2" and bare "20260728"; requiring an explicit
+    # UTC offset and a floor at the repository's creation kills all three.
+    #
+    # There is deliberately NO upper bound against "now": this derivation must stay
+    # deterministic and offline, and comparing to a wall clock would make the same
+    # bytes derive differently on different days. A future-dated record is therefore
+    # accepted, and is part of the disclosed staleness gap rather than a separate one.
     stamp = str(record.get("observed_at"))
     try:
-        datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        observed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
     except ValueError:
         return False
-    return True
+    return observed.tzinfo is not None and observed >= _REPOSITORY_CREATED
 
 
 def derive_paper_readiness(repo_root: str | Path) -> PaperReadinessState:
