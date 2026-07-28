@@ -20,10 +20,11 @@ This module reads only bytes; it evaluates no strategy, opens no sealed value, a
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
+from eth_research._json import StrictJSONError, strict_json_loads
 from eth_research.v2c.readiness import ReadinessInputs, derive_sell_ready
 
 PAPER_READINESS_RELPATH = "governance/v2/paper_readiness_state.json"
@@ -50,6 +51,7 @@ _PAPER_TRADING_RECORD = "governance/v2/paper_trading_record.json"
 # API rather than inferred from packaging metadata. See ``_repository_private``.
 _REPOSITORY_VISIBILITY = "governance/v2f/repository_visibility.json"
 _EXPECTED_REPOSITORY = "panfot1409/gambling-winnings"
+_VISIBILITY_SCHEMA_VERSION = 1
 
 #: The gates whose conjunction IS paper-activation authorization, in fixed order.
 PAPER_ACTIVATION_GATES: tuple[str, ...] = (
@@ -94,14 +96,41 @@ class PaperReadinessState:
 
 
 def _read_json(root: Path, rel: str) -> dict[str, object] | None:
+    """Read a governance artifact as a JSON object, or ``None`` — strictly, and no symlinks.
+
+    Two hardening rules, both reproduced as live attacks before being fixed and both
+    already standard elsewhere in this tree (``v2e/paper.py``, ``v2e/state.py``,
+    ``m3f/validation.py``); this module was the outlier:
+
+    * **A symlink is not the artifact.** ``Path.is_file()`` follows symlinks, so a
+      ``repository_visibility.json`` pointing anywhere on disk read as a committed
+      record. A governed artifact must be a regular file whose bytes are in the tree.
+    * **Strict decoding.** ``json.loads`` silently keeps the *last* of duplicate keys,
+      so ``{"observed_private": false, "observed_private": true}`` parsed as private.
+      That is the same duplicate-key bypass that opened the containment gate;
+      :func:`strict_json_loads` rejects it, along with non-finite numbers.
+
+    Every rejection returns ``None``, which fails the reading gate closed.
+    """
     path = root / rel
-    if not path.is_file():
+    if path.is_symlink() or not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (ValueError, OSError):
+        data = strict_json_loads(path.read_bytes())
+    except (StrictJSONError, OSError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def _path_exists(root: Path, rel: str) -> bool:
+    """True if *anything* is at ``rel`` — symlink, directory, malformed file included.
+
+    Deliberately weaker than :func:`_read_json`, and used only for the paper-trading
+    record. Presence of that record makes ``paper_trading_active`` **true**, so the
+    conservative direction is inverted: corrupting the record must not be a way to
+    report "not trading". Gates that must be *earned* keep the strict reader.
+    """
+    return (root / rel).exists() or (root / rel).is_symlink()
 
 
 def _nested_dict(obj: dict[str, object] | None, key: str) -> dict[str, object]:
@@ -178,6 +207,8 @@ def _repository_private(root: Path) -> bool:
         return False
     if record.get("kind") != "v2f_repository_visibility":
         return False
+    if record.get("schema_version") != _VISIBILITY_SCHEMA_VERSION:
+        return False
     if record.get("repository") != _EXPECTED_REPOSITORY:
         return False
 
@@ -189,10 +220,21 @@ def _repository_private(root: Path) -> bool:
     if record.get("observed_visibility") != "private":
         return False
 
-    return all(
+    if not all(
         isinstance(record.get(field), str) and record.get(field)
         for field in ("observed_at", "observed_via", "observed_by")
-    )
+    ):
+        return False
+
+    # ``observed_at`` is the whole claim to freshness, so it must be a real instant and
+    # not the string "soon". Parsed, not merely non-empty; an unparseable stamp is a
+    # record that cannot be reasoned about and fails closed.
+    stamp = str(record.get("observed_at"))
+    try:
+        datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
 
 
 def derive_paper_readiness(repo_root: str | Path) -> PaperReadinessState:
@@ -221,7 +263,7 @@ def derive_paper_readiness(repo_root: str | Path) -> PaperReadinessState:
         "repository_private": private,
     }
     authorized = all(gates[g] for g in PAPER_ACTIVATION_GATES)
-    trading_active = _read_json(root, _PAPER_TRADING_RECORD) is not None
+    trading_active = _path_exists(root, _PAPER_TRADING_RECORD)
     sell_ready = derive_sell_ready(ReadinessInputs.current())
     blocking = tuple(g for g in PAPER_ACTIVATION_GATES if not gates[g])
     return PaperReadinessState(

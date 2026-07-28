@@ -143,16 +143,44 @@ No workflow run was queued or in progress at verification time.
   lifting it requires.
 * The `schedule:` trigger is **removed** from the workflow — not commented out. A
   commented cron is one careless uncomment from resuming.
-* `tools/v2f_containment_gate.py` refuses ahead of every network step in all four jobs,
-  so `workflow_dispatch` cannot fetch while containment is active. It is stdlib-only so
-  it runs before any environment sync, and **absence of the record refuses**: deleting
-  `governance/v2f/containment.json` must not be a way to resume egress.
+* `tools/v2f_containment_gate.py` refuses ahead of every network, push and PR step in
+  all **five** jobs, so `workflow_dispatch` cannot fetch while containment is active. It
+  is stdlib-only so it runs before any environment sync, and **absence of the record
+  refuses**: deleting `governance/v2f/containment.json` must not be a way to resume
+  egress.
+* The gate rule is stated over **every job that checks out the repository**, not over a
+  list of the jobs that exist today. A named list is a blacklist: adding `runner_c` with
+  a checkout and a fetch would have passed every other check while looking, in a review
+  diff, exactly like its gated siblings.
 * `tests/test_m3e_workflow_security.py` previously asserted the cron was *present*; it
   now asserts its *absence*, so restoring the schedule cannot pass CI unnoticed.
+* The gate itself is also checked for *integrity*, in every job: a step wearing
+  `continue-on-error: true`, `if: false`, `|| true`, or a second `--repo-root` is
+  present but refuses nothing, and each of those was reproduced passing the earlier
+  substring check before this was tightened.
 
 Disabling the workflow in the Actions UI and removing its schedule from the default
 branch are **independent** controls, and both are now in force. Either alone would stop
 the timer; together, re-enabling requires both a UI action and a reviewed commit.
+
+### Findings raised against this change and deliberately NOT fixed
+
+Three independent read-only auditors reviewed the containment change in disposable
+clones. Every finding acted on below was reproduced first-hand before being fixed. These
+are the ones left open — recorded here rather than dropped, because "auditors clean" is
+not the same as "findings ignored".
+
+| # | finding | class | disposition |
+| --- | --- | --- | --- |
+| B‑1 | The visibility record is an **observation with a timestamp**, not a live check. If the repository went public again tomorrow, nothing in the tree would notice and `repository_private` would keep deriving `true` from a stale record. | B | **Open.** Determinism was chosen over freshness: `paper_readiness` derives from committed bytes, offline, and must stay reproducible. The compensating control — a scheduled live re-observation that fails when the API disagrees with the record — is **not built**. Until it is, this gate proves *what was observed*, not *what is true now*. |
+| C‑6 | `assemble_and_publish` still declares `contents: write` and `open_draft_pr` still declares `pull-requests: write` while containment is active. | C | **Declined, with reason.** Stripping them would make lifting containment a two-part edit (flip the record *and* restore permissions), so the record's `lift_requires` would no longer describe what lifting actually takes. The generalized rule above is the stronger control: a new job inherits the top-level `contents: read` **and** must gate. |
+| D‑2 | `m3f verify_inventory` compares against the M3F freeze commit rather than the live tree, so it cannot detect drift introduced after that freeze. | D | **Open, out of scope here.** Pre-existing and not introduced by containment; belongs to the governance-model repair, not to a change whose whole purpose is to be a minimal, reviewable suspension. |
+
+One further limitation of this branch, found by re-reading its own history rather than
+by an auditor: **the commits are not individually self-contained.** The first three leave
+`fable5 verify` red, because the governed inventory is rebuilt in a later commit. `main`
+never observes that state — the merge takes the branch tip — but the branch is not
+bisectable. Fixing it would require rewriting history, which is not authorized.
 
 ## 5. Data rights — classified, not concluded
 

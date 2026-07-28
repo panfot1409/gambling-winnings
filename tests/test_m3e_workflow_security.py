@@ -1,13 +1,17 @@
 """Workflow-security invariants for the M3E update automation.
 
-Under the committed V2D activation anchor the standing update workflow is ACTIVE:
-it gates fail-closed on the anchor, fetches the due window on two isolated
-runners over one hardened curl (endpoint from the offline-emitted plan — no host
-literal in YAML), pushes exactly one new bot branch (job-scoped contents: write),
-and opens exactly one DRAFT PR (job-scoped pull-requests: write). It never
-merges, undrafts, retargets, force-pushes, or references a repository secret,
-and every other workflow keeps the full read-only posture — all pinned below and
-by the shared fail-closed scanners.
+**The update workflow is SUSPENDED under V2F-R containment.** Its `schedule:` trigger
+is removed (not commented out), and `tools/v2f_containment_gate.py` refuses ahead of
+every network, push and PR step, so `workflow_dispatch` cannot fetch either. Both
+controls are pinned by :func:`containment_violations` below.
+
+What the definition still *describes*, and what therefore stays pinned so that lifting
+containment cannot quietly widen it: gate fail-closed on the V2D anchor, fetch the due
+window on two isolated runners over one hardened curl (endpoint from the offline-emitted
+plan — no host literal in YAML), push exactly one new bot branch (job-scoped
+contents: write), open exactly one DRAFT PR (job-scoped pull-requests: write). It never
+merges, undrafts, retargets, force-pushes, or references a repository secret, and every
+other workflow keeps the full read-only posture.
 """
 
 from __future__ import annotations
@@ -78,7 +82,11 @@ GUARDED_JOBS = (
     ("runner_a", "tools/m3e_fetch_window.sh"),
     ("runner_b", "tools/m3e_fetch_window.sh"),
     ("assemble_and_publish", "git push origin"),
+    ("open_draft_pr", "gh pr create"),
 )
+
+#: The marker every job that obtains the repository carries.
+CHECKOUT = "uses: actions/checkout@"
 
 
 def containment_violations(text: str) -> list[str]:
@@ -115,36 +123,57 @@ def containment_violations(text: str) -> list[str]:
     # step still matched a raw-text count. Each gate step must therefore be the
     # exact two lines, and the count is taken over directives so comments cannot
     # inflate it.
+    #
+    # A floor, not an exact count: adding a *gated* job is allowed and must not read as
+    # a violation, while dropping or inerting one still does.
     count = directives.count(GATE_STEP)
-    if count != len(GUARDED_JOBS):
+    if count < len(GUARDED_JOBS):
         violations.append(
-            f"containment_gate_first: expected {len(GUARDED_JOBS)} active gate steps, found {count}"
+            f"containment_gate_first: expected at least {len(GUARDED_JOBS)} active gate "
+            f"steps, found {count}"
         )
 
     blocks = _job_blocks(directives)
+
+    # Step integrity applies to every gate in every job, including jobs added later.
+    # Scoping it to GUARDED_JOBS would mean a new job could carry a gate wearing
+    # `continue-on-error: true` and satisfy the checkout rule while refusing nothing.
+    for name, block in sorted(blocks.items()):
+        for step in (s for s in _step_blocks(block) if GATE_STEP in s):
+            step_lines = [ln.strip() for ln in step.splitlines() if ln.strip()]
+            extras = [ln for ln in step_lines if not ln.startswith(("- name:", "run:"))]
+            if extras:
+                violations.append(
+                    f"containment_gate_first: {name} gate step carries {extras!r}; "
+                    f"a gate with a condition or an error tolerance is not a gate"
+                )
+            run_lines = [ln for ln in step_lines if ln.startswith("run:")]
+            if run_lines != [GATE_STEP]:
+                violations.append(
+                    f"containment_gate_first: {name} gate run line is {run_lines!r}, "
+                    f"not exactly [{GATE_STEP!r}]"
+                )
+
+    # Enforce at the boundary, not against a fixed list. GUARDED_JOBS names the jobs
+    # that exist today, so on its own it is a blacklist: adding `runner_c` with a
+    # checkout and a fetch passes every check above. Any job that obtains the
+    # repository can run the egress script or push, so every such job must gate —
+    # and a new one has to be added here consciously rather than by omission.
+    for name, block in sorted(blocks.items()):
+        if CHECKOUT in block and GATE_STEP not in block:
+            violations.append(
+                f"containment_gate_first: job {name} checks out the repository but has no "
+                f"containment gate; every checkout job must gate, not only the known ones"
+            )
+
     for job, guarded_step in GUARDED_JOBS:
         body = blocks.get(job)
         if body is None:
             violations.append(f"containment_gate_first: job {job} is missing")
             continue
-        steps = [s for s in _step_blocks(body) if GATE_STEP in s]
-        if not steps:
+        if not any(GATE_STEP in s for s in _step_blocks(body)):
             violations.append(f"containment_gate_first: {job} has no containment gate")
             continue
-        for step in steps:
-            body_lines = [ln.strip() for ln in step.splitlines() if ln.strip()]
-            extras = [ln for ln in body_lines if not ln.startswith(("- name:", "run:"))]
-            if extras:
-                violations.append(
-                    f"containment_gate_first: {job} gate step carries {extras!r}; "
-                    f"a gate with a condition or an error tolerance is not a gate"
-                )
-            run_lines = [ln for ln in body_lines if ln.startswith("run:")]
-            if run_lines != [GATE_STEP]:
-                violations.append(
-                    f"containment_gate_first: {job} gate run line is {run_lines!r}, "
-                    f"not exactly [{GATE_STEP!r}]"
-                )
         if guarded_step not in body:
             violations.append(f"containment_gate_first: {job} no longer contains {guarded_step!r}")
             continue
@@ -174,14 +203,17 @@ def test_the_update_workflow_defaults_read_only_and_is_schedule_suspended() -> N
     assert "concurrency:" in text  # overlapping runs stay serialized
 
 
-def test_the_active_update_workflow_has_exactly_the_authorized_shape() -> None:
-    # V2D supersedes the read-only probe: under the committed activation anchor
-    # the standing workflow now fetches on two isolated runners (endpoint from
-    # the offline-emitted plan — still no host literal in YAML), moves runner
-    # bundles as private artifacts, pushes ONE new bot branch (job-scoped
-    # contents: write), and opens ONE draft PR (job-scoped pull-requests:
-    # write). It still never merges/undrafts/retargets, never force-pushes,
-    # never references a repository secret, and gates on the anchor first.
+def test_the_suspended_update_workflow_has_exactly_the_authorized_shape() -> None:
+    # The workflow is suspended, so these assertions pin the shape it would have
+    # if containment were lifted — deliberately, because a suspension that also
+    # stopped checking the definition would let the shape widen while nobody was
+    # looking, and the lift would then restore something larger than what was
+    # authorized. Described capability: fetch on two isolated runners (endpoint
+    # from the offline-emitted plan — no host literal in YAML), move runner
+    # bundles as private artifacts, push ONE new bot branch (job-scoped
+    # contents: write), open ONE draft PR (job-scoped pull-requests: write).
+    # Never merges/undrafts/retargets, never force-pushes, never references a
+    # repository secret, and gates on containment then the V2D anchor first.
     text = PROBE.read_text()
     assert "eth_research.v2d verify" in text  # fail-closed gate before any fetch
     assert "tools/m3e_fetch_window.sh" in text  # the single hardened curl driver

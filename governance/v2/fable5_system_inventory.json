@@ -565,8 +565,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "4b8ee38af943d833ff9ecb3e7beb449c98c0598b53010f695680eeb25f191ba1",
-  "tracked_file_count": 1048,
+  "surface_digest": "ae8f76fa39060e7ac622947d202500a9ca929e196ddf505e94d934c6bbeefe3f",
+  "tracked_file_count": 1049,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
@@ -607,7 +607,7 @@
     "m3e-prospective-update.yml": {
       "declares_write_permission": true,
       "has_unpinned_uses": false,
-      "sha256": "946f6c3dadb32f2defb719cea0e9d503d1771ca6e65d872af762768d216e8743",
+      "sha256": "4430f8b323c3b36b1a9bcc9b361f9ddf7a30dd27fad651a2bf64f5fce7f360c0",
       "uses_secrets": false
     },
     "m3e-replay.yml": {

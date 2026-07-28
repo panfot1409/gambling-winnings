@@ -6,6 +6,14 @@
 > added by this document** — the repository stays `Private :: Do Not Upload`. Any real evaluation
 > license must be drafted and reviewed by qualified counsel and signed by authorized signatories.
 
+> **Erratum, 2026-07-28 (V2F-R).** "The repository stays `Private :: Do Not Upload`" conflates two
+> different things. What is true and unchanged: there is no `LICENSE` file and no license field or
+> classifier, and the PyPI classifier `Private :: Do Not Upload` is present, so the package cannot
+> be uploaded to the index. What that phrasing wrongly implies is that the *repository* was private
+> — a GitHub visibility property the classifier says nothing about. The repository was public. See
+> `docs/V2_PUBLIC_EXPOSURE_INCIDENT.md`. The license position stated above is unaffected: no
+> license was granted, then or now.
+
 ## 1. Scope of the (hypothetical) grant
 
 Under a future, separately-authorized agreement, a `[LICENSEE]` **could** be granted a limited,

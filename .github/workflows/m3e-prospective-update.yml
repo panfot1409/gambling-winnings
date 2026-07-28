@@ -238,6 +238,8 @@ jobs:
       pull-requests: write # job-scoped: open exactly one DRAFT PR; no merge verbs exist here
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: V2F-R containment gate (fail-closed, before any PR is opened)
+        run: python3 tools/v2f_containment_gate.py --repo-root .
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: pr-body
