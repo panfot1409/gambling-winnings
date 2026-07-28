@@ -57,8 +57,32 @@ def _empty_sealed_ledgers(root: Path) -> None:
 
 
 def _private(root: Path) -> None:
-    (root / "pyproject.toml").write_text(
-        '[project]\nclassifiers = ["Private :: Do Not Upload"]\n', encoding="utf-8"
+    """Provision the evidence the ``repository_private`` gate actually reads.
+
+    This used to write the PyPI classifier ``Private :: Do Not Upload`` into
+    ``pyproject.toml``, because that was what the gate consumed. That was the
+    defect: the classifier governs PyPI uploads and says nothing about GitHub
+    repository visibility, so the gate reported private for a public repository.
+    The gate now reads a committed API observation, and these synthetic trees
+    must supply one — otherwise ``repository_private`` blocks for a reason that
+    has nothing to do with what each catastrophe scenario is testing.
+    """
+    path = root / "governance/v2f/repository_visibility.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "v2f_repository_visibility",
+                "schema_version": 1,
+                "repository": "panfot1409/gambling-winnings",
+                "observed_private": True,
+                "observed_visibility": "private",
+                "observed_at": "2026-07-28T11:33:55Z",
+                "observed_by": "catastrophe fixture",
+                "observed_via": "catastrophe fixture",
+            }
+        ),
+        encoding="utf-8",
     )
 
 
