@@ -19,7 +19,7 @@
     "governance/v2/fable5_audit_manifest.json": "ab655c8a1e65eb11d6dedb91dee5e3206974c35e0d946226222ade8c4afaa7f1",
     "governance/v2/fable5_findings.json": "66cb5f3532bebd8c1ef70ae2fac9536e08fdf6fbd5e882da96bc94b3b5bdfbc4",
     "governance/v2/fable5_remediation_state.json": "b52fceae56270265971d6d5580c184d172539757a838aa39e316866b85be4001",
-    "governance/v2/fable5_system_inventory.json": "393fb68fdda3ace8af14385a2bc7bd495c6b96fa59f8816104da60306f2433db",
+    "governance/v2/fable5_system_inventory.json": "b0ad98770deae630f395884d985b18258a8b9137b99e3de7cfead14cb5dcd2f5",
     "governance/v2/paper_readiness_state.json": "972278500259782b8a8ddaa2540dd308f1f6b8d6fee26a1a12ab0858e94e1971"
   },
   "frozen_source_sha256": {
@@ -28,7 +28,7 @@
     "src/eth_research/v2/fable5/__main__.py": "ff37771c94fa72ed694bc6c83debd64faf4c6bbd7170f479e672274984b53645",
     "src/eth_research/v2/fable5/freeze.py": "0cdd0553915ddb277aec4c23dd01931354736aa5f33db460a60acc1506ba338c",
     "src/eth_research/v2/fable5/inventory.py": "9dd9b2cdb21066118045d4742f69bcfcb628a4b81f688341e01fd4fa67a69847",
-    "src/eth_research/v2/fable5/paper_readiness.py": "c9e004a2ec4124ff6026c24cda1944ff50ecab88072e7e68f90051084db63248",
+    "src/eth_research/v2/fable5/paper_readiness.py": "44b8138818f65a7d9f6a454ce9a3154e80eedd769614519b8cb03ebf8ca266de",
     "src/eth_research/v2ab/commercial_truth.py": "a3241244307395f930e032328b6bec0a270f59967d736ef37d7619e963bbce31"
   },
   "schema_version": 1

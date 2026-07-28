@@ -79,6 +79,8 @@ _VISIBILITY_SCHEMA_VERSION = 1
 _REPOSITORY_CREATED = datetime.fromisoformat("2026-07-11T00:22:16+00:00")
 
 #: The gates whose conjunction IS paper-activation authorization, in fixed order.
+#: This tuple exists ONLY to give ``blocking_gates`` a stable, readable order. It is NOT
+#: the authority — see :data:`REQUIRED_PAPER_ACTIVATION_GATES` and :func:`_authorized`.
 PAPER_ACTIVATION_GATES: tuple[str, ...] = (
     "platform_audit_complete",
     "platform_hardened",
@@ -92,6 +94,60 @@ PAPER_ACTIVATION_GATES: tuple[str, ...] = (
     "sealed_partitions_untouched",
     "repository_private",
 )
+
+#: The exact set of gate names that must ALL hold for paper activation. Authorization is
+#: decided against this frozen set, never by reducing over a replaceable sequence.
+#:
+#: Why this is not simply ``all(gates[g] for g in PAPER_ACTIVATION_GATES)``: that form is
+#: *vacuously true* over an empty collection. Rebinding the module-level name to ``()``
+#: produced ``paper_activation_authorized = True`` with ``blocking_gates = ()`` while the
+#: gate vector itself still reported unmet gates — a self-inconsistent authorization, and
+#: exactly the shape of bug that reads as fine in review. Reducing over data that can be
+#: replaced makes the *collection* the authority; naming the requirement makes the
+#: *requirement* the authority.
+REQUIRED_PAPER_ACTIVATION_GATES: frozenset[str] = frozenset(
+    {
+        "platform_audit_complete",
+        "platform_hardened",
+        "no_unresolved_class_abd_finding",
+        "eligible_paper_candidate_present",
+        "candidate_lineage_valid",
+        "strategy_specification_immutable",
+        "paper_release_candidate_frozen",
+        "paper_duration_and_success_criteria_preregistered",
+        "human_activation_approval_recorded",
+        "sealed_partitions_untouched",
+        "repository_private",
+    }
+)
+
+
+def _authorized(gates: dict[str, bool]) -> bool:
+    """True only if the gate vector is EXACTLY the required set and every value is ``True``.
+
+    Four independent conditions, each of which alone refuses:
+
+    * the requirement itself must be non-empty — an empty requirement authorizes nothing,
+      which is what makes this immune to the vacuous-``all`` rewrite;
+    * the delivered key set must equal the required set exactly — a missing gate cannot be
+      skipped, and an *extra* gate is equally refused because it means the caller is not
+      speaking the schema this function validates;
+    * every value must be the ``True`` singleton — ``is True`` rather than truthiness, so
+      ``1``, ``"yes"`` and a truthy object are all rejected;
+    * the ordering tuple must agree with the required set, so the two cannot silently drift
+      apart and leave ``blocking_gates`` describing a different question than authorization.
+
+    This does not defend against arbitrary in-process code execution — an attacker who can
+    rebind names can rebind this function too. That threat is addressed by source freeze,
+    package verification and deployment isolation, not by anything written here.
+    """
+    if not REQUIRED_PAPER_ACTIVATION_GATES:
+        return False
+    if set(gates) != REQUIRED_PAPER_ACTIVATION_GATES:
+        return False
+    if set(PAPER_ACTIVATION_GATES) != REQUIRED_PAPER_ACTIVATION_GATES:
+        return False
+    return all(gates.get(name) is True for name in REQUIRED_PAPER_ACTIVATION_GATES)
 
 
 class PaperReadinessError(RuntimeError):
@@ -382,7 +438,7 @@ def derive_paper_readiness(repo_root: str | Path) -> PaperReadinessState:
         "sealed_partitions_untouched": sealed_untouched,
         "repository_private": private,
     }
-    authorized = all(gates[g] for g in PAPER_ACTIVATION_GATES)
+    authorized = _authorized(gates)
     trading_active = _path_exists(root, _PAPER_TRADING_RECORD)
     sell_ready = derive_sell_ready(ReadinessInputs.current())
     blocking = tuple(g for g in PAPER_ACTIVATION_GATES if not gates[g])
