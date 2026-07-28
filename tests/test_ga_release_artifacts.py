@@ -5,19 +5,41 @@ source; these tests prove the committed bytes match, that hardening changed no `
 artifact (the governed-state digest reproduces), that the sealed ledgers stay byte-empty, and that
 the release state records the **private** posture — the public-GA route abandoned, built/hardened
 but **not** publicly published, every public channel closed, on the ordered private lifecycle.
+
+Two of the three artifacts are *historical* records of release v1.1.0 rather than descriptions of
+the live tree: ``release_manifest.json`` (built from the v1.1.0 source tree) and ``sbom.cdx.json``
+(built from the v1.1.0 ``uv.lock``). Once the active version moves past ``VERSION`` they are never
+rebuilt and are validated against their own recorded identity; the tests below pin that, including
+that declaring a dependency — which necessarily rewrites ``uv.lock`` — cannot mutate the frozen
+SBOM. Current-tree dependency coverage lives in the *live* private SBOM at
+``governance/v2c/commercial/sbom.cdx.json``, which is covered here too.
 """
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 import eth_research
+from eth_research.v2c.commercial import evidence as v2c_evidence
+from eth_research.v2c.commercial.sbom import V2C_DEV_VERSION, build_private_sbom
 
 REPO_ROOT = Path(eth_research.__file__).resolve().parents[2]
+
+FROZEN_SBOM_PATH = REPO_ROOT / "release/v1.1.0/sbom.cdx.json"
+#: The frozen v1.1.0 SBOM's byte identity, recorded here as an independent regression anchor. It is
+#: the same digest the V2A-V2B stack freeze table and the Fable 5 system inventory pin for this
+#: path. Nothing in an ordinary development change — least of all a dependency declaration — may
+#: move it; if this constant ever needs editing, a historical release record has been falsified.
+FROZEN_SBOM_SHA256 = "7fd0396afbf4e642d724ea2a90ae3d25d108de5540f472fc1e73eecc11fa2731"
+
+LIVE_SBOM_PATH = REPO_ROOT / "governance/v2c/commercial/sbom.cdx.json"
 
 
 def _load_tool() -> object:
@@ -84,8 +106,34 @@ def test_write_keeps_the_historical_manifest_under_a_later_version(
     written = _TOOL.write(tmp_path)  # type: ignore[attr-defined]
 
     assert "release_manifest.json" not in written
-    assert set(written) == {"sbom.cdx.json", "release_state.json"}
+    assert set(written) == {"release_state.json"}
     assert manifest.read_bytes() == historical, "the historical manifest was rewritten"
+
+
+def test_write_keeps_the_historical_sbom_under_a_later_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--write`` must not rebuild the v1.1.0 SBOM from a lock that is no longer v1.1.0's.
+
+    The SBOM's ``components[]`` are read out of ``uv.lock``. A document whose subject is stamped
+    ``eth-research 1.1.0`` but whose dependency list is regenerated from today's lock describes no
+    release that ever existed, and rewriting it also falsifies the ``"immutability": "immutable"``
+    identity the V2A-V2B stack freeze table records for this path.
+    """
+    monkeypatch.setattr(_TOOL, "_active_version", lambda _root: "2.0.0.dev2")
+    _stub_artifacts(monkeypatch)
+    outdir = tmp_path / _TOOL.RELDIR  # type: ignore[attr-defined]
+    outdir.mkdir(parents=True)
+    sbom = outdir / "sbom.cdx.json"
+    historical = FROZEN_SBOM_PATH.read_bytes()
+    sbom.write_bytes(historical)
+
+    written = _TOOL.write(tmp_path)  # type: ignore[attr-defined]
+
+    assert "sbom.cdx.json" not in written
+    assert set(written) == {"release_state.json"}
+    assert sbom.read_bytes() == historical, "the historical SBOM was rewritten"
+    assert hashlib.sha256(sbom.read_bytes()).hexdigest() == FROZEN_SBOM_SHA256
 
 
 def test_write_rebuilds_everything_at_the_release_version(
@@ -99,6 +147,208 @@ def test_write_rebuilds_everything_at_the_release_version(
 
     assert set(written) == {"release_manifest.json", "sbom.cdx.json", "release_state.json"}
     assert (tmp_path / _TOOL.RELDIR / "release_manifest.json").is_file()  # type: ignore[attr-defined]
+    assert (tmp_path / _TOOL.RELDIR / "sbom.cdx.json").is_file()  # type: ignore[attr-defined]
+
+
+# --------------------------------------------------------------------------- #
+# the frozen v1.1.0 SBOM is historical: a dependency change cannot move it     #
+# --------------------------------------------------------------------------- #
+def _diverged_tree(tmp_path: Path, *, extra_packages: tuple[tuple[str, str], ...] = ()) -> bytes:
+    """A minimal repo root that is past v1.1.0, holding the real frozen SBOM and a mutated lock.
+
+    Returns the frozen SBOM bytes that were planted. ``extra_packages`` are appended to a copy of
+    the live ``uv.lock`` — this is what declaring a dependency does to the lock, and therefore to
+    anything that rebuilds a bill of materials from it.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "eth-research"\nversion = "2.0.0.dev2"\ndependencies = []\n',
+        encoding="utf-8",
+    )
+    lock = (REPO_ROOT / "uv.lock").read_text(encoding="utf-8")
+    for name, version in extra_packages:
+        lock += (
+            f'\n[[package]]\nname = "{name}"\nversion = "{version}"\n'
+            'source = { registry = "https://pypi.org/simple" }\n'
+        )
+    (tmp_path / "uv.lock").write_text(lock, encoding="utf-8")
+    outdir = tmp_path / _TOOL.RELDIR  # type: ignore[attr-defined]
+    outdir.mkdir(parents=True)
+    frozen = FROZEN_SBOM_PATH.read_bytes()
+    (outdir / "sbom.cdx.json").write_bytes(frozen)
+    return frozen
+
+
+def test_a_declared_dependency_cannot_mutate_the_frozen_sbom(tmp_path: Path) -> None:
+    """The regression this whole treatment exists for, driven through the real builders.
+
+    Adding one package to ``uv.lock`` is enough to make :func:`build_sbom` emit different bytes.
+    ``write`` must not put those bytes on disk: the artifact describes release v1.1.0, and the
+    stack freeze table records its byte identity as immutable with no writer that could reissue it.
+    """
+    frozen = _diverged_tree(tmp_path, extra_packages=(("nardis-telemetry", "1.4.2"),))
+    sbom_path = tmp_path / _TOOL.RELDIR / "sbom.cdx.json"  # type: ignore[attr-defined]
+
+    # The generator genuinely would have produced something else — this is not a no-op test.
+    regenerated = _TOOL.build_sbom(tmp_path)  # type: ignore[attr-defined]
+    assert "nardis-telemetry" in {c["name"] for c in regenerated["components"]}
+    assert _TOOL._canonical_json(regenerated) != frozen  # type: ignore[attr-defined]
+
+    written = _TOOL.write(tmp_path)  # type: ignore[attr-defined]
+
+    assert written == ["release_state.json"]
+    assert sbom_path.read_bytes() == frozen
+    assert hashlib.sha256(sbom_path.read_bytes()).hexdigest() == FROZEN_SBOM_SHA256
+
+
+def test_check_does_not_call_the_frozen_sbom_stale_after_a_dependency_change(
+    tmp_path: Path,
+) -> None:
+    """...and ``check`` must not report it stale either, or ``--write`` gets invoked to "fix" it.
+
+    ``check``'s drift message is literally "regenerate with --write". If a dependency change made
+    the frozen SBOM look stale, the remedy the tool prints is the one that falsifies it. (The other
+    problems this stub tree reports — no ``research/``, no sealed ledgers, no manifest — are
+    expected; only the SBOM's silence is under test.)
+    """
+    _diverged_tree(tmp_path, extra_packages=(("nardis-telemetry", "1.4.2"),))
+
+    problems = _TOOL.check(tmp_path)  # type: ignore[attr-defined]
+
+    assert not [p for p in problems if "sbom" in p], problems
+
+
+def test_frozen_sbom_recorded_identity_validates() -> None:
+    """The committed artifact passes the historical check it is now verified by."""
+    assert _TOOL._check_sbom_historical(FROZEN_SBOM_PATH, REPO_ROOT) == []  # type: ignore[attr-defined]
+
+
+def _bump_subject_version(doc: dict[str, Any]) -> None:
+    doc["metadata"]["component"]["version"] = "2.0.0.dev2"
+
+
+def _bump_spec_version(doc: dict[str, Any]) -> None:
+    doc["specVersion"] = "1.6"
+
+
+def _drop_scope_property(doc: dict[str, Any]) -> None:
+    doc["metadata"]["properties"] = []
+
+
+def _relabel_a_component_purl(doc: dict[str, Any]) -> None:
+    doc["components"][0]["purl"] = "pkg:pypi/numpy@99.0.0"
+
+
+def _retype_a_component(doc: dict[str, Any]) -> None:
+    doc["components"][0]["type"] = "application"
+
+
+def _strip_a_component_version(doc: dict[str, Any]) -> None:
+    del doc["components"][0]["version"]
+
+
+def _list_the_subject_as_a_dependency(doc: dict[str, Any]) -> None:
+    doc["components"].append(
+        {
+            "type": "library",
+            "name": "eth-research",
+            "version": "1.1.0",
+            "purl": "pkg:pypi/eth-research@1.1.0",
+        }
+    )
+
+
+def _duplicate_a_component(doc: dict[str, Any]) -> None:
+    doc["components"].append(dict(doc["components"][0]))
+
+
+def _reorder_components(doc: dict[str, Any]) -> None:
+    doc["components"].reverse()
+
+
+def _empty_the_components(doc: dict[str, Any]) -> None:
+    doc["components"] = []
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected"),
+    [
+        (_bump_subject_version, "metadata drifted"),
+        (_bump_spec_version, "specVersion drifted"),
+        (_drop_scope_property, "metadata drifted"),
+        (_relabel_a_component_purl, "purl does not bind its name and version"),
+        (_retype_a_component, "is not typed as a library"),
+        (_strip_a_component_version, "component with no name or version"),
+        (_list_the_subject_as_a_dependency, "lists its own subject"),
+        (_duplicate_a_component, "duplicate component identity"),
+        (_reorder_components, "canonical (sorted) name order"),
+        (_empty_the_components, "records no components"),
+    ],
+)
+def test_historical_sbom_check_rejects_a_tampered_record(
+    tmp_path: Path, tamper: Callable[[dict[str, Any]], None], expected: str
+) -> None:
+    """Not reproducing from the live lock is not the same as not checking anything.
+
+    Everything that is a function of the frozen ``VERSION`` must still rebuild byte-for-byte, and
+    ``components[]`` — the one lock-derived field — is held to its own recorded identity.
+    """
+    doc: dict[str, Any] = json.loads(FROZEN_SBOM_PATH.read_bytes())
+    tamper(doc)
+    path = tmp_path / "sbom.cdx.json"
+    path.write_bytes(_TOOL._canonical_json(doc))  # type: ignore[attr-defined]
+
+    problems = _TOOL._check_sbom_historical(path, REPO_ROOT)  # type: ignore[attr-defined]
+
+    assert [p for p in problems if expected in p], problems
+
+
+def test_frozen_sbom_stays_byte_pinned_by_the_stack_freeze_table() -> None:
+    """Provenance is not weakened by going historical: the bytes are still pinned, immutably.
+
+    ``research/v2ab/stack_freeze_table.json`` records this path as ``immutable`` and ships no
+    writer. Making the artifact genuinely immutable is what makes that recorded claim true.
+    """
+    table = json.loads((REPO_ROOT / "research/v2ab/stack_freeze_table.json").read_bytes())
+    entry = next(e for e in table["entries"] if e["path"] == "release/v1.1.0/sbom.cdx.json")
+    data = FROZEN_SBOM_PATH.read_bytes()
+    assert entry["immutability"] == "immutable"
+    assert entry["byte_count"] == len(data)
+    assert entry["sha256"] == hashlib.sha256(data).hexdigest() == FROZEN_SBOM_SHA256
+
+
+# --------------------------------------------------------------------------- #
+# the live SBOM is what still tracks the current tree                          #
+# --------------------------------------------------------------------------- #
+def test_the_live_private_sbom_covers_the_current_locked_tree() -> None:
+    """Dependency coverage is kept — by the artifact whose job it is.
+
+    ``governance/v2c/commercial/sbom.cdx.json`` is derived from the live ``uv.lock`` by
+    ``eth_research.v2c.commercial.sbom`` and rewritten by that package's own writer
+    (``evidence.write_all``). It sits outside the frozen ``research/``/``release/`` roots precisely
+    so it *may* move, which is why the frozen v1.1.0 SBOM does not have to.
+    """
+    live: dict[str, Any] = build_private_sbom(REPO_ROOT)
+    locked = {p["name"] for p in _TOOL._locked_packages(REPO_ROOT)} - {"eth-research"}  # type: ignore[attr-defined]
+    assert {c["name"] for c in live["components"]} == locked
+    for dep in ("numpy", "pandas", "pyarrow"):
+        assert dep in locked, dep
+    # The committed bytes are current, and they are the writer's output — never hand-edited.
+    assert v2c_evidence.check(REPO_ROOT) == []
+    assert LIVE_SBOM_PATH.read_bytes() == v2c_evidence.build_all(REPO_ROOT)["sbom.cdx.json"]
+
+
+def test_the_two_sboms_are_different_documents_about_different_subjects() -> None:
+    """The frozen one is stamped v1.1.0 forever; the live one is stamped for the V2C distribution.
+
+    They are not redundant copies with a stale one to fix — they are bills of materials for two
+    different releases, which is why only one of them is allowed to follow ``uv.lock``.
+    """
+    frozen = json.loads(FROZEN_SBOM_PATH.read_bytes())
+    live = json.loads(LIVE_SBOM_PATH.read_bytes())
+    assert frozen["metadata"]["component"]["version"] == _TOOL.VERSION == "1.1.0"  # type: ignore[attr-defined]
+    assert live["metadata"]["component"]["version"] == V2C_DEV_VERSION
+    assert frozen["metadata"]["component"]["version"] != live["metadata"]["component"]["version"]
+    assert _TOOL._active_version(REPO_ROOT) != _TOOL.VERSION  # type: ignore[attr-defined]
 
 
 def test_manifest_identity() -> None:

@@ -9,7 +9,10 @@ Emits three canonical-JSON artifacts under ``release/<version>/``:
   ledger triple. Every field is a function of the **tracked** source in a clean checkout — the tool
   hashes the working tree (filtering ``__pycache__``), so generate/verify from a clean tree; an
   untracked file under ``src/`` or ``research/`` shifts a digest and drift then fails closed.
-* ``sbom.cdx.json`` — a minimal CycloneDX 1.5 software bill of materials derived from ``uv.lock``.
+* ``sbom.cdx.json`` — a minimal CycloneDX 1.5 software bill of materials for release v1.1.0. Its
+  ``components[]`` were derived from the ``uv.lock`` of the v1.1.0 tree; everything else is a
+  function of the frozen ``VERSION``. Like the manifest it is a *historical* record and is never
+  rebuilt once the active version has moved past ``VERSION`` — see :func:`write`.
 * ``release_state.json`` — the honest **private** release posture: the public-GA route was
   abandoned, the package is built and hardened but **not publicly published**, distribution is
   private, and the ordered private lifecycle (``public_ga_abandoned`` → ``private_ga_in_progress``
@@ -252,19 +255,30 @@ _ARTIFACTS: dict[str, Callable[[Path], dict[str, object]]] = {
 def write(repo_root: Path) -> list[str]:
     """Regenerate the release evidence; return the artifact names actually written.
 
-    Under a later development version this deliberately leaves ``release_manifest.json`` alone,
-    for the same reason :func:`check` stops reproducing it: the v1.1.0 manifest is a record of the
-    v1.1.0 *source tree*, and rebuilding it from a diverged tree would produce an artifact that
-    still claims version 1.1.0 while listing today's files — a false record, written by the very
-    command ``check``'s "regenerate with --write" message sends an operator to. The sbom and the
-    release state are version-independent and are always rebuilt.
+    Under a later development version this deliberately leaves the two *historical* artifacts alone,
+    for the same reason :func:`check` stops reproducing them:
+
+    * ``release_manifest.json`` is a record of the v1.1.0 *source tree*. Rebuilding it from a
+      diverged tree would produce an artifact that still claims version 1.1.0 while listing today's
+      files — a false record, written by the very command ``check``'s "regenerate with --write"
+      message sends an operator to.
+    * ``sbom.cdx.json`` is a record of the v1.1.0 *locked environment*. Its ``components[]`` come
+      from ``uv.lock``, so declaring one new dependency rewrites it — and the rewritten file still
+      stamps ``eth-research 1.1.0`` as its subject while enumerating a later tree's dependency set.
+      That is the same false record in bill-of-materials form, and it also breaks the byte identity
+      the V2A-V2B stack freeze table records for this path as ``"immutability": "immutable"``. That
+      table ships no writer by design, so the only way its immutability claim can be *true* is for
+      this artifact to be genuinely immutable.
+
+    ``release_state.json`` is version-independent (a posture record built from the ``VERSION``
+    constant, touching neither the source tree nor the lock) and is always rebuilt.
     """
     outdir = repo_root / RELDIR
     outdir.mkdir(parents=True, exist_ok=True)
     historical = _active_version(repo_root) != VERSION
     written: list[str] = []
     for name, builder in _ARTIFACTS.items():
-        if historical and name == "release_manifest.json":
+        if historical and name in _HISTORICAL_CHECKS:
             continue
         (outdir / name).write_bytes(_canonical_json(builder(repo_root)))
         written.append(name)
@@ -317,22 +331,89 @@ def _check_release_manifest_historical(path: Path, repo_root: Path) -> list[str]
     return problems
 
 
+def _check_sbom_historical(path: Path, repo_root: Path) -> list[str]:
+    """Historical-replay verification of the committed v1.1.0 ``sbom.cdx.json``.
+
+    Used only when the active package version has moved past the frozen release ``VERSION``. The
+    v1.1.0 SBOM enumerates the environment *release v1.1.0 was locked against*; the live ``uv.lock``
+    moves whenever a dependency is declared, upgraded or dropped, so requiring the live lock to
+    reproduce it would make a document describing v1.1.0 mutate as the tree walks away from v1.1.0.
+
+    Exactly one field of the SBOM is a function of the lock — ``components[]``. Every other field is
+    a function of the frozen ``VERSION`` constant, so this still requires all of them to reproduce
+    byte-for-byte from :func:`build_sbom`; only ``components[]`` is verified against the artifact's
+    own recorded identity (well-formed CycloneDX entries, each ``purl`` binding its own
+    ``name``/``version``, canonical sorted order, no duplicate identity, and the subject not listed
+    as a dependency of itself) instead of against the moving lock. The artifact is never mutated,
+    and the live-reproduction check that runs when the active version equals ``VERSION`` is
+    untouched. Current-tree dependency coverage is not lost: it is carried by the live private SBOM
+    at ``governance/v2c/commercial/sbom.cdx.json`` (``eth_research.v2c.commercial.sbom``), which is
+    derived from the live ``uv.lock`` and rebuilt by its own writer.
+    """
+    problems: list[str] = []
+    sb = f"{RELDIR}/sbom.cdx.json"
+    doc = json.loads(path.read_bytes())
+    fresh = build_sbom(repo_root)
+
+    # Version-independent skeleton: identical to a fresh build, because none of it reads uv.lock.
+    for key in ("bomFormat", "specVersion", "version", "metadata"):
+        if doc.get(key) != fresh[key]:
+            problems.append(f"{sb} {key} drifted from the frozen v{VERSION} release identity")
+
+    components = doc.get("components")
+    if not isinstance(components, list) or not components:
+        problems.append(f"{sb} records no components")
+        return problems
+
+    names: list[str] = []
+    for entry in components:
+        if not isinstance(entry, dict):
+            problems.append(f"{sb} records a component that is not an object")
+            continue
+        name, ver = entry.get("name"), entry.get("version")
+        if not isinstance(name, str) or not name or not isinstance(ver, str) or not ver:
+            problems.append(f"{sb} records a component with no name or version")
+            continue
+        names.append(name)
+        if entry.get("type") != "library":
+            problems.append(f"{sb} component {name!r} is not typed as a library")
+        if entry.get("purl") != f"pkg:pypi/{name}@{ver}":
+            problems.append(f"{sb} component {name!r} purl does not bind its name and version")
+    if "eth-research" in names:
+        problems.append(f"{sb} lists its own subject as one of its dependencies")
+    if len(set(names)) != len(names):
+        problems.append(f"{sb} lists a duplicate component identity")
+    if names != sorted(names):
+        problems.append(f"{sb} components are not in canonical (sorted) name order")
+    return problems
+
+
+# The v1.1.0 artifacts that are *historical records of release v1.1.0* rather than descriptions of
+# the live tree, mapped to the verifier that validates each one's recorded identity. Under a later
+# active version ``write`` skips these and ``check`` routes them here; at ``VERSION`` itself neither
+# is historical and both take the unchanged strict live-reproduction path.
+_HISTORICAL_CHECKS: dict[str, Callable[[Path, Path], list[str]]] = {
+    "release_manifest.json": _check_release_manifest_historical,
+    "sbom.cdx.json": _check_sbom_historical,
+}
+
+
 def check(repo_root: Path) -> list[str]:
     problems = []
     outdir = repo_root / RELDIR
-    # Under a later development version, the v1.1.0 release evidence is a *historical* artifact:
-    # its source-derived manifest was built from the v1.1.0 tree and is verified for its own
-    # recorded identity rather than reproduced from the diverged live tree. The sbom and
-    # release_state are version-independent (the sbom excludes eth-research itself; the state is a
-    # posture record), so they are still rebuilt-and-compared in both modes.
+    # Under a later development version, the v1.1.0 manifest and sbom are *historical* artifacts:
+    # the manifest was built from the v1.1.0 source tree and the sbom from the v1.1.0 lock, so each
+    # is verified for its own recorded identity rather than reproduced from a diverged live tree.
+    # release_state is version-independent (a posture record built from the VERSION constant, which
+    # reads neither the source tree nor the lock), so it is rebuilt-and-compared in both modes.
     historical = _active_version(repo_root) != VERSION
     for name, builder in _ARTIFACTS.items():
         path = outdir / name
         if not path.exists():
             problems.append(f"{RELDIR}/{name} is missing")
             continue
-        if historical and name == "release_manifest.json":
-            problems.extend(_check_release_manifest_historical(path, repo_root))
+        if historical and name in _HISTORICAL_CHECKS:
+            problems.extend(_HISTORICAL_CHECKS[name](path, repo_root))
             continue
         want = _canonical_json(builder(repo_root))
         if path.read_bytes() != want:
