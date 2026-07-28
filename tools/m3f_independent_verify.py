@@ -254,9 +254,20 @@ def _workflow_grants_write(text: str) -> bool:
 # report                                                                       #
 # --------------------------------------------------------------------------- #
 class Report:
+    """Check outcomes, with skipped work tracked separately from passed work.
+
+    ``skipped`` exists because of a real defect: the acceptance-chain check ran
+    its git-object binding half only ``if (root / ".git").exists()``, and when
+    ``.git`` was absent it silently dropped that half and still reported the
+    whole check PASSED. A verifier that reports success for work it did not do
+    is the exact failure mode this tool exists to catch, so a skip is now
+    recorded as its own outcome and never lands in ``checks``.
+    """
+
     def __init__(self) -> None:
         self.checks: list[str] = []
         self.failures: list[str] = []
+        self.skipped: list[str] = []
 
     def ok(self, name: str) -> None:
         self.checks.append(name)
@@ -264,6 +275,10 @@ class Report:
     def fail(self, name: str, detail: str) -> None:
         self.checks.append(name)
         self.failures.append(f"{name}: {detail}")
+
+    def skip(self, name: str, reason: str) -> None:
+        """Record work that could not be performed. Not a pass, not a failure."""
+        self.skipped.append(f"{name}: {reason}")
 
     def guard(self, name: str, fn: Any) -> None:
         try:
@@ -377,7 +392,7 @@ def verify(repo_root: str | Path) -> dict[str, Any]:
     report.guard("08_honest_state_crosscheck", check_honest_state)
 
     def check_acceptance() -> None:
-        _check_acceptance_chain(root, facts)
+        _check_acceptance_chain(root, facts, report)
 
     report.guard("09_acceptance_chain", check_acceptance)
 
@@ -878,7 +893,7 @@ def _check_record_provenance(
         )
 
 
-def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
+def _check_acceptance_chain(root: Path, facts: dict[str, Any], report: Report) -> None:
     """Independent chain walk: every created production proposal must be covered
     by a verified acceptance record and the tree must equal the chain-head state."""
     created = list(facts.get("m3e_created_proposal_ids", []))
@@ -919,6 +934,12 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
     # ROOT-01..03, derived here rather than taken from the record.
     if (root / ".git").exists():
         _check_genesis_root(root, genesis)
+    else:
+        report.skip(
+            "09_acceptance_chain/genesis_root",
+            "no .git directory: the genesis root could not be re-derived from trusted "
+            "history, so ROOT-01..03 were not verified",
+        )
     accepted: list[str] = []
     for position, entry in enumerate(records[1:], start=1):
         _require(entry.get("entry_kind") == "acceptance", "unknown acceptance entry kind")
@@ -1064,6 +1085,13 @@ def _check_acceptance_chain(root: Path, facts: dict[str, Any]) -> None:
         if (root / ".git").exists():
             _check_file_set_binding(root, record, proposal_id)
             _check_record_provenance(root, record, completion, proposal_id)
+        else:
+            report.skip(
+                "09_acceptance_chain/git_binding",
+                f"no .git directory: acceptance {proposal_id} had neither its closed "
+                f"file set nor its provenance bound to git objects "
+                f"(GIT-04, GIT-05, PROV-01, PROV-03 not verified)",
+            )
         accepted.append(proposal_id)
         expected = new_state
     _require(
@@ -1208,11 +1236,16 @@ def _check_honest_state(root: Path, facts: dict[str, Any]) -> None:
 
 
 def _payload(report: Report, facts: dict[str, Any]) -> dict[str, Any]:
+    # ``ok`` requires completeness, not merely the absence of failures. A run that
+    # could not perform its git-object binding has not verified the acceptance
+    # chain, and must not present the same "ok": true a full run does.
     return {
-        "ok": not report.failures,
+        "ok": not report.failures and not report.skipped,
+        "complete": not report.skipped,
         "verifier": "m3f_independent_stdlib",
         "checks": report.checks,
         "failures": report.failures,
+        "skipped": report.skipped,
         "facts": facts,
     }
 
@@ -1226,10 +1259,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        status = "OK" if payload["ok"] else "FAIL"
-        print(f"{status}: {len(payload['checks'])} checks, {len(payload['failures'])} failures")
+        if payload["failures"]:
+            status = "FAIL"
+        elif payload["skipped"]:
+            status = "INCOMPLETE"  # never "OK": work was not done
+        else:
+            status = "OK"
+        print(
+            f"{status}: {len(payload['checks'])} checks, "
+            f"{len(payload['failures'])} failures, {len(payload['skipped'])} skipped"
+        )
         for failure in payload["failures"]:
-            print(f"  - {failure}")
+            print(f"  - FAILED  {failure}")
+        for skip in payload["skipped"]:
+            print(f"  - SKIPPED {skip}")
     return 0 if payload["ok"] else 1
 
 
