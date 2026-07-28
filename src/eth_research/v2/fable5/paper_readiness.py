@@ -157,9 +157,10 @@ def _repository_private(root: Path) -> bool:
     This gate previously returned ``"Private :: Do Not Upload" in pyproject.toml``. That
     string is a **PyPI trove classifier**: it controls whether the Python Package Index
     rejects an upload, and carries no information at all about GitHub repository
-    visibility. It was measured returning ``True`` while the repository was verifiably
-    public — recorded as STOP-1 in ``docs/V2F_HARD_STOP.md`` and as a confirmed Class-B
-    safety defect in ``docs/V2E_BUG_LOG.md``.
+    visibility. It was measured returning ``True`` while the GitHub API reported
+    ``private: false`` — a Class A safety defect, since authorization is the conjunction
+    of every gate and this was the one keeping paper trading off a public repository.
+    The incident is recorded in ``docs/V2_PUBLIC_EXPOSURE_INCIDENT.md``.
 
     The replacement reads a visibility *observation* rather than a proxy for one. It is
     still not a live check — this module derives from committed bytes and must stay

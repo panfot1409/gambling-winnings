@@ -54,7 +54,10 @@ control. Containment limits *future* exposure only.
 
 ## 2. Third-party market data published
 
-Measured by walking the Git index and parsing every raw acquisition file:
+Measured by walking the Git index **of this branch** (`security/v2f-private-containment`,
+whose `research/` subtree is byte-identical to `main`) and parsing every raw acquisition
+file. The ref matters and is stated because these totals differ by ref — see the note
+below.
 
 | acquisition | candle rows |
 | --- | --- |
@@ -63,13 +66,31 @@ Measured by walking the Git index and parsing every raw acquisition file:
 | `research/v2b/raw/coinbase/coinbase-btc-usd-research-audit-002` | 2,221 |
 | `research/v2b/raw/coinbase/coinbase-btc-usd-research-genesis-001` | 2,221 |
 | `research/m2b/raw/coinbase/discovery-001` | 257 |
-| `research/m3d/raw/coinbase/…prospective-update-20260715-20260723-…` | 9 |
 | `research/m3d/raw/coinbase/coinbase-eth-usd-prospective-genesis-001` | 3 |
 | `research/m3d/raw/coinbase/coinbase-eth-usd-prospective-audit-002` | 3 |
-| **total** | **12,118 rows across 57 raw JSON files** |
+| **total on `main` / this branch** | **12,109 rows** |
+
+Those rows live in **45 candle-bearing files**, among 54 files total under
+`research/**/raw/coinbase/`; the other 9 are acquisition receipts and request plans
+carrying no market data.
+
+**Ref-dependence, stated explicitly.** Two unmerged refs — the bot branch
+`bot/m3e-prospective-update/20260715-20260724-315846f9ec5196b4` and the working branch
+`claude/v2e-proposal-acceptance-001` that merged it — additionally carry
+`research/m3d/raw/coinbase/…prospective-update-20260715-20260723-…` (**9 rows across 3
+files**), for **12,118 rows across 57 files** on those refs. Both were public while the
+repository was public, so the exposed maximum is 12,118 rows even though `main` carries
+12,109.
+
+> **Erratum, 2026-07-28.** An earlier revision of this section reported "12,118 rows
+> across 57 raw JSON files" as the figure for this branch. That total is correct for the
+> two unmerged refs above, not for `main` or for the branch carrying this document, and
+> the "57 files" count silently included 9 non-candle receipt/plan files. Corrected
+> above. Found by an independent read-only auditor re-deriving the figure rather than
+> reading it.
 
 Provider: Coinbase Exchange public market data. Derived datasets, cohort manifests and
-proposal bundles carry the same values onward, so 12,118 raw candle rows is a **lower
+proposal bundles carry the same values onward, so the raw candle-row count is a **lower
 bound** on what was published. No raw market-data values are reproduced in this record.
 
 ## 3. The scheduled collector was live and unattended
@@ -95,12 +116,15 @@ failure: the data landed, and the human-review notification did not.
 
 Inventoried, **not deleted**:
 
-| branch | head |
-| --- | --- |
-| `bot/m3e-prospective-update/20260715-20260724-315846f9ec5196b4` | `779df6bb` |
-| `bot/m3e-prospective-update/20260715-20260727-bf52161f7935a5e2` | `5f924e04` |
+| branch | head | verifiable from |
+| --- | --- | --- |
+| `bot/m3e-prospective-update/20260715-20260724-315846f9ec5196b4` | `779df6bb` | this repository (the object is present locally) |
+| `bot/m3e-prospective-update/20260715-20260727-bf52161f7935a5e2` | `5f924e04` | **GitHub API branch listing only** — the object is not in a local clone unless separately fetched |
 
-Neither has an associated pull request. Both remain in place as evidence.
+Neither has an associated pull request. Both remain in place as evidence. The
+provenance column is recorded because the second head cannot be confirmed by
+`git cat-file` in a fresh clone; anyone re-deriving this table offline will find only
+the first, and that is expected rather than a discrepancy.
 
 ## 4. Containment
 

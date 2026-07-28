@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -29,14 +30,41 @@ class ContainmentRefusal(Exception):
     """The workflow must not proceed."""
 
 
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Refuse duplicate JSON keys instead of silently taking the last one.
+
+    ``{"active": true, "active": false}`` is accepted by a stock JSON parser and
+    resolves to ``false``. A reviewer scanning for ``"active": true`` sees it and
+    moves on, while the gate opens. Duplicate keys are a defect in the document,
+    not a value to resolve.
+    """
+    seen: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ContainmentRefusal(f"{RECORD_RELPATH}: duplicate JSON key {key!r}")
+        seen[key] = value
+    return seen
+
+
 def _load(record_path: Path) -> dict[str, Any]:
+    # A symlink is refused rather than followed: the record is hash-pinned in the
+    # governed inventory, and a symlink lets the pinned path keep its digest while
+    # the bytes actually read come from somewhere unpinned.
+    if record_path.is_symlink():
+        raise ContainmentRefusal(
+            f"{RECORD_RELPATH} is a symlink; the containment record must be a regular file"
+        )
     if not record_path.is_file():
         raise ContainmentRefusal(
             f"{RECORD_RELPATH} is absent. Absence is refused, not permitted: removing "
             f"the record must never be a way to resume suspended market-data egress."
         )
     try:
-        payload = json.loads(record_path.read_text(encoding="utf-8"))
+        raw = record_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as exc:
+        raise ContainmentRefusal(f"{RECORD_RELPATH} is not readable UTF-8 text: {exc}") from exc
+    try:
+        payload = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
     except json.JSONDecodeError as exc:
         raise ContainmentRefusal(f"{RECORD_RELPATH} is not valid JSON: {exc}") from exc
     if not isinstance(payload, dict):
@@ -65,15 +93,28 @@ def check(repo_root: Path) -> str:
             + str(payload.get("reason", "no reason recorded"))
         )
 
-    # active is False — containment claims to have been lifted. Require the lift
-    # to name a human and a date, so an unattributed flag flip cannot open it.
-    missing = [f for f in ("lifted_by", "lifted_on") if not payload.get(f)]
+    # active is False — containment claims to have been lifted. Require the lift to
+    # name a human and a date. Truthiness is not enough: `lifted_by: 1` and
+    # `lifted_by: " "` are both truthy and neither names anybody, so the types and
+    # the date format are checked rather than assumed.
+    missing = [
+        field
+        for field in ("lifted_by", "lifted_on")
+        if not isinstance(payload.get(field), str) or not str(payload.get(field)).strip()
+    ]
     if missing:
         raise ContainmentRefusal(
-            f"{RECORD_RELPATH} sets active=false without {', '.join(missing)}; "
-            f"an unattributed lift is refused"
+            f"{RECORD_RELPATH} sets active=false without a non-empty string "
+            f"{', '.join(missing)}; an unattributed lift is refused"
         )
-    return f"containment lifted by {payload['lifted_by']} on {payload['lifted_on']}"
+    lifted_on = str(payload["lifted_on"])
+    try:
+        date.fromisoformat(lifted_on)
+    except ValueError as exc:
+        raise ContainmentRefusal(
+            f"{RECORD_RELPATH} lifted_on={lifted_on!r} is not an ISO-8601 date: {exc}"
+        ) from exc
+    return f"containment lifted by {payload['lifted_by']} on {lifted_on}"
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,7 +1,12 @@
 {
-  "authorized_by": "repository owner — MILESTONE V2F-R decision 4, reaffirmed in V2F-R2 decision 4",
-  "authorized_on": "2026-07-28",
   "active": true,
+  "authorized_by": "repository owner \u2014 MILESTONE V2F-R decision 4, reaffirmed in V2F-R2 decision 4",
+  "authorized_on": "2026-07-28",
+  "enforcement_scripts_note": "The scripts that actually enforce containment are pinned here because the governed inventory only walks governance/ and release/, so tools/ carries no hash of its own. This record IS in governed_artifacts, so editing an enforcement script without updating this map fails tests/test_v2f_containment_mutations.py, and updating this map changes the record's hash and so fails `fable5 verify` until the inventory is rebuilt. Neither half is a self-hash: each is pinned by the other.",
+  "enforcement_scripts_sha256": {
+    "tools/m3e_fetch_window.sh": "f8eca934a0cfb1e419c5cb155a43a941a2bcb870d237899348b194e1ea5d495c",
+    "tools/v2f_containment_gate.py": "50ebe7887bcf314ba859332812c9584df1ef1e5484cb85d6d52fbbc9f3b6372b"
+  },
   "kind": "v2f_containment",
   "lift_requires": [
     "an independently accepted containment and remediation review",
@@ -11,22 +16,22 @@
   ],
   "quoted_authority": "Immediately suspend the scheduled Coinbase prospective-update workflow while containment and rights review are underway.",
   "reason": "This repository was public while redistributing third-party Coinbase market data with no committed rights assessment, and the scheduled workflow added more of that data weekly without human review. The repository has since been returned to private and the workflow disabled in the Actions UI, both verified against the GitHub API. The redistribution-rights question nevertheless remains OPEN, so containment stays in force: restoring privacy reduces future exposure, it does not decide whether this data may be collected, retained or redistributed at all.",
-  "state_at_authorization": {
-    "repository_was_public": true,
-    "repository_now_private": true,
-    "privacy_restored_observed_at": "2026-07-28T11:33:55Z",
-    "workflow_disabled_in_actions_ui": true,
-    "workflow_disabled_observed_at": "2026-07-28T11:31:40Z",
-    "data_rights_resolved": false,
-    "data_classification": "internal_research_only_pending_written_redistribution_permission"
-  },
   "schema_version": 1,
   "scope": {
-    "removes_schedule_trigger": true,
-    "refuses_manual_dispatch_while_active": true,
-    "preserves_workflow_definition": true,
     "deletes_no_branch_commit_or_artifact": true,
+    "preserves_workflow_definition": true,
+    "refuses_manual_dispatch_while_active": true,
+    "removes_schedule_trigger": true,
     "rewrites_no_history": true
+  },
+  "state_at_authorization": {
+    "data_classification": "internal_research_only_pending_written_redistribution_permission",
+    "data_rights_resolved": false,
+    "privacy_restored_observed_at": "2026-07-28T11:33:55Z",
+    "repository_now_private": true,
+    "repository_was_public": true,
+    "workflow_disabled_in_actions_ui": true,
+    "workflow_disabled_observed_at": "2026-07-28T11:31:40Z"
   },
   "suspends_workflow_basename": "m3e-prospective-update.yml"
 }

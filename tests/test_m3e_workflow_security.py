@@ -41,6 +41,15 @@ def _uncommented(text: str) -> str:
     return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
 
 
+def _step_blocks(job_body: str) -> list[str]:
+    """Split a job body into its individual ``- name:`` steps."""
+    starts = [m.start() for m in re.finditer(r"^      - ", job_body, re.MULTILINE)]
+    return [
+        job_body[s : (starts[i + 1] if i + 1 < len(starts) else len(job_body))]
+        for i, s in enumerate(starts)
+    ]
+
+
 def _job_blocks(text: str) -> dict[str, str]:
     """Split a workflow into ``{job_name: body}``, each body ending at the next job.
 
@@ -58,6 +67,12 @@ def _job_blocks(text: str) -> dict[str, str]:
 #: Jobs that reach the network or publish, and the step each one must not reach
 #: before the containment gate has run.
 GATE_STEP = "run: python3 tools/v2f_containment_gate.py --repo-root ."
+
+#: The complete trigger block, pinned exactly. Containment suspends the schedule;
+#: it does not remove the mechanism, so workflow_dispatch stays and is the only
+#: trigger permitted while containment is active.
+TRIGGER_BLOCK = "on:\n  workflow_dispatch:\n"
+
 GUARDED_JOBS = (
     ("gate_and_plan", "eth_research.v2d verify"),
     ("runner_a", "tools/m3e_fetch_window.sh"),
@@ -77,30 +92,59 @@ def containment_violations(text: str) -> list[str]:
     violations: list[str] = []
     directives = _uncommented(text)
 
-    # A commented-out cron is not containment, and a comment explaining the removal
-    # is not a violation — so this reads directives, not raw text.
-    if "cron:" in directives:
-        violations.append("schedule_suspended: an active cron: directive is present")
-    if "schedule:" in directives:
-        violations.append("schedule_suspended: an active schedule: trigger is present")
-    if "workflow_dispatch:" not in directives:
-        violations.append("schedule_suspended: workflow_dispatch: was removed")
-
-    count = text.count(GATE_STEP)
-    if count != len(GUARDED_JOBS):
+    # Trigger check by EXACT MATCH, not by scanning for forbidden tokens.
+    #
+    # The previous version asked "is the substring 'cron:' present?". A read-only
+    # auditor broke it eight ways in one pass — `"schedule":` with quoted keys,
+    # `schedule :` with a space before the colon, and flow style all parse to a live
+    # weekly trigger while containing neither `schedule:` nor `cron:` as literal
+    # bytes, and every one is visually indistinguishable from the contained form in
+    # a review diff. Enumerating spellings is a losing game; pinning the whole
+    # trigger block is not. PyYAML is deliberately not a dependency here, so this
+    # compares bytes rather than parsing.
+    if TRIGGER_BLOCK not in directives:
         violations.append(
-            f"containment_gate_first: expected {len(GUARDED_JOBS)} gate steps, found {count}"
+            "schedule_suspended: the on: block is not exactly "
+            f"{TRIGGER_BLOCK.strip()!r} — any other trigger set is refused"
         )
 
-    blocks = _job_blocks(text)
+    # Gate-step integrity. Presence and ordering are not enough: a step can be
+    # present and inert. `continue-on-error: true` leaves the refusal in the log
+    # while the job proceeds; `if: false` never runs it; `|| true` swallows the
+    # exit code; a second `--repo-root` wins under argparse; and a commented-out
+    # step still matched a raw-text count. Each gate step must therefore be the
+    # exact two lines, and the count is taken over directives so comments cannot
+    # inflate it.
+    count = directives.count(GATE_STEP)
+    if count != len(GUARDED_JOBS):
+        violations.append(
+            f"containment_gate_first: expected {len(GUARDED_JOBS)} active gate steps, found {count}"
+        )
+
+    blocks = _job_blocks(directives)
     for job, guarded_step in GUARDED_JOBS:
         body = blocks.get(job)
         if body is None:
             violations.append(f"containment_gate_first: job {job} is missing")
             continue
-        if GATE_STEP not in body:
+        steps = [s for s in _step_blocks(body) if GATE_STEP in s]
+        if not steps:
             violations.append(f"containment_gate_first: {job} has no containment gate")
             continue
+        for step in steps:
+            body_lines = [ln.strip() for ln in step.splitlines() if ln.strip()]
+            extras = [ln for ln in body_lines if not ln.startswith(("- name:", "run:"))]
+            if extras:
+                violations.append(
+                    f"containment_gate_first: {job} gate step carries {extras!r}; "
+                    f"a gate with a condition or an error tolerance is not a gate"
+                )
+            run_lines = [ln for ln in body_lines if ln.startswith("run:")]
+            if run_lines != [GATE_STEP]:
+                violations.append(
+                    f"containment_gate_first: {job} gate run line is {run_lines!r}, "
+                    f"not exactly [{GATE_STEP!r}]"
+                )
         if guarded_step not in body:
             violations.append(f"containment_gate_first: {job} no longer contains {guarded_step!r}")
             continue

@@ -19,6 +19,7 @@ Two implementation notes, both learned by getting them wrong first:
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -86,8 +87,7 @@ def test_restoring_the_cron_fails() -> None:
     )
     assert mutated != _workflow(), "mutation did not apply"
     found = _violations(mutated)
-    assert "an active cron: directive is present" in found
-    assert "an active schedule: trigger is present" in found
+    assert "the on: block is not exactly" in found
 
 
 def test_commenting_the_cron_out_is_not_containment() -> None:
@@ -103,14 +103,14 @@ def test_commenting_the_cron_out_is_not_containment() -> None:
     )
     assert containment_violations(mutated) == []
     live = mutated.replace('  #   - cron: "17 2 * * 1"', '    - cron: "17 2 * * 1"')
-    assert "an active cron: directive is present" in _violations(live)
+    assert "the on: block is not exactly" in _violations(live)
 
 
 def test_removing_one_jobs_gate_fails() -> None:
     mutated = _workflow().replace(RUNNER_A_GATE, "", 1)
     assert mutated != _workflow(), "mutation did not apply"
     found = _violations(mutated)
-    assert "expected 4 gate steps, found 3" in found
+    assert "expected 4 active gate steps, found 3" in found
     assert "runner_a has no containment gate" in found
 
 
@@ -125,14 +125,14 @@ def test_moving_a_gate_after_the_network_step_fails() -> None:
     found = _violations(mutated)
     # The gate count is still 4 — this is purely an ordering defect, which is
     # exactly the failure a count-only check would miss.
-    assert "expected 4 gate steps" not in found
+    assert "active gate steps" not in found
     assert "runner_a reaches 'tools/m3e_fetch_window.sh' before the gate" in found
 
 
 def test_removing_workflow_dispatch_is_also_reported() -> None:
     """Containment suspends the schedule; it does not delete the mechanism."""
     mutated = _workflow().replace("on:\n  workflow_dispatch:", "on:\n  push:\n    branches: [x]")
-    assert "workflow_dispatch: was removed" in _violations(mutated)
+    assert "the on: block is not exactly" in _violations(mutated)
 
 
 # --- visibility surface ----------------------------------------------------
@@ -223,3 +223,25 @@ def test_a_classifier_only_tree_is_not_private(tmp_path: Path) -> None:
 def test_the_classifier_remains_the_packaging_kill_switch() -> None:
     """Separation in both directions: packaging prohibition survives the fix."""
     assert "Private :: Do Not Upload" in (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+
+# --- enforcement scripts are pinned ----------------------------------------
+
+
+def test_the_enforcement_scripts_are_hash_pinned() -> None:
+    """The scripts that enforce containment must not be silently editable.
+
+    The governed inventory walks only ``governance/`` and ``release/``, so nothing
+    under ``tools/`` carries a hash — an auditor showed that inserting a
+    context-keyed escape hatch into the gate script passes the gate's own test
+    suite and trips no governance check. The scripts are therefore pinned inside
+    the containment record, which is itself in ``governed_artifacts``: editing a
+    script fails this test, and updating the pin changes the record's hash and
+    fails ``fable5 verify`` until the inventory is rebuilt.
+    """
+    record = json.loads((REPO_ROOT / "governance/v2f/containment.json").read_text())
+    pinned = record["enforcement_scripts_sha256"]
+    assert set(pinned) == {"tools/v2f_containment_gate.py", "tools/m3e_fetch_window.sh"}
+    for relpath, expected in pinned.items():
+        live = hashlib.sha256((REPO_ROOT / relpath).read_bytes()).hexdigest()
+        assert live == expected, f"{relpath} drifted from its pin in the containment record"

@@ -12,6 +12,17 @@
 # m3d-format receipt. Failures are hard stops; nothing is retried into ambiguity.
 set -euo pipefail
 
+# V2F-R containment, enforced at the egress boundary rather than by workflow step
+# order. A gate that lives only in m3e-prospective-update.yml is bypassed by any
+# new workflow that calls this script directly — the YAML scanner reads one file,
+# but the network call lives here. Refusing here means containment holds however
+# this script is reached.
+#
+# Resolved from this script's own location, so it cannot be pointed at a scratch
+# tree carrying a forged lift by passing a different working directory.
+_V2F_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+python3 "$_V2F_REPO_ROOT/tools/v2f_containment_gate.py" --repo-root "$_V2F_REPO_ROOT"
+
 PLAN_DIR="$1"
 STAGING="$2"
 LABEL="$3"

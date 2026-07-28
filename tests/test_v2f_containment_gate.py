@@ -94,13 +94,13 @@ def test_a_deleted_record_still_refuses(tmp_path: Path) -> None:
 
 def test_an_unattributed_lift_refuses(tmp_path: Path) -> None:
     _write(tmp_path, {"kind": "v2f_containment", "active": False})
-    with pytest.raises(ContainmentRefusal, match="without lifted_by, lifted_on"):
+    with pytest.raises(ContainmentRefusal, match="without a non-empty string lifted_by, lifted_on"):
         check(tmp_path)
 
 
 def test_a_partially_attributed_lift_refuses(tmp_path: Path) -> None:
     _write(tmp_path, {"kind": "v2f_containment", "active": False, "lifted_by": "someone"})
-    with pytest.raises(ContainmentRefusal, match="without lifted_on"):
+    with pytest.raises(ContainmentRefusal, match="without a non-empty string lifted_on"):
         check(tmp_path)
 
 

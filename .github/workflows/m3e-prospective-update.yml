@@ -1,9 +1,18 @@
-# Milestone 3E / V2D — DATA-ONLY prospective-update automation (ACTIVE under the
-# committed V2D activation anchor).
+# Milestone 3E / V2D — DATA-ONLY prospective-update automation.
+#
+# ***** SUSPENDED under V2F-R containment (governance/v2f/containment.json). *****
+# The weekly schedule is REMOVED and the containment gate below refuses every
+# dispatch while the record is active, so none of the behaviour described in this
+# header currently occurs. The V2D activation anchor has NOT been revoked — it is
+# still authorized and still passes — which is exactly why containment is enforced
+# separately, both here and inside tools/m3e_fetch_window.sh at the egress boundary.
+# The description below documents the mechanism as designed, for the day
+# containment is lawfully lifted; it is not a statement of current behaviour.
 #
 # Authorized by governance/v2d/prospective_activation.json (checked FAIL-CLOSED by
-# the gate job before any network step). On the weekly schedule or a manual
-# dispatch this workflow: verifies the activation gate and the accepted base;
+# the gate job before any network step). On a manual dispatch — and, before
+# containment, on the weekly schedule — this workflow: verifies the activation gate
+# and the accepted base;
 # computes the due completed-day window offline; fetches the pinned public
 # Coinbase candles on TWO ISOLATED runner jobs over a hardened curl (endpoint read
 # from the offline-emitted plan — no host literal lives in this file); verifies
