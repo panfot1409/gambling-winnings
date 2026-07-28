@@ -46,6 +46,11 @@ _PAPER_RELEASE_FREEZE = "governance/v2/paper_release_freeze.json"
 _PAPER_ACTIVATION_APPROVAL = "governance/v2/paper_activation_approval.json"
 _PAPER_TRADING_RECORD = "governance/v2/paper_trading_record.json"
 
+# A committed observation of real GitHub repository visibility, produced from the REST
+# API rather than inferred from packaging metadata. See ``_repository_private``.
+_REPOSITORY_VISIBILITY = "governance/v2f/repository_visibility.json"
+_EXPECTED_REPOSITORY = "panfot1409/gambling-winnings"
+
 #: The gates whose conjunction IS paper-activation authorization, in fixed order.
 PAPER_ACTIVATION_GATES: tuple[str, ...] = (
     "platform_audit_complete",
@@ -147,10 +152,46 @@ def _sealed_untouched(root: Path) -> bool:
 
 
 def _repository_private(root: Path) -> bool:
-    pyproject = root / "pyproject.toml"
-    if not pyproject.is_file():
+    """True only if a typed, attributed observation records this repository as private.
+
+    This gate previously returned ``"Private :: Do Not Upload" in pyproject.toml``. That
+    string is a **PyPI trove classifier**: it controls whether the Python Package Index
+    rejects an upload, and carries no information at all about GitHub repository
+    visibility. It was measured returning ``True`` while the repository was verifiably
+    public — recorded as STOP-1 in ``docs/V2F_HARD_STOP.md`` and as a confirmed Class-B
+    safety defect in ``docs/V2E_BUG_LOG.md``.
+
+    The replacement reads a visibility *observation* rather than a proxy for one. It is
+    still not a live check — this module derives from committed bytes and must stay
+    deterministic and offline — so the honest framing is: some named party observed the
+    GitHub API at a stated time and committed what it said. Every one of those parts is
+    required, because an unattributed or self-contradictory record is indistinguishable
+    from a wish.
+
+    Fail-closed in every direction: a missing record, a wrong ``kind``, a record for a
+    different repository, a non-boolean ``observed_private``, a ``visibility`` string
+    that disagrees with the boolean, or missing attribution all derive **false**.
+    """
+    record = _read_json(root, _REPOSITORY_VISIBILITY)
+    if record is None:
         return False
-    return "Private :: Do Not Upload" in pyproject.read_text(encoding="utf-8")
+    if record.get("kind") != "v2f_repository_visibility":
+        return False
+    if record.get("repository") != _EXPECTED_REPOSITORY:
+        return False
+
+    observed_private = record.get("observed_private")
+    if not isinstance(observed_private, bool) or not observed_private:
+        return False
+    # A half-updated record — boolean flipped, string left behind — is a lie in one of
+    # its two halves. Require them to agree rather than picking a winner.
+    if record.get("observed_visibility") != "private":
+        return False
+
+    return all(
+        isinstance(record.get(field), str) and record.get(field)
+        for field in ("observed_at", "observed_via", "observed_by")
+    )
 
 
 def derive_paper_readiness(repo_root: str | Path) -> PaperReadinessState:

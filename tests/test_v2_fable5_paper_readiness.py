@@ -64,10 +64,41 @@ def test_real_tree_eligibility_reads_committed_null_results() -> None:
     assert derive_paper_readiness(REPO_ROOT).eligible_paper_candidate_present is False
 
 
-def test_real_tree_sealed_and_private_gates_hold() -> None:
+def test_real_tree_sealed_gate_holds_and_visibility_gate_blocks() -> None:
+    """The sealed gate holds; the visibility gate correctly does not.
+
+    This test previously asserted ``repository_private is True``. It passed for the
+    wrong reason: the gate read the PyPI classifier ``Private :: Do Not Upload`` from
+    ``pyproject.toml``, which says nothing about GitHub visibility. The repository was
+    verifiably public the whole time (STOP-1 in ``docs/V2F_HARD_STOP.md``).
+
+    The gate now reads a committed API observation, and that observation records
+    ``observed_private: false``. So the honest derivation is **False**, and this test
+    asserts the truth rather than the comfortable answer. When the repository is
+    actually returned to private and the observation is re-taken, this flips — by the
+    repository changing, not by the test being relaxed.
+    """
     state = derive_paper_readiness(REPO_ROOT)
     assert state.gates["sealed_partitions_untouched"] is True
-    assert state.gates["repository_private"] is True
+    assert state.gates["repository_private"] is False
+    assert "repository_private" in state.blocking_gates
+
+    observation = json.loads((REPO_ROOT / "governance/v2f/repository_visibility.json").read_text())
+    assert observation["observed_private"] is False
+    assert observation["observed_visibility"] == "public"
+
+
+def test_the_visibility_gate_no_longer_reads_the_pypi_classifier(tmp_path: Path) -> None:
+    """A tree with the classifier and no observation must NOT satisfy the gate.
+
+    This is the STOP-1 regression, stated as an executable claim: if this fails, the
+    classifier is load-bearing again and a public repository can pass a gate whose
+    entire purpose is to keep paper trading off one.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nclassifiers = ["Private :: Do Not Upload"]\n', encoding="utf-8"
+    )
+    assert derive_paper_readiness(tmp_path).gates["repository_private"] is False
 
 
 def test_gate_vector_covers_exactly_the_declared_gates() -> None:
@@ -106,9 +137,27 @@ def _touch_empty_ledgers(root: Path) -> None:
         p.write_bytes(b"")
 
 
-def _private_pyproject(root: Path) -> None:
-    (root / "pyproject.toml").write_text(
-        '[project]\nclassifiers = ["Private :: Do Not Upload"]\n', encoding="utf-8"
+def _private_visibility_record(root: Path) -> None:
+    """Provision the evidence the ``repository_private`` gate actually reads.
+
+    This helper used to write a ``pyproject.toml`` containing the PyPI classifier
+    ``Private :: Do Not Upload``, because that was what the gate consumed. That was the
+    defect (STOP-1): the classifier governs PyPI uploads and says nothing about GitHub
+    visibility, so the gate reported private for a public repository.
+    """
+    _write(
+        root,
+        "governance/v2f/repository_visibility.json",
+        {
+            "kind": "v2f_repository_visibility",
+            "schema_version": 1,
+            "repository": "panfot1409/gambling-winnings",
+            "observed_private": True,
+            "observed_visibility": "private",
+            "observed_at": "2026-08-01T00:00:00Z",
+            "observed_by": "synthetic fixture",
+            "observed_via": "synthetic fixture",
+        },
     )
 
 
@@ -131,7 +180,7 @@ def test_empty_tree_blocks_everything(tmp_path: Path) -> None:
 def test_remediation_freeze_advances_only_platform_gates(tmp_path: Path) -> None:
     _null_result_decisions(tmp_path)
     _touch_empty_ledgers(tmp_path)
-    _private_pyproject(tmp_path)
+    _private_visibility_record(tmp_path)
     _write(
         tmp_path,
         "governance/v2/fable5_remediation_state.json",
@@ -220,7 +269,7 @@ def test_fully_provisioned_synthetic_tree_can_authorize(tmp_path: Path) -> None:
         },
     )
     _touch_empty_ledgers(tmp_path)
-    _private_pyproject(tmp_path)
+    _private_visibility_record(tmp_path)
     _write(
         tmp_path,
         "governance/v2/fable5_remediation_state.json",

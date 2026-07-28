@@ -38,9 +38,14 @@ class TestDerivation:
         assert "human_approval_artifact" in blocking
         assert "kill_switch_qualified" in blocking
         assert "monitoring_qualified" in blocking
-        # The two invariants that DO hold today:
+        # The one invariant that DOES hold today:
         assert requirements.sealed_ledgers_intact is True
-        assert requirements.repository_private is True
+        # repository_private was asserted True here until V2F-R. It derived True from a
+        # PyPI classifier while the repository was verifiably public (STOP-1). It now
+        # derives from a committed GitHub API observation, which records "public", so
+        # the honest value is False and it is itself a blocker.
+        assert requirements.repository_private is False
+        assert "repository_private" in blocking
 
     def test_derivation_can_never_yield_active(self) -> None:
         state, _ = derive_resting_state(_ALL_TRUE)

@@ -120,6 +120,7 @@
     "governance/v2c/qualifications/v2c_offline_operational_qualification_run_001/oq_result.json": "739cec5dca07b984d6fb624384e490dcab7722c5341053790d5ba8cd1945b897",
     "governance/v2d/prospective_activation.json": "6f6d7410a05bd21515fb398e73b99aca7ef6dc1574f8b2aa88899827b809d746",
     "governance/v2f/containment.json": "5e22caca1845464d0289d4d53e6359114f8033d0046923ebb9fee0558c20d743",
+    "governance/v2f/repository_visibility.json": "7c4d6f3d5c56e3501f9d5991c05f125379c37ae5b07fc8cb91ab8d65cee750b7",
     "release/private/v1.1.0/README.md": "44635eaaf44ad252c788e1e463d1c4a5e5b59d592f8931e9ce370b951a3071ab",
     "release/private/v1.1.0/private_distribution_policy.json": "22f42d7854eec8a8f59fc37b2e1fd85e027d337d0b03ce006797c227f2e1a081",
     "release/private/v1.1.0/private_install_contract.json": "b8db651e26ad517381e5e15d2e9c27a05ecf44a0cd6d808ddf6e9d9021b36d51",
@@ -572,8 +573,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "a92cffe0085042d01e7ffae4cb207d84f5e0488205696ef0934c4c9a5c316d7d",
-  "tracked_file_count": 1086,
+  "surface_digest": "7d3ebaa1448324ef4f8bd94a4ab1980182127f43126d3296f7edfe25c5254e77",
+  "tracked_file_count": 1088,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,

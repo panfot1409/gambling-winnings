@@ -5,7 +5,8 @@
     "strategy_specification_immutable",
     "paper_release_candidate_frozen",
     "paper_duration_and_success_criteria_preregistered",
-    "human_activation_approval_recorded"
+    "human_activation_approval_recorded",
+    "repository_private"
   ],
   "eligible_paper_candidate_present": false,
   "gates": {
@@ -17,7 +18,7 @@
     "paper_release_candidate_frozen": false,
     "platform_audit_complete": true,
     "platform_hardened": true,
-    "repository_private": true,
+    "repository_private": false,
     "sealed_partitions_untouched": true,
     "strategy_specification_immutable": false
   },
