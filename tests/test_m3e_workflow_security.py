@@ -1,13 +1,17 @@
 """Workflow-security invariants for the M3E update automation.
 
-Under the committed V2D activation anchor the standing update workflow is ACTIVE:
-it gates fail-closed on the anchor, fetches the due window on two isolated
-runners over one hardened curl (endpoint from the offline-emitted plan — no host
-literal in YAML), pushes exactly one new bot branch (job-scoped contents: write),
-and opens exactly one DRAFT PR (job-scoped pull-requests: write). It never
-merges, undrafts, retargets, force-pushes, or references a repository secret,
-and every other workflow keeps the full read-only posture — all pinned below and
-by the shared fail-closed scanners.
+**The update workflow is SUSPENDED under V2F-R containment.** Its `schedule:` trigger
+is removed (not commented out), and `tools/v2f_containment_gate.py` refuses ahead of
+every network, push and PR step, so `workflow_dispatch` cannot fetch either. Both
+controls are pinned by :func:`containment_violations` below.
+
+What the definition still *describes*, and what therefore stays pinned so that lifting
+containment cannot quietly widen it: gate fail-closed on the V2D anchor, fetch the due
+window on two isolated runners over one hardened curl (endpoint from the offline-emitted
+plan — no host literal in YAML), push exactly one new bot branch (job-scoped
+contents: write), open exactly one DRAFT PR (job-scoped pull-requests: write). It never
+merges, undrafts, retargets, force-pushes, or references a repository secret, and every
+other workflow keeps the full read-only posture.
 """
 
 from __future__ import annotations
@@ -31,28 +35,272 @@ def _all_workflows() -> list[Path]:
     return sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
 
 
+def _uncommented(text: str) -> str:
+    """Drop whole-line YAML comments, leaving only directives.
+
+    Deliberately does not strip trailing comments: those sit on lines that already
+    carry a directive, so removing them cannot turn an active trigger into an absent
+    one, and naive trailing-comment stripping would corrupt any value containing '#'.
+    """
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+def _step_blocks(job_body: str) -> list[str]:
+    """Split a job body into its individual steps, at whatever indent they use.
+
+    This used to anchor on exactly six spaces (``^      - ``). An auditor indented a
+    job's steps by eight — valid YAML, honoured by GitHub — and the job parsed as
+    **zero** steps, so step-integrity and ordering never ran while the block still
+    contained the gate text. The indent is therefore taken from the first list item
+    found rather than assumed.
+    """
+    first = re.search(r"^(\s+)- ", job_body, re.MULTILINE)
+    if first is None:
+        return []
+    marker = rf"^{first.group(1)}- "
+    starts = [m.start() for m in re.finditer(marker, job_body, re.MULTILINE)]
+    return [
+        job_body[s : (starts[i + 1] if i + 1 < len(starts) else len(job_body))]
+        for i, s in enumerate(starts)
+    ]
+
+
+def _job_blocks(text: str) -> dict[str, str]:
+    """Split a workflow into ``{job_name: body}``, each body ending at the next job.
+
+    Ordering assertions are worthless if a job's "body" runs to end-of-file,
+    because a later job's step then satisfies an earlier job's requirement.
+
+    Scoped to the region after the top-level ``jobs:`` key. Two-space-indented keys
+    also occur under ``on:`` and ``permissions:``, so an unscoped scan reported
+    ``workflow_dispatch`` as a job with no steps.
+
+    The header pattern tolerates trailing whitespace and a trailing comment. It
+    previously required the line to END at the colon, so ``runner_c:`` followed by a
+    single space — or by ``# third runner`` — parsed as no job at all, and every
+    job-level rule silently skipped it while GitHub ran it.
+    """
+    start = re.search(r"^jobs:[ \t]*(?:#.*)?$", text, re.MULTILINE)
+    if start is None:
+        return {}
+    text = text[start.end() :]
+    headers = list(re.finditer(r"^  ([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(?:#.*)?$", text, re.MULTILINE))
+    blocks: dict[str, str] = {}
+    for i, match in enumerate(headers):
+        end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+        blocks[match.group(1)] = text[match.end() : end]
+    return blocks
+
+
+#: Jobs that reach the network or publish, and the step each one must not reach
+#: before the containment gate has run.
+GATE_STEP = "run: python3 tools/v2f_containment_gate.py --repo-root ."
+
+#: The complete trigger block, pinned exactly. Containment suspends the schedule;
+#: it does not remove the mechanism, so workflow_dispatch stays and is the only
+#: trigger permitted while containment is active.
+TRIGGER_BLOCK = "on:\n  workflow_dispatch:\n"
+
+GUARDED_JOBS = (
+    ("gate_and_plan", "eth_research.v2d verify"),
+    ("runner_a", "tools/m3e_fetch_window.sh"),
+    ("runner_b", "tools/m3e_fetch_window.sh"),
+    ("assemble_and_publish", "git push origin"),
+    ("open_draft_pr", "gh pr create"),
+)
+
+#: The marker every job that obtains the repository carries.
+CHECKOUT = "uses: actions/checkout@"
+
+#: Job-level keys that redirect or precede the gate without being steps. An auditor
+#: pointed `defaults.run.working-directory` at a forged tree carrying an `active:false`
+#: record, leaving the gate's pinned command byte-identical while it opened; and hid a
+#: decoy copy of the gate text in a job-level `env:` value, which sits before the first
+#: step marker and so defeated the first-occurrence ordering test.
+FORBIDDEN_JOB_KEYS = ("defaults:", "env:", "uses:", "container:", "with:")
+
+
+def _trigger_region(directives: str) -> str | None:
+    """Return the entire top-level ``on:`` block, or ``None`` if there is not one.
+
+    Everything from the ``on:`` line up to the next line starting in column zero is
+    the trigger set. Returning the whole region — rather than asking whether some
+    known-good substring appears somewhere inside it — is what makes an appended
+    ``schedule:`` visible.
+    """
+    lines = directives.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if not line.startswith("on:"):
+            continue
+        region = [line]
+        for following in lines[index + 1 :]:
+            if following.strip() and not following[:1].isspace():
+                break
+            region.append(following)
+        return "".join(region).rstrip("\n") + "\n"
+    return None
+
+
+def containment_violations(text: str) -> list[str]:
+    """Return every containment violation in ``text``, or an empty list.
+
+    Exposed as a pure function over workflow text so the mutation suite can feed it
+    damaged workflows directly. Driving the real test file as a subprocess would not
+    work: it resolves its repository root from the *installed* package, so a mutated
+    copy in a scratch directory is never the file under test.
+    """
+    violations: list[str] = []
+    directives = _uncommented(text)
+
+    # Trigger check over the WHOLE `on:` region, not by substring containment.
+    #
+    # History, because it is the point. Version 1 asked "is the substring 'cron:'
+    # present?"; an auditor broke it eight ways with quoted keys, a space before the
+    # colon, and flow style. Version 2 replaced that with `TRIGGER_BLOCK not in
+    # directives` and a comment claiming it "pinned the whole trigger block". It did
+    # not: `x in y` is substring containment, so putting the cron AFTER
+    # workflow_dispatch left the pinned substring perfectly intact and restored a
+    # live weekly trigger with NO violation reported. Two different auditors, two
+    # bypasses, same root cause — checking for the presence of good text says nothing
+    # about the absence of bad text.
+    #
+    # The region is now extracted and compared in full. Anything between `on:` and the
+    # next top-level key is part of the trigger set, wherever it sits in that block.
+    region = _trigger_region(directives)
+    if region is None:
+        violations.append("schedule_suspended: no top-level 'on:' block found")
+    elif region != TRIGGER_BLOCK:
+        violations.append(
+            f"schedule_suspended: the on: region is {region!r}, not exactly "
+            f"{TRIGGER_BLOCK!r} — any other trigger set is refused"
+        )
+
+    # Gate-step integrity. Presence and ordering are not enough: a step can be
+    # present and inert. `continue-on-error: true` leaves the refusal in the log
+    # while the job proceeds; `if: false` never runs it; `|| true` swallows the
+    # exit code; a second `--repo-root` wins under argparse; and a commented-out
+    # step still matched a raw-text count. Each gate step must therefore be the
+    # exact two lines, and the count is taken over directives so comments cannot
+    # inflate it.
+    #
+    # A floor, not an exact count: adding a *gated* job is allowed and must not read as
+    # a violation, while dropping or inerting one still does.
+    count = directives.count(GATE_STEP)
+    if count < len(GUARDED_JOBS):
+        violations.append(
+            f"containment_gate_first: expected at least {len(GUARDED_JOBS)} active gate "
+            f"steps, found {count}"
+        )
+
+    blocks = _job_blocks(directives)
+
+    # Step integrity applies to every gate in every job, including jobs added later.
+    # Scoping it to GUARDED_JOBS would mean a new job could carry a gate wearing
+    # `continue-on-error: true` and satisfy the checkout rule while refusing nothing.
+    for name, block in sorted(blocks.items()):
+        for step in (s for s in _step_blocks(block) if GATE_STEP in s):
+            step_lines = [ln.strip() for ln in step.splitlines() if ln.strip()]
+            extras = [ln for ln in step_lines if not ln.startswith(("- name:", "run:"))]
+            if extras:
+                violations.append(
+                    f"containment_gate_first: {name} gate step carries {extras!r}; "
+                    f"a gate with a condition or an error tolerance is not a gate"
+                )
+            run_lines = [ln for ln in step_lines if ln.startswith("run:")]
+            if run_lines != [GATE_STEP]:
+                violations.append(
+                    f"containment_gate_first: {name} gate run line is {run_lines!r}, "
+                    f"not exactly [{GATE_STEP!r}]"
+                )
+
+    # Every job in this file must check out and then gate, as its first two steps.
+    #
+    # The previous rule was "every job that CHECKS OUT must gate", keyed on the
+    # checkout substring. An auditor wrote a job with no checkout at all that simply
+    # curled the endpoint, and another that delegated the work to a reusable workflow
+    # via a job-level `uses:` — neither had to gate, because neither checked out.
+    # Keying on checkout made it optional; requiring it makes it a precondition.
+    #
+    # Requiring the gate to be step 2 (immediately after checkout) also closes the
+    # whole class of attacks that run something BEFORE the gate: an auditor prepended
+    # a step that put a fake `python3` on $GITHUB_PATH, and another that staged a
+    # forged containment record for `defaults.run.working-directory` to point at. A
+    # text scanner cannot see either of those; leaving no room for a preceding step is
+    # what it can do.
+    for name, block in sorted(blocks.items()):
+        for key in FORBIDDEN_JOB_KEYS:
+            if re.search(rf"^    {re.escape(key)}", block, re.MULTILINE):
+                violations.append(
+                    f"containment_gate_first: job {name} declares job-level {key!r}; "
+                    f"while suspended this workflow may not redirect, delegate or "
+                    f"pre-seed anything around the gate"
+                )
+        steps = _step_blocks(block)
+        if not steps:
+            violations.append(
+                f"containment_gate_first: job {name} has no parsable steps; a job that "
+                f"does its work without steps cannot be gated"
+            )
+            continue
+        if CHECKOUT not in steps[0]:
+            violations.append(
+                f"containment_gate_first: job {name} step 1 is not {CHECKOUT!r}; every job "
+                f"must obtain the repository first so the gate it runs is the real one"
+            )
+        if len(steps) < 2 or GATE_STEP not in steps[1]:
+            violations.append(
+                f"containment_gate_first: job {name} step 2 is not the containment gate; "
+                f"nothing may run between checkout and the gate"
+            )
+
+    for job, guarded_step in GUARDED_JOBS:
+        body = blocks.get(job)
+        if body is None:
+            violations.append(f"containment_gate_first: job {job} is missing")
+            continue
+        if not any(GATE_STEP in s for s in _step_blocks(body)):
+            violations.append(f"containment_gate_first: {job} has no containment gate")
+            continue
+        if guarded_step not in body:
+            violations.append(f"containment_gate_first: {job} no longer contains {guarded_step!r}")
+            continue
+        if body.index(GATE_STEP) > body.index(guarded_step):
+            violations.append(
+                f"containment_gate_first: {job} reaches {guarded_step!r} before the gate"
+            )
+    return violations
+
+
 def test_both_m3e_workflows_exist() -> None:
     assert PROBE.is_file()
     assert PR_CHECK.is_file()
 
 
-def test_the_update_workflow_defaults_read_only_and_keeps_its_schedule() -> None:
+def test_the_update_workflow_defaults_read_only_and_is_schedule_suspended() -> None:
+    """Containment holds on the committed workflow.
+
+    This assertion used to pin `cron: "17 2 * * 1"` IN PLACE. It now pins its
+    absence via containment_violations(), so restoring the weekly trigger — or
+    moving/removing any job's gate — cannot pass CI silently.
+    """
     text = PROBE.read_text()
     assert "permissions:\n  contents: read" in text  # top-level default stays read
-    assert 'cron: "17 2 * * 1"' in text  # Mondays 02:17 UTC
-    assert "workflow_dispatch:" in text
+    assert containment_violations(text) == []
     assert "github.repository == 'panfot1409/gambling-winnings'" in text
     assert "concurrency:" in text  # overlapping runs stay serialized
 
 
-def test_the_active_update_workflow_has_exactly_the_authorized_shape() -> None:
-    # V2D supersedes the read-only probe: under the committed activation anchor
-    # the standing workflow now fetches on two isolated runners (endpoint from
-    # the offline-emitted plan — still no host literal in YAML), moves runner
-    # bundles as private artifacts, pushes ONE new bot branch (job-scoped
-    # contents: write), and opens ONE draft PR (job-scoped pull-requests:
-    # write). It still never merges/undrafts/retargets, never force-pushes,
-    # never references a repository secret, and gates on the anchor first.
+def test_the_suspended_update_workflow_has_exactly_the_authorized_shape() -> None:
+    # The workflow is suspended, so these assertions pin the shape it would have
+    # if containment were lifted — deliberately, because a suspension that also
+    # stopped checking the definition would let the shape widen while nobody was
+    # looking, and the lift would then restore something larger than what was
+    # authorized. Described capability: fetch on two isolated runners (endpoint
+    # from the offline-emitted plan — no host literal in YAML), move runner
+    # bundles as private artifacts, push ONE new bot branch (job-scoped
+    # contents: write), open ONE draft PR (job-scoped pull-requests: write).
+    # Never merges/undrafts/retargets, never force-pushes, never references a
+    # repository secret, and gates on containment then the V2D anchor first.
     text = PROBE.read_text()
     assert "eth_research.v2d verify" in text  # fail-closed gate before any fetch
     assert "tools/m3e_fetch_window.sh" in text  # the single hardened curl driver

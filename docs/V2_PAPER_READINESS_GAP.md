@@ -47,6 +47,16 @@ derives **false** and can only change if a genuine, separately-governed nominati
 | `sealed_partitions_untouched` | **true** | — (all three sealed ledgers byte-empty) |
 | `repository_private` | **true** | — (`Private :: Do Not Upload`; no license) |
 
+> **Erratum, 2026-07-28 (V2F-R).** The `repository_private` row above is wrong, and it is the row
+> that mattered: authorization is the conjunction of every gate, and this was the gate keeping paper
+> trading off a public repository. It derived `true` from the PyPI classifier `Private :: Do Not
+> Upload`, which says nothing about GitHub visibility — while the GitHub API reported
+> `private: false`. The gate now reads a committed API observation
+> (`governance/v2f/repository_visibility.json`) and fails closed on a missing, unattributed,
+> self-contradictory, symlinked or duplicate-keyed record. The count "eight of eleven gates are
+> unmet" below was therefore also understated at the time of writing. See
+> `docs/V2_PUBLIC_EXPOSURE_INCIDENT.md`.
+
 Derived outputs: `paper_activation_authorized = false`, `paper_trading_active = false`,
 `sell_ready = false`. Eight of eleven gates are unmet, and **the first unmet gate is the scientific
 one** — everything downstream of it (`candidate_lineage_valid`, `strategy_specification_immutable`,

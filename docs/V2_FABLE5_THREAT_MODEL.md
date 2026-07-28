@@ -16,6 +16,14 @@ but to *scientific and governance integrity*.
 - V2A/V2B were run once each and produced **governed NULL results** (zero nominated candidates).
   V2C qualified the *platform*, not a strategy. There is therefore **no edge and no candidate**.
 - The repository is **private** (`Private :: Do Not Upload`; no license). Distribution is private-only.
+  > **Erratum, 2026-07-28 (V2F-R).** This inference was wrong, and it was load-bearing: it is a
+  > threat-model *assumption* that later analysis rested on. `Private :: Do Not Upload` is a PyPI
+  > trove classifier governing whether the Python Package Index rejects an upload; it carries no
+  > information about GitHub repository visibility. The repository was in fact **public** when this
+  > line was written, and third-party market data was being published from it. Repository visibility
+  > is now derived only from a committed GitHub API observation
+  > (`governance/v2f/repository_visibility.json`). The classifier remains the packaging kill-switch
+  > and nothing more. See `docs/V2_PUBLIC_EXPOSURE_INCIDENT.md`.
 
 ## Assets to protect
 

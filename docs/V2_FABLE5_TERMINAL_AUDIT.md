@@ -172,6 +172,10 @@ Result taxonomy: **A** scientific · **B** governance/security · **C** defense-
 142. The distribution contains no tests, tools, docs, or git metadata. ✔
 143. The distribution contains no in-package README (clean-distribution invariant preserved). ✔
 144. `pyproject.toml` carries the `Private :: Do Not Upload` classifier (private). ✔
+     > **Erratum, 2026-07-28 (V2F-R).** The classifier claim is correct; the parenthetical
+     > "(private)" is not, and is withdrawn. A PyPI trove classifier governs index uploads, not
+     > GitHub repository visibility — the repository was public at the time. See
+     > `docs/V2_PUBLIC_EXPOSURE_INCIDENT.md`.
 145. There is no `LICENSE` file and no license field/classifier (human gate preserved). ✔
 146. The AST client-import scanner covers the shipped fixed client (documented scope). ✔
 147. No uncontrolled-exposure capability (network egress / broker / order routing) exists. ✔

@@ -23,6 +23,11 @@ post-qualification red team, the terminal documentation, and CI.
 4. `V2C_DEV_VERSION = "2.0.0.dev2"` in the SBOM module matches. PASS
 5. No version-drift test fails (`tests/test_version.py`, `tests/test_v2c_commercial.py`). PASS
 6. The repository is private (`pyproject.toml` classifier `Private :: Do Not Upload`). PASS
+   > **Erratum, 2026-07-28 (V2F-R).** This item conflated two different things and its PASS is
+   > withdrawn. The classifier was present, but it is a PyPI upload guard and is not evidence of
+   > GitHub repository visibility; the repository was public. What the item *did* verify —
+   > the classifier is in `pyproject.toml` — remains true. See
+   > `docs/V2_PUBLIC_EXPOSURE_INCIDENT.md`.
 7. No public index publication artifact was created for this dev version. PASS
 8. The working tree is clean at each committed checkpoint. PASS
 9. The branch base (`merge-base` with `origin/main`) is `6e0d60e` (M2). PASS

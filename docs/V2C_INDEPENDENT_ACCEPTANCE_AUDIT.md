@@ -18,7 +18,13 @@ required.
 | PR | #18 — **open, draft, unmerged**, base `main`, head this branch. `mergeable_state` is `clean` once the branch-head CI completes (it reads `unstable` only transiently while checks are still in flight) |
 | Version | `2.0.0.dev2` | 
 | Runtime | CPython 3.12.3 (authoritative); 3.13.12 (compatibility) |
-| Repository | private (`Private :: Do Not Upload`) |
+| Repository | private (`Private :: Do Not Upload`) — **see erratum below** |
+
+> **Erratum, 2026-07-28 (V2F-R).** The `Repository` row is withdrawn. `Private :: Do Not Upload`
+> is a PyPI trove classifier controlling index uploads; it is not evidence of GitHub repository
+> visibility, and the repository was public. Visibility is now derived only from a committed
+> GitHub API observation (`governance/v2f/repository_visibility.json`). See
+> `docs/V2_PUBLIC_EXPOSURE_INCIDENT.md`.
 
 The audit committed only additive artifacts (`docs/V2C_INDEPENDENT_ACCEPTANCE_PLAN.md`, this file,
 `tests/test_v2c_oq_acceptance_matrix.py`). HEAD advanced `ed0ee06 → 5e5e26b → e2db958 → (this

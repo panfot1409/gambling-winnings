@@ -1,9 +1,18 @@
-# Milestone 3E / V2D — DATA-ONLY prospective-update automation (ACTIVE under the
-# committed V2D activation anchor).
+# Milestone 3E / V2D — DATA-ONLY prospective-update automation.
+#
+# ***** SUSPENDED under V2F-R containment (governance/v2f/containment.json). *****
+# The weekly schedule is REMOVED and the containment gate below refuses every
+# dispatch while the record is active, so none of the behaviour described in this
+# header currently occurs. The V2D activation anchor has NOT been revoked — it is
+# still authorized and still passes — which is exactly why containment is enforced
+# separately, both here and inside tools/m3e_fetch_window.sh at the egress boundary.
+# The description below documents the mechanism as designed, for the day
+# containment is lawfully lifted; it is not a statement of current behaviour.
 #
 # Authorized by governance/v2d/prospective_activation.json (checked FAIL-CLOSED by
-# the gate job before any network step). On the weekly schedule or a manual
-# dispatch this workflow: verifies the activation gate and the accepted base;
+# the gate job before any network step). On a manual dispatch — and, before
+# containment, on the weekly schedule — this workflow: verifies the activation gate
+# and the accepted base;
 # computes the due completed-day window offline; fetches the pinned public
 # Coinbase candles on TWO ISOLATED runner jobs over a hardened curl (endpoint read
 # from the offline-emitted plan — no host literal lives in this file); verifies
@@ -18,9 +27,14 @@
 
 name: M3E Prospective Update
 
+# SUSPENDED under V2F-R containment (governance/v2f/containment.json). The weekly
+# `schedule:` trigger is REMOVED, not commented out: a commented cron is one careless
+# uncomment away from resuming unattended egress, and GitHub honours `schedule:` only
+# from the default branch, so nothing short of removing it there actually stops a run.
+# `workflow_dispatch:` is kept so the mechanism stays reviewable and can be restored by
+# a normal commit, but the containment gate below refuses every dispatch while
+# containment is active. Restoring the schedule requires lifting containment first.
 on:
-  schedule:
-    - cron: "17 2 * * 1" # Mondays 02:17 UTC
   workflow_dispatch:
 
 permissions:
@@ -38,6 +52,8 @@ jobs:
       due: ${{ steps.plan.outputs.due }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: V2F-R containment gate (fail-closed, stdlib only, before anything else)
+        run: python3 tools/v2f_containment_gate.py --repo-root .
       - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
         run: |
           python3 -m venv "$RUNNER_TEMP/uvenv"
@@ -84,6 +100,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: V2F-R containment gate (fail-closed, before this job's fetch)
+        run: python3 tools/v2f_containment_gate.py --repo-root .
       - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
         run: |
           python3 -m venv "$RUNNER_TEMP/uvenv"
@@ -113,6 +131,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: V2F-R containment gate (fail-closed, before this job's fetch)
+        run: python3 tools/v2f_containment_gate.py --repo-root .
       - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
         run: |
           python3 -m venv "$RUNNER_TEMP/uvenv"
@@ -149,6 +169,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+      - name: V2F-R containment gate (fail-closed, before any branch push)
+        run: python3 tools/v2f_containment_gate.py --repo-root .
       - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
         run: |
           python3 -m venv "$RUNNER_TEMP/uvenv"
@@ -216,6 +238,8 @@ jobs:
       pull-requests: write # job-scoped: open exactly one DRAFT PR; no merge verbs exist here
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: V2F-R containment gate (fail-closed, before any PR is opened)
+        run: python3 tools/v2f_containment_gate.py --repo-root .
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: pr-body
