@@ -200,7 +200,69 @@ lifted containment would restore acquisition, but data acquired into the existin
 cohort inherits that cohort's separate evaluation prohibition. A lawful evaluation needs a new
 partition with its own preregistration and its own single-use evaluation ledger.
 
-## 9. Limits of this determination
+## 9. Addendum, same day — a second closure record, found after §1–8 were written
+
+While designing the candidate under §11 I found a governance record I had not consulted when
+writing the sections above: `research/v2/research_partition_closure.json`. It does not change
+the determination; it independently reaches it by a different route, and it forbids something
+the candidate's natural design was heading straight toward. Recording it as a dated addendum
+rather than editing the earlier sections, per this document's own rule.
+
+    "closure_status": "closed_to_new_candidate_nomination_research"
+    "closure_reason": "V2A nominated no ETH candidate (3 families) and V2B no cross-asset
+                       candidate (2 families) under cumulative multiplicity; the historical
+                       partitions are closed to further candidate-nomination research to
+                       prevent strategy mining."
+
+Its `forbidden_operations` list names, among others:
+
+    evaluate_new_candidate            run_new_experiment
+    evaluate_modified_candidate       open_new_research_budget
+    recombine_and_claim_new_trial     claim_freshness_via_new_version
+    read_sealed_to_choose_family      claim_freshness_via_new_benchmark
+
+Two things follow.
+
+**First, `evaluate_new_candidate` is forbidden outright.** That is the §12 operation, named. So
+the historical partitions are closed by two independent records — the M3D exhaustion decision
+(§2) and this closure — written at different times for different reasons. Neither depends on the
+other, and neither depends on my reading of the other.
+
+**Second, `recombine_and_claim_new_trial` is aimed precisely at the candidate I was about to
+build.** The natural construction of an adaptive expert mixer is a weighted combination of
+existing expert signals, and the obvious experts to hand are the three V2A families. All three
+are recorded in `research/v2/negative_evidence_index.jsonl` as `research_stage_rejected`:
+
+    v2a_meanrev_zscore_accumulation        research_stage_rejected
+    v2a_trend_regime_single_horizon        research_stage_rejected
+    v2a_vol_scaled_hold_drawdown_guard     research_stage_rejected
+
+So a mixer over those three is a recombination of rejected families, and calling its evaluation
+a fresh trial is the named prohibition. I want to be exact about the boundary rather than
+comfortable:
+
+- **Writing** the mixer is not forbidden. The closure governs evaluation, nomination and trial
+  accounting, not the existence of source code. §11 of the directive instructs building it, and
+  that instruction is unconditional.
+- **Evaluating** it on the historical partitions is forbidden twice over — as
+  `evaluate_new_candidate` and as `recombine_and_claim_new_trial`.
+- **Claiming** its evaluation would be a new trial is forbidden by name.
+
+There is also a scientific point independent of governance, and it is the more interesting one.
+An adaptive mixture of the Hedge/exponential-weights kind carries a *relative* guarantee: its
+regret against the best single expert in hindsight is bounded. It does not manufacture edge. If
+every expert in the pool has already been measured and rejected, the mixture's best realistic
+outcome is "approximately as good as the least bad rejected expert" — which is not a qualifying
+outcome under any honest preregistered criterion. A mixer over rejected experts has a poor prior
+by construction, and that belongs in a preregistration written before any result, not in a
+discussion section written after one.
+
+This does not change the terminal position: the one-shot is not spent, the candidate is built
+and left unevaluated. It adds a third independent reason why, and it means any future attempt to
+evaluate this candidate must clear the closure record as well as the containment record and the
+partition problem.
+
+## 10. Limits of this determination
 
 - It is a statement about **this repository at this commit**. It does not assert that no data
   exists anywhere that could lawfully support the study.

@@ -35,6 +35,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EXHAUSTION_PATH = REPO_ROOT / "research/m3d/research_train_exhaustion.json"
 JOINT_IDENTITY_PATH = REPO_ROOT / "research/v2b/joint_partition_identity.json"
 CONTAINMENT_PATH = REPO_ROOT / "governance/v2f/containment.json"
+CLOSURE_PATH = REPO_ROOT / "research/v2/research_partition_closure.json"
+NEGATIVE_EVIDENCE_PATH = REPO_ROOT / "research/v2/negative_evidence_index.jsonl"
 
 #: The three ledgers whose emptiness IS the seal. Named individually, never globbed: a glob
 #: that matches nothing passes vacuously, which is the failure mode this suite exists to catch.
@@ -249,6 +251,78 @@ def test_control_the_gate_opens_for_a_properly_attributed_human_lift(tmp_path: P
     code, out = _run_gate(_scratch_repo(tmp_path, record))
     assert code == 0, f"gate refused even a fully attributed lift — it may be stuck shut: {out!r}"
     assert "open" in out.lower()
+
+
+# --- addendum: the second, independent closure record --------------------------------------
+#
+# Found after the first eight sections of the determination were written. It reaches the same
+# conclusion by a different route, so the two records corroborate rather than merely repeat.
+
+
+def test_control_the_closure_record_exists_and_parses() -> None:
+    closure = _load(CLOSURE_PATH)
+    assert closure["closure_id"] == "legacy_research_partition_closure_v1"
+    assert closure["historical_experiments"] == ["v2a_run_001", "v2b_run_001"]
+
+
+def test_the_historical_partitions_are_closed_to_new_candidate_research() -> None:
+    assert _load(CLOSURE_PATH)["closure_status"] == "closed_to_new_candidate_nomination_research"
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "evaluate_new_candidate",
+        "evaluate_modified_candidate",
+        "run_new_experiment",
+        "open_new_research_budget",
+        "recombine_and_claim_new_trial",
+        "claim_freshness_via_new_version",
+        "claim_freshness_via_new_benchmark",
+        "read_sealed_to_choose_family",
+    ],
+)
+def test_the_closure_record_forbids_the_operation(operation: str) -> None:
+    assert operation in _load(CLOSURE_PATH)["forbidden_operations"]
+
+
+def test_two_independent_records_close_the_historical_partitions() -> None:
+    """Corroboration, not repetition: different files, different authors, different reasons.
+
+    If a future change softens one, this still fails on the other, which is the point of
+    asserting both rather than picking whichever is convenient.
+    """
+    assert "evaluate_new_candidate" in _load(CLOSURE_PATH)["forbidden_operations"]
+    assert _load(EXHAUSTION_PATH)["classification"] == "exhausted_for_new_candidate_research"
+
+
+def test_every_v2a_expert_family_is_recorded_rejected() -> None:
+    """The mixer's natural expert pool is three already-rejected families.
+
+    This is why ``recombine_and_claim_new_trial`` is on point for it, and why its prior is poor
+    on the science as well as blocked on the governance. Pinned so a later reader cannot assume
+    the experts were neutral priors.
+    """
+    decisions: dict[str, str] = {}
+    sealed_touched: dict[str, object] = {}
+    for line in NEGATIVE_EVIDENCE_PATH.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        entry = json.loads(line)
+        family = entry.get("family_id")
+        if isinstance(family, str) and family.startswith("v2a_"):
+            decisions[family] = str(entry.get("decision"))
+            sealed_touched[family] = entry.get("sealed_data_touched")
+
+    assert decisions == {
+        "v2a_meanrev_zscore_accumulation": "research_stage_rejected",
+        "v2a_trend_regime_single_horizon": "research_stage_rejected",
+        "v2a_vol_scaled_hold_drawdown_guard": "research_stage_rejected",
+    }, f"V2A decision set changed: {decisions}"
+
+    # Corroborates §3: those rejections were reached without reading any sealed partition, so
+    # the seals being intact and the families being rejected are consistent facts, not a puzzle.
+    assert set(sealed_touched.values()) == {False}, sealed_touched
 
 
 # --- the conjunction: the determination itself ---------------------------------------------
