@@ -40,7 +40,13 @@ class TestDerivation:
         assert "monitoring_qualified" in blocking
         # The two invariants that DO hold today:
         assert requirements.sealed_ledgers_intact is True
+        # repository_private still derives True — but for a different and honest
+        # reason. Until V2F-R it read the PyPI classifier "Private :: Do Not Upload",
+        # which governs PyPI uploads, not GitHub visibility, and returned True while
+        # the repository was verifiably public. It now derives from a committed
+        # GitHub API observation recording private=true.
         assert requirements.repository_private is True
+        assert "repository_private" not in blocking
 
     def test_derivation_can_never_yield_active(self) -> None:
         state, _ = derive_resting_state(_ALL_TRUE)

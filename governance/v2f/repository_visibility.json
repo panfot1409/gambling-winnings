@@ -1,0 +1,20 @@
+{
+  "kind": "v2f_repository_visibility",
+  "schema_version": 1,
+  "repository": "panfot1409/gambling-winnings",
+  "observed_private": true,
+  "observed_visibility": "private",
+  "observed_allow_forking": true,
+  "observed_forks_count": 0,
+  "observed_at": "2026-07-28T11:33:55Z",
+  "observed_by": "V2F-R2 phase 0 live owner-action verification",
+  "observed_via": "GitHub REST API, repository search restricted to repo:panfot1409/gambling-winnings, full (non-minimal) response",
+  "note": "This record states what the GitHub API reported, not what any committed policy document, PyPI classifier, README sentence or branch name claims. It is an observation with a timestamp, not a live check: whoever consumes it trusts that the named observer read the API at the stated time. Re-observe and replace this file whenever visibility changes.",
+  "supersedes": "the previous derivation, which returned true whenever pyproject.toml contained the PyPI classifier 'Private :: Do Not Upload' — a classifier that governs PyPI uploads and carries no information about GitHub repository visibility. That derivation returned true while this repository was verifiably public.",
+  "prior_observation": {
+    "observed_private": false,
+    "observed_visibility": "public",
+    "observed_at": "2026-07-28T00:00:00Z",
+    "note": "Recorded for the incident timeline. The repository was public when V2F-R phase 0 measured it, and was returned to private by the owner later the same day. Privacy restoration does not recall prior clones, caches, screenshots or forks."
+  }
+}
