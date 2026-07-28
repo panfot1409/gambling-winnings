@@ -119,6 +119,7 @@
     "governance/v2c/qualifications/v2c_offline_operational_qualification_run_001/oq_report.md": "9658ffc1feda560fe6434401ada1bbf0b264921ae3217c8689f391896c7c0c4e",
     "governance/v2c/qualifications/v2c_offline_operational_qualification_run_001/oq_result.json": "739cec5dca07b984d6fb624384e490dcab7722c5341053790d5ba8cd1945b897",
     "governance/v2d/prospective_activation.json": "6f6d7410a05bd21515fb398e73b99aca7ef6dc1574f8b2aa88899827b809d746",
+    "governance/v2f/containment.json": "5e22caca1845464d0289d4d53e6359114f8033d0046923ebb9fee0558c20d743",
     "release/private/v1.1.0/README.md": "44635eaaf44ad252c788e1e463d1c4a5e5b59d592f8931e9ce370b951a3071ab",
     "release/private/v1.1.0/private_distribution_policy.json": "22f42d7854eec8a8f59fc37b2e1fd85e027d337d0b03ce006797c227f2e1a081",
     "release/private/v1.1.0/private_install_contract.json": "b8db651e26ad517381e5e15d2e9c27a05ecf44a0cd6d808ddf6e9d9021b36d51",
@@ -571,8 +572,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "cb55d10a2a7e440f931e0e66f3726231d2a6e6c386bba42ba283a2b0f0dab443",
-  "tracked_file_count": 1083,
+  "surface_digest": "a92cffe0085042d01e7ffae4cb207d84f5e0488205696ef0934c4c9a5c316d7d",
+  "tracked_file_count": 1086,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
@@ -613,7 +614,7 @@
     "m3e-prospective-update.yml": {
       "declares_write_permission": true,
       "has_unpinned_uses": false,
-      "sha256": "d1bfbf3d224a11b211a3a1d61298a7888ceacf44b578cbf765d091c377716eea",
+      "sha256": "42c50c27a8d51746a4296f1c90177142e24fe0b114ad52a9f2a4b3d15ca59648",
       "uses_secrets": false
     },
     "m3e-replay.yml": {

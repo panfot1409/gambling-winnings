@@ -31,18 +31,78 @@ def _all_workflows() -> list[Path]:
     return sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
 
 
+def _uncommented(text: str) -> str:
+    """Drop whole-line YAML comments, leaving only directives.
+
+    Deliberately does not strip trailing comments: those sit on lines that already
+    carry a directive, so removing them cannot turn an active trigger into an absent
+    one, and naive trailing-comment stripping would corrupt any value containing '#'.
+    """
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+def _job_blocks(text: str) -> dict[str, str]:
+    """Split a workflow into ``{job_name: body}``, each body ending at the next job.
+
+    Ordering assertions are worthless if a job's "body" runs to end-of-file,
+    because a later job's step then satisfies an earlier job's requirement.
+    """
+    headers = list(re.finditer(r"^  ([A-Za-z_][A-Za-z0-9_-]*):$", text, re.MULTILINE))
+    blocks: dict[str, str] = {}
+    for i, match in enumerate(headers):
+        end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+        blocks[match.group(1)] = text[match.end() : end]
+    return blocks
+
+
 def test_both_m3e_workflows_exist() -> None:
     assert PROBE.is_file()
     assert PR_CHECK.is_file()
 
 
-def test_the_update_workflow_defaults_read_only_and_keeps_its_schedule() -> None:
+def test_the_update_workflow_defaults_read_only_and_is_schedule_suspended() -> None:
+    # V2F-R containment supersedes the V2D schedule. This assertion used to pin
+    # `cron: "17 2 * * 1"` in place; it now pins its ABSENCE, so restoring the
+    # weekly trigger cannot pass CI silently — it has to come back through this
+    # test, which is the point at which a human sees it.
     text = PROBE.read_text()
     assert "permissions:\n  contents: read" in text  # top-level default stays read
-    assert 'cron: "17 2 * * 1"' in text  # Mondays 02:17 UTC
-    assert "workflow_dispatch:" in text
+    # Check YAML, not raw text: the containment comment in this workflow explains what
+    # was removed and necessarily names `schedule:`/`cron:`. A substring check over the
+    # whole file cannot tell an active trigger from a comment describing its absence.
+    directives = _uncommented(text)
+    assert "cron:" not in directives  # V2F-R containment: no unattended egress
+    assert "schedule:" not in directives  # removed, not commented out
+    assert "workflow_dispatch:" in directives
     assert "github.repository == 'panfot1409/gambling-winnings'" in text
     assert "concurrency:" in text  # overlapping runs stay serialized
+
+
+def test_every_job_that_can_reach_the_network_runs_the_containment_gate_first() -> None:
+    """A dispatch must not be able to fetch while containment is active.
+
+    Removing `schedule:` stops the timer, but `workflow_dispatch:` is still
+    there, so the gate is what actually holds. It must run before the fetch in
+    every job that performs or publishes one — not only in the job the others
+    happen to depend on today.
+    """
+    text = PROBE.read_text()
+    gate = "run: python3 tools/v2f_containment_gate.py --repo-root ."
+    assert text.count(gate) == 4  # gate_and_plan, runner_a, runner_b, assemble_and_publish
+
+    jobs = _job_blocks(text)
+    for job, guarded_step in (
+        ("gate_and_plan", "eth_research.v2d verify"),
+        ("runner_a", "tools/m3e_fetch_window.sh"),
+        ("runner_b", "tools/m3e_fetch_window.sh"),
+        ("assemble_and_publish", "git push origin"),
+    ):
+        body = jobs[job]
+        assert gate in body, f"{job} has no containment gate"
+        assert guarded_step in body, f"{job} no longer contains {guarded_step!r}; update this test"
+        assert body.index(gate) < body.index(guarded_step), (
+            f"{job} reaches {guarded_step!r} before the containment gate"
+        )
 
 
 def test_the_active_update_workflow_has_exactly_the_authorized_shape() -> None:

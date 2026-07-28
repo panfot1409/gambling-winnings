@@ -1,0 +1,23 @@
+{
+  "authorized_by": "repository owner — MILESTONE V2F-R, authoritative decision 4",
+  "authorized_on": "2026-07-28",
+  "active": true,
+  "kind": "v2f_containment",
+  "lift_requires": [
+    "an independently accepted containment and remediation review",
+    "a completed third-party market-data rights assessment (V2F-R phase 2)",
+    "the repository verified private through the GitHub API, not inferred from any committed artifact",
+    "an explicit human authorization recorded in this file as active=false with lifted_by and lifted_on"
+  ],
+  "quoted_authority": "Immediately suspend the scheduled Coinbase prospective-update workflow while containment and rights review are underway.",
+  "reason": "The repository is public and is redistributing third-party Coinbase market data with no committed rights assessment. The scheduled workflow adds more of that data every Monday without human review, so the exposure grows on a timer while the rights question is open.",
+  "schema_version": 1,
+  "scope": {
+    "removes_schedule_trigger": true,
+    "refuses_manual_dispatch_while_active": true,
+    "preserves_workflow_definition": true,
+    "deletes_no_branch_commit_or_artifact": true,
+    "rewrites_no_history": true
+  },
+  "suspends_workflow_basename": "m3e-prospective-update.yml"
+}
