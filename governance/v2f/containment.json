@@ -1,0 +1,32 @@
+{
+  "authorized_by": "repository owner — MILESTONE V2F-R decision 4, reaffirmed in V2F-R2 decision 4",
+  "authorized_on": "2026-07-28",
+  "active": true,
+  "kind": "v2f_containment",
+  "lift_requires": [
+    "an independently accepted containment and remediation review",
+    "a completed third-party market-data rights assessment resolving redistribution",
+    "the repository verified private through the GitHub API, not inferred from any committed artifact",
+    "an explicit human authorization recorded in this file as active=false with lifted_by and lifted_on"
+  ],
+  "quoted_authority": "Immediately suspend the scheduled Coinbase prospective-update workflow while containment and rights review are underway.",
+  "reason": "This repository was public while redistributing third-party Coinbase market data with no committed rights assessment, and the scheduled workflow added more of that data weekly without human review. The repository has since been returned to private and the workflow disabled in the Actions UI, both verified against the GitHub API. The redistribution-rights question nevertheless remains OPEN, so containment stays in force: restoring privacy reduces future exposure, it does not decide whether this data may be collected, retained or redistributed at all.",
+  "state_at_authorization": {
+    "repository_was_public": true,
+    "repository_now_private": true,
+    "privacy_restored_observed_at": "2026-07-28T11:33:55Z",
+    "workflow_disabled_in_actions_ui": true,
+    "workflow_disabled_observed_at": "2026-07-28T11:31:40Z",
+    "data_rights_resolved": false,
+    "data_classification": "internal_research_only_pending_written_redistribution_permission"
+  },
+  "schema_version": 1,
+  "scope": {
+    "removes_schedule_trigger": true,
+    "refuses_manual_dispatch_while_active": true,
+    "preserves_workflow_definition": true,
+    "deletes_no_branch_commit_or_artifact": true,
+    "rewrites_no_history": true
+  },
+  "suspends_workflow_basename": "m3e-prospective-update.yml"
+}

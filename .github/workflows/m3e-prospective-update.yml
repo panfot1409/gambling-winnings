@@ -18,9 +18,14 @@
 
 name: M3E Prospective Update
 
+# SUSPENDED under V2F-R containment (governance/v2f/containment.json). The weekly
+# `schedule:` trigger is REMOVED, not commented out: a commented cron is one careless
+# uncomment away from resuming unattended egress, and GitHub honours `schedule:` only
+# from the default branch, so nothing short of removing it there actually stops a run.
+# `workflow_dispatch:` is kept so the mechanism stays reviewable and can be restored by
+# a normal commit, but the containment gate below refuses every dispatch while
+# containment is active. Restoring the schedule requires lifting containment first.
 on:
-  schedule:
-    - cron: "17 2 * * 1" # Mondays 02:17 UTC
   workflow_dispatch:
 
 permissions:
@@ -38,6 +43,8 @@ jobs:
       due: ${{ steps.plan.outputs.due }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: V2F-R containment gate (fail-closed, stdlib only, before anything else)
+        run: python3 tools/v2f_containment_gate.py --repo-root .
       - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
         run: |
           python3 -m venv "$RUNNER_TEMP/uvenv"
@@ -84,6 +91,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: V2F-R containment gate (fail-closed, before this job's fetch)
+        run: python3 tools/v2f_containment_gate.py --repo-root .
       - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
         run: |
           python3 -m venv "$RUNNER_TEMP/uvenv"
@@ -113,6 +122,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: V2F-R containment gate (fail-closed, before this job's fetch)
+        run: python3 tools/v2f_containment_gate.py --repo-root .
       - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
         run: |
           python3 -m venv "$RUNNER_TEMP/uvenv"
@@ -149,6 +160,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+      - name: V2F-R containment gate (fail-closed, before any branch push)
+        run: python3 tools/v2f_containment_gate.py --repo-root .
       - name: Install uv 0.8.17 (hash-pinned PyPI wheel)
         run: |
           python3 -m venv "$RUNNER_TEMP/uvenv"

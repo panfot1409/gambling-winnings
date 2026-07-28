@@ -31,16 +31,101 @@ def _all_workflows() -> list[Path]:
     return sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")])
 
 
+def _uncommented(text: str) -> str:
+    """Drop whole-line YAML comments, leaving only directives.
+
+    Deliberately does not strip trailing comments: those sit on lines that already
+    carry a directive, so removing them cannot turn an active trigger into an absent
+    one, and naive trailing-comment stripping would corrupt any value containing '#'.
+    """
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+def _job_blocks(text: str) -> dict[str, str]:
+    """Split a workflow into ``{job_name: body}``, each body ending at the next job.
+
+    Ordering assertions are worthless if a job's "body" runs to end-of-file,
+    because a later job's step then satisfies an earlier job's requirement.
+    """
+    headers = list(re.finditer(r"^  ([A-Za-z_][A-Za-z0-9_-]*):$", text, re.MULTILINE))
+    blocks: dict[str, str] = {}
+    for i, match in enumerate(headers):
+        end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+        blocks[match.group(1)] = text[match.end() : end]
+    return blocks
+
+
+#: Jobs that reach the network or publish, and the step each one must not reach
+#: before the containment gate has run.
+GATE_STEP = "run: python3 tools/v2f_containment_gate.py --repo-root ."
+GUARDED_JOBS = (
+    ("gate_and_plan", "eth_research.v2d verify"),
+    ("runner_a", "tools/m3e_fetch_window.sh"),
+    ("runner_b", "tools/m3e_fetch_window.sh"),
+    ("assemble_and_publish", "git push origin"),
+)
+
+
+def containment_violations(text: str) -> list[str]:
+    """Return every containment violation in ``text``, or an empty list.
+
+    Exposed as a pure function over workflow text so the mutation suite can feed it
+    damaged workflows directly. Driving the real test file as a subprocess would not
+    work: it resolves its repository root from the *installed* package, so a mutated
+    copy in a scratch directory is never the file under test.
+    """
+    violations: list[str] = []
+    directives = _uncommented(text)
+
+    # A commented-out cron is not containment, and a comment explaining the removal
+    # is not a violation — so this reads directives, not raw text.
+    if "cron:" in directives:
+        violations.append("schedule_suspended: an active cron: directive is present")
+    if "schedule:" in directives:
+        violations.append("schedule_suspended: an active schedule: trigger is present")
+    if "workflow_dispatch:" not in directives:
+        violations.append("schedule_suspended: workflow_dispatch: was removed")
+
+    count = text.count(GATE_STEP)
+    if count != len(GUARDED_JOBS):
+        violations.append(
+            f"containment_gate_first: expected {len(GUARDED_JOBS)} gate steps, found {count}"
+        )
+
+    blocks = _job_blocks(text)
+    for job, guarded_step in GUARDED_JOBS:
+        body = blocks.get(job)
+        if body is None:
+            violations.append(f"containment_gate_first: job {job} is missing")
+            continue
+        if GATE_STEP not in body:
+            violations.append(f"containment_gate_first: {job} has no containment gate")
+            continue
+        if guarded_step not in body:
+            violations.append(f"containment_gate_first: {job} no longer contains {guarded_step!r}")
+            continue
+        if body.index(GATE_STEP) > body.index(guarded_step):
+            violations.append(
+                f"containment_gate_first: {job} reaches {guarded_step!r} before the gate"
+            )
+    return violations
+
+
 def test_both_m3e_workflows_exist() -> None:
     assert PROBE.is_file()
     assert PR_CHECK.is_file()
 
 
-def test_the_update_workflow_defaults_read_only_and_keeps_its_schedule() -> None:
+def test_the_update_workflow_defaults_read_only_and_is_schedule_suspended() -> None:
+    """Containment holds on the committed workflow.
+
+    This assertion used to pin `cron: "17 2 * * 1"` IN PLACE. It now pins its
+    absence via containment_violations(), so restoring the weekly trigger — or
+    moving/removing any job's gate — cannot pass CI silently.
+    """
     text = PROBE.read_text()
     assert "permissions:\n  contents: read" in text  # top-level default stays read
-    assert 'cron: "17 2 * * 1"' in text  # Mondays 02:17 UTC
-    assert "workflow_dispatch:" in text
+    assert containment_violations(text) == []
     assert "github.repository == 'panfot1409/gambling-winnings'" in text
     assert "concurrency:" in text  # overlapping runs stay serialized
 
