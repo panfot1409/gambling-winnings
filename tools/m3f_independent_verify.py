@@ -141,14 +141,46 @@ def _loads(text: str) -> Any:
         raise IndependentVerifyError(f"invalid JSON: {exc}") from exc
 
 
+def _confined_path(root: Path, relpath: str) -> Path:
+    """Resolve ``relpath`` under ``root``, refusing any symlink component or any escape.
+
+    This mirrors the package's ``safe_repo_path`` (``eth_research.m3f.validation``) without
+    importing it — importing would defeat the point of an independent backstop. It must stay
+    semantically equivalent, because this tool's own docstring promises that a disagreement
+    between the two verifiers is itself a finding, and a backstop weaker than the thing it
+    backstops cannot deliver on that.
+
+    The earlier implementation checked only ``path.is_symlink()``, which tests the **final
+    component alone**. It paired that with a resolved-inside-root check, so a symlink pointing
+    *outside* the repository was caught — but an intermediate directory symlink whose target
+    was *inside* the root passed silently, and the tool read and certified the redirected
+    bytes. Reproduced: with ``real -> shadow``, ``_read_bytes(root, "real/data.json")``
+    returned the shadow file's contents and every check still reported ok.
+    """
+    if relpath.startswith("/"):
+        raise IndependentVerifyError(f"{relpath}: unsafe path: absolute path")
+    parts = relpath.split("/")
+    for part in parts:
+        if part in ("", ".", ".."):
+            raise IndependentVerifyError(f"{relpath}: unsafe path: bad component")
+    # Every component, not just the last: Path.is_symlink() tests the final one only.
+    cursor = root
+    for part in parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            raise IndependentVerifyError(f"{relpath}: unsafe path: symlink component")
+    resolved = (root / relpath).resolve()
+    root_resolved = root.resolve()
+    if resolved != root_resolved and not resolved.is_relative_to(root_resolved):
+        raise IndependentVerifyError(f"{relpath}: unsafe path: escapes the repository")
+    return resolved
+
+
 def _read_bytes(root: Path, relpath: str) -> bytes:
     # A4: refuse to read through a symlink or any path that escapes the repository root,
     # mirroring the package's safe_repo_path guard so the independent backstop cannot be
     # steered to bytes outside the repo.
-    path = root / relpath
-    resolved = path.resolve()
-    if path.is_symlink() or not resolved.is_relative_to(root.resolve()):
-        raise IndependentVerifyError(f"{relpath}: unsafe path (symlink or escapes the repository)")
+    path = _confined_path(root, relpath)
     raw = path.read_bytes()
     if len(raw) > MAX_ARTIFACT_BYTES:
         raise IndependentVerifyError(f"{relpath}: exceeds the parse ceiling")
@@ -262,10 +294,18 @@ def _canonical_bytes(payload: Any) -> bytes:
 
 def _v2d_anchor_active(root: Path) -> bool:
     """Strictly validate the committed V2D activation anchor; absent → inactive."""
-    path = root / V2D_ANCHOR_RELPATH
+    # Confine BEFORE existence, and via the same helper every other artifact uses. This read
+    # previously bypassed _read_bytes entirely, so it had neither the component check nor the
+    # escape check — strictly weaker than the rest of the tool. That matters more here than
+    # elsewhere, because an active anchor is a *relaxation*: it disables the zero-proposal
+    # check, whitelists a workflow's write permission, and loosens the freeze-catalog check
+    # from exact-hash to append-only. Reproduced: with `governance/v2d` symlinked outside the
+    # repository, the tool read the outside bytes and failed on their *contents*
+    # ("v2d anchor kind/schema is unexpected") — a content complaint proves no path guard ran.
+    path = _confined_path(root, V2D_ANCHOR_RELPATH)
     if not path.exists():
         return False
-    _require(not path.is_symlink() and path.is_file(), "v2d anchor is not a regular file")
+    _require(path.is_file(), "v2d anchor is not a regular file")
     doc = _loads(path.read_text(encoding="utf-8"))
     _require(isinstance(doc, dict), "v2d anchor is not a JSON object")
     _require(

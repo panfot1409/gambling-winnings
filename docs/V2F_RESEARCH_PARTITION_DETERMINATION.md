@@ -262,7 +262,55 @@ and left unevaluated. It adds a third independent reason why, and it means any f
 evaluate this candidate must clear the closure record as well as the containment record and the
 partition problem.
 
-## 10. Limits of this determination
+## 10. Addendum, 2026-07-29 — what the independent audit added
+
+§9 said an independent read-only audit was running and that any contradiction would be recorded
+here rather than by editing the earlier text. It finished. It **did not contradict** the
+determination — an independent captain and its refuter both reached "no partition is lawfully
+available" from the committed artifacts, at the same pinned commit, without my reasoning in front
+of them. Three things they had that I did not:
+
+**1. The development gate is not virgin data — it is byte-identical to already-consumed
+m2b_validation.** My §3 noted these share a date window. The stronger fact is that they share a
+*content fingerprint*: both are
+`sha256:97747723e0fcd141ea346b1d4ca784bf782f887280d4515f69609eb9c2392b1a`, and
+`src/eth_research/m3d/exhaustion.py` aliases the two names to that one fingerprint so renaming
+cannot evade the guard. The gate is *procedurally* sealed — its access ledger is byte-empty — but
+those rows already ran through the engine for the M2B benchmark with `pnl_computed: true`. The
+repository discloses this itself (`research/m3a/README.md`), and the ledger genesis is worded
+"zero **strategy** access", not "never computed on".
+
+This does not change any conclusion — the gate was already disqualified twice over — but it
+matters for anyone who later reads "sealed" and infers "untouched". It is not untouched. Any
+future one-shot proposed on it must carry this caveat explicitly.
+
+**2. The closure has an explicit permanence clause I had not quoted.**
+`research/v2/research_partition_closure.json`:
+
+    "supersession_policy": "This closure is permanent for the legacy partitions. Future research
+     requires a separately-authorized, new prospective dataset or domain under its own
+     governance; it does not reopen these partitions."
+
+My §8 item 5 argued a lifted containment would still need a *new, disjoint* partition. That was
+my inference; this is the record saying it directly, which is better authority than my reasoning.
+
+**3. The one-shot budget is an enforced chokepoint, not just a document.** I cited
+`v2b_one_shot_budget.json` as a record. The refuter executed against it:
+
+    v2b_run_002 registered  -> V2BGovernanceError: a registered event already exists
+    v2b_run_001 started     -> V2BGovernanceError: a started event already exists;
+                               the one-shot budget is spent
+
+**One thing they corrected that was mine, indirectly.** The refuter showed that the mutual hash
+pinning described in `containment.json` detects *drift* but not *forgery* — a forged attributed
+lift survives `fable5 build --write && freeze-build --write`, and the containment-mutation suite
+passes over the laundered tree. I reproduced that in a disposable clone before accepting it. The
+control that actually catches a forged lift is a hard-coded live-state assertion, and §5 of this
+document rests on the gate refusing *at this commit*, which those assertions pin. Recorded as
+standing correction 6 in `docs/V2F_ERROR_CORRECTION_LOG.md`, and `containment.json` now carries a
+`mutual_pinning_limitation` field so its own reader is not misled.
+
+## 11. Limits of this determination
 
 - It is a statement about **this repository at this commit**. It does not assert that no data
   exists anywhere that could lawfully support the study.

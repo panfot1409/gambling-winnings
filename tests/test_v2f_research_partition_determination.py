@@ -222,8 +222,20 @@ def test_the_containment_gate_refuses_here_because_containment_is_suspended() ->
 
 
 def test_the_gate_refuses_an_unattributed_lift(tmp_path: Path) -> None:
-    """Flipping active=false is not enough; §5 of the determination depends on this."""
-    record = _load(CONTAINMENT_PATH) | {"active": False}
+    """Flipping active=false is not enough; §5 of the determination depends on this.
+
+    The attribution keys are **removed explicitly** rather than assumed absent. An earlier draft
+    wrote ``_load(CONTAINMENT_PATH) | {"active": False}`` and inherited whatever the live record
+    happened to contain — so the moment a lift was recorded there, the fixture silently stopped
+    being unattributed and this test stopped testing anything. Caught by reproducing a forged
+    lift in a disposable clone, where it failed for that reason and not the intended one.
+    """
+    record = {
+        k: v for k, v in _load(CONTAINMENT_PATH).items() if k not in ("lifted_by", "lifted_on")
+    }
+    record["active"] = False
+    assert "lifted_by" not in record
+    assert "lifted_on" not in record
     code, out = _run_gate(_scratch_repo(tmp_path, record))
     assert code != 0
     assert "lifted_by" in out
@@ -323,6 +335,37 @@ def test_every_v2a_expert_family_is_recorded_rejected() -> None:
     # Corroborates §3: those rejections were reached without reading any sealed partition, so
     # the seals being intact and the families being rejected are consistent facts, not a puzzle.
     assert set(sealed_touched.values()) == {False}, sealed_touched
+
+
+# --- addendum 2026-07-29: facts the independent audit added ---------------------------------
+
+
+def test_the_development_gate_is_byte_identical_to_consumed_m2b_validation() -> None:
+    """ "Sealed" does not mean "untouched" here, and a later reader must not infer that.
+
+    Both names resolve to one content fingerprint, and the M2B benchmark computed PnL over those
+    rows. The gate is procedurally sealed (its ledger is byte-empty) and simultaneously not
+    virgin data. Pinned so the caveat cannot be quietly lost.
+    """
+    from eth_research.m3d.exhaustion import _PROTECTED_FINGERPRINTS
+
+    gate = _PROTECTED_FINGERPRINTS["development_gate"]
+    validation = _PROTECTED_FINGERPRINTS["m2b_validation"]
+    assert gate == validation, "the aliasing that stops a rename from evading the guard is gone"
+    assert gate.endswith("97747723e0fcd141ea346b1d4ca784bf782f887280d4515f69609eb9c2392b1a")
+
+
+def test_research_train_and_m2b_train_are_also_one_partition_under_two_names() -> None:
+    from eth_research.m3d.exhaustion import _PROTECTED_FINGERPRINTS
+
+    assert _PROTECTED_FINGERPRINTS["research_train"] == _PROTECTED_FINGERPRINTS["m2b_train"]
+
+
+def test_the_closure_is_permanent_and_does_not_reopen_on_new_authorization() -> None:
+    """A lifted containment would still not reopen these partitions — the record says so."""
+    policy = _load(CLOSURE_PATH)["supersession_policy"]
+    assert "permanent" in policy
+    assert "does not reopen these partitions" in policy
 
 
 # --- the conjunction: the determination itself ---------------------------------------------
