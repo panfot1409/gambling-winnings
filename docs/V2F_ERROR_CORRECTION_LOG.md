@@ -240,3 +240,86 @@ the moment a lift was recorded it silently stopped being an unattributed-lift te
 the attribution keys explicitly and asserts their absence. Deriving an attack fixture from live
 state is the same class of mistake as reducing over a rebindable collection: the fixture stops
 describing the thing it is named after.
+
+---
+
+## V2F-EC-003 — the reported paper lifecycle state could outrun its own requirements
+
+| field | value |
+| --- | --- |
+| **Class** | C — reporting / decision-support integrity. **NOT an authorization bypass.** |
+| **Reported by** | primary writer, while verifying the paper platform under §14 |
+| **File** | `src/eth_research/v2e/paper.py` — `_stage_satisfied`, `derive_resting_state` |
+
+### Observation — two defects, one shallow and one that matters more
+
+**(a) the vacuous reduction.** `_stage_satisfied` was
+`all(getattr(requirements, name) is True for name in _STAGE_PREREQUISITES[stage])`. `all(())` is
+`True`, so that rebindable module dict was the authority on what a stage requires.
+
+**(b) the coverage gap — found by the mutation proof, and the more serious half.** The stage
+table names only **11 of the 17** requirements. These six were consulted by no stage at all:
+
+    fable5_acceptance            no_unresolved_class_abd_defect
+    kill_switch_qualified        monitoring_qualified
+    sealed_ledgers_intact        repository_private
+
+So the reported resting state could read `"approved"` **with the repository public and the
+sealed ledgers broken**, provided the other eleven held. No table needed emptying for that; it
+was the standing behaviour.
+
+### Reproduction (executed, literal output)
+
+```
+control (all False) resting: disabled
+control (all True)  resting: approved
+MUTANT: emptied stage tuples, requirements still ALL FALSE
+  resting state : approved   <-- reported as if fully approved
+  blockers count: 17 (the requirements themselves are still honest)
+  request_activation_token: PaperGateError -> paper activation refused; unmet requirements: ...
+```
+
+A state that reports `approved` while listing seventeen blockers contradicts its own evidence —
+the same shape as V2F-EC-001, in a different module.
+
+### Scope — what this is NOT
+
+**Authorization was never affected, and saying otherwise would repeat a mistake this project has
+already made and corrected.** `request_activation_token` and `transition` both gate on
+`requirements.all_satisfied`, which reduces over the dataclass's own `fields()`. That cannot be
+widened by editing a separate constant, and the reproduction above confirms the token was still
+refused with the stage table emptied. What was broken is the state a **human reads before
+deciding whether to approve** — which is why it is worth fixing rather than noting.
+
+### Repair
+
+1. `_stage_satisfied` refuses an absent or empty stage, and refuses prerequisite names that are
+   not real fields.
+2. `derive_resting_state` refuses a stage set that is not exactly `_REQUIRED_STAGES`.
+3. **The tie-in that closes (b):** `"approved"` additionally requires `all_satisfied`, so
+   reporting can never outrun authorization however the stage table is arranged.
+4. `_STAGE_UNCOVERED_REQUIREMENTS` names the six explicitly, so the 11/6 split is documented and
+   tested rather than implicit. Adding an eighteenth requirement and forgetting it is now a test
+   failure.
+
+### Mutation proof (executed)
+
+Reverting `_stage_satisfied` to the vacuous form and dropping both new guards fails 8 tests:
+
+```
+FAILED ...[unknown-field-names]
+FAILED test_an_extra_stage_is_refused
+FAILED test_a_single_unmet_requirement_forbids_the_top_state[fable5_acceptance]
+FAILED ...[no_unresolved_class_abd_defect]   ...[kill_switch_qualified]
+FAILED ...[monitoring_qualified]             ...[sealed_ledgers_intact]
+FAILED ...[repository_private]
+```
+
+Those last six failing is how defect (b) was discovered: they are exactly the requirements no
+stage covers. The mutation proof found a defect the repair had already incidentally closed,
+which is the argument for running it even when the fix seems obvious.
+
+### Neutrality
+
+The real repository rests `disabled` before and after, with blockers named. 29 tests here; 124
+across the paper/dashboard/readiness suites. No scientific or financial artifact changed.
