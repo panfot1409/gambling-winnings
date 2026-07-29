@@ -1,6 +1,6 @@
 {
-  "base_sha256": "c7af0ecc3c3e2f3b838a405e1bc017e7e0b183639302d2eb7654d4299426373f",
-  "canonical_content_fingerprint": "bb6dd3921fa31915496806349ca21254e05070c94a97b30982030673b7966507",
+  "base_sha256": "4e7b888bf3efb4c2256d3d091f034a11e2f663aa1ae7dad0f801452ce29f99cb",
+  "canonical_content_fingerprint": "ab22a0861d25781358404a4165a9b839e81871ff28e4785749c6c1207a6588f3",
   "cohort_start": "2026-07-12T00:00:00Z",
   "evaluation_authorized": false,
   "first_open": "2026-07-12T00:00:00Z",
@@ -10,7 +10,7 @@
     "venue": "coinbase-exchange"
   },
   "kind": "accepted_prospective_base",
-  "last_open": "2026-07-14T00:00:00Z",
+  "last_open": "2026-07-23T00:00:00Z",
   "ledgers": {
     "development_gate": {
       "byte_count": 0,
@@ -33,12 +33,13 @@
   "package_version": "0.8.0",
   "provenance": {
     "m3c_candidate_decision_outcome": "rejected_for_development_gate_promotion",
-    "manifest_sha256": "24457fb92a300b28cf5343283be9d39772cd599ec16e641235fd9cc0bc1be4b4",
-    "publication_manifest_sha256": "aea4c96b9d6e90e2faf96d0bea52f8775306816a1ec18d5f0158b7d703ad1f65",
+    "manifest_sha256": "a3b9b522ed60b597a38c821e15ea8b5c776edc0d128381b854ac4c39ef3c14ac",
+    "publication_manifest_sha256": "88a3fea7366fce2351382a22ac8f06dd1eefd1acd015ed101996110f76552004",
     "reacquisition_audit_sha256": "d4ff04a86d755c1c6dcd132ce26265169d232e22d962c22bb162ed7ec7fb4d42",
-    "segment_chain_sha256": "05cd7b84c06aac9b02f2843dd3ae04d6a9a03f87e23ed432ed0e3497e53aef20"
+    "segment_chain_sha256": "7d338720562382d2c1fe74c42baa029f9a6237659ad6d7390937f8aab45534bf",
+    "update_attempts_ledger_sha256": "754493bcbc2f3cd2a976d2310e398c6a222c9d2f835da36f7926eb41745be97e"
   },
-  "row_count": 3,
+  "row_count": 12,
   "schema_version": 1,
   "upstream_milestone": "M3D"
 }

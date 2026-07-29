@@ -1,0 +1,27 @@
+{
+  "attempt_id": "coinbase-eth-usd-prospective-update-runner-b",
+  "client_identity": "curl-hardened",
+  "created_at_utc": "2026-07-24T04:55:01Z",
+  "endpoint": "https://api.exchange.coinbase.com/products/ETH-USD/candles",
+  "kind": "prospective_attempt_receipt",
+  "package_version": "0.8.0",
+  "plan_sha256": "3a4cd5af0f4ab83170b9444823bc3c2d1686c589965eefc4038d71cad0318f18",
+  "responses": [
+    {
+      "content_type": "application/json; charset=utf-8",
+      "end_param": "2026-07-23T00:00:00Z",
+      "http_status": 200,
+      "ordinal": 0,
+      "raw_filename": "coinbase-eth-usd-1d-update_0000_20260715_20260724.json",
+      "response_byte_length": 533,
+      "response_sha256": "43cfa2eadecbb322379e2f5edeaf5a5de512a6e19312a20aa419c258a2c6cc02",
+      "retrieved_at": "2026-07-24T04:55:18Z",
+      "start_param": "2026-07-15T00:00:00Z"
+    }
+  ],
+  "runner_identity": "github-hosted-runner-b-30068014058",
+  "schema_version": 1,
+  "source_commit": "ba2dcc1d63f29a009d3660be2d960388a9615da0",
+  "user_agent": "eth-research-m3d-prospective-acquisition/1 (offline research; public candles)",
+  "workflow_run_id": "30068014058"
+}
