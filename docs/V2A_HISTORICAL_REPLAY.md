@@ -28,6 +28,31 @@ and branches:
 
 ## Exactly what changed
 
+> **Superseded in part — read this first.** The section below is the record of what *V2A* changed,
+> and it is left as written. Two of its statements are no longer true of current behaviour, because
+> later work extended the same rule (§"The rule" is unchanged; both extensions follow it) to two more
+> artifacts that turned out to read `uv.lock`:
+>
+> - **`sbom.cdx.json` is no longer live-compared.** "Treat the v1.1.0 SBOM as the historical record
+>   it is" moved it onto the same historical path as `release_manifest.json`: its `components[]` came
+>   from the *v1.1.0* `uv.lock`, so declaring a dependency rewrote a document whose subject is
+>   stamped `eth-research 1.1.0`. Past `VERSION`, `write` skips it and `check` validates its recorded
+>   identity (`_check_sbom_historical`). `release_state.json` is genuinely version-independent and
+>   *is* still live-compared in both modes, as this section says.
+> - **`tools/private_release.py` `check()` holds three more things to the committed v1.1.0
+>   evidence.** Past `VERSION`, the frozen payload manifest's `sbom.cdx.json` member is compared
+>   against the committed `release/v1.1.0/sbom.cdx.json` rather than a rebuild from the live lock,
+>   and the install contract's and install guide's pinned numpy/pandas/pyarrow versions are read from
+>   that same record's `components[]` (`_release_locked_versions`). Every one of those comparisons is
+>   still byte-exact; only what they compare against changed, from a moving source to a frozen,
+>   freeze-table-pinned one. Current-tree dependency coverage was never these artifacts' job and is
+>   unaffected — it belongs to `governance/v2c/commercial/sbom.cdx.json` and
+>   `eth_research.m3f.dependency_inventory`, which follow the live lock and ship their own writers.
+>
+> Current behaviour is defined by `tools/release_evidence.py` (`_HISTORICAL_CHECKS`) and
+> `tools/private_release.py` (`_is_historical`, `_sbom_bytes`, `_release_locked_versions`), and is
+> covered by `tests/test_ga_release_artifacts.py` and `tests/test_private_release.py`.
+
 - **`tools/release_evidence.py`** — `check()` computes `historical = _active_version != VERSION`.
   When historical, `release_manifest.json` is verified by `_check_release_manifest_historical`
   (recorded identity + internal consistency + the version-independent governed record) instead of

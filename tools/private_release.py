@@ -27,6 +27,18 @@ source-derived fields (governed-state digest over ``research/**``, sealed-ledger
 policy SHA-256, and the ``src/eth_research`` member tree) reproduce from the current tree.
 It mutates nothing and needs neither ``uv`` nor ``git``.
 
+Those manifests are records *of release v1.1.0*, so what "reproduce" is measured against depends on
+whether the tree still is v1.1.0. At ``VERSION`` everything is rebuilt from the live tree and the
+live ``uv.lock``. Once the active version has moved past ``VERSION`` (:func:`_is_historical`) the
+tree and the lock belong to a later release, and the frozen deliverables are held to the committed
+v1.1.0 evidence instead: the payload manifest's ``sbom.cdx.json`` member against the committed
+``release/v1.1.0/sbom.cdx.json``, and the install contract / install guide's pinned runtime versions
+against that same record's ``components[]``. Every one of those comparisons stays byte-exact; only
+what they compare against changes, and it changes from a moving source to a frozen, byte-pinned one.
+Live-tree dependency coverage is not this tool's job and is unaffected — it belongs to
+``governance/v2c/commercial/sbom.cdx.json`` and ``eth_research.m3f.dependency_inventory``, both of
+which follow the live lock and ship their own writers.
+
 Reuses the repository's conventions rather than reinventing them: canonical JSON + hashing
 from :mod:`eth_research.api.serialization`, the strict decoder from :mod:`eth_research._json`,
 the governed-state / source-tree / SBOM builders from ``tools/release_evidence.py``, and the
@@ -106,6 +118,13 @@ MANIFEST_NAME = "private_payload_manifest.json"
 POLICY_NAME = "private_distribution_policy.json"
 CONTRACT_NAME = "private_install_contract.json"
 PAYLOAD_NAME = f"eth-research-{VERSION}-private-payload.tar"
+
+# The committed v1.1.0 SBOM. It is the *same document* the v1.1.0 payload carried as its
+# ``sbom.cdx.json`` member (byte-identical, sha256 7fd0396a…), and its ``components[]`` are the
+# committed record of the environment release v1.1.0 was locked against. Past the frozen
+# ``VERSION`` that record — not the live ``uv.lock`` — is what the frozen private deliverables are
+# verified against; see :func:`_sbom_bytes` and :func:`_release_locked_versions`.
+EVIDENCE_SBOM_RELPATH = f"release/v{VERSION}/{SBOM_NAME}"
 
 # The loose files written next to the payload tar in the output dir. Anything else present is
 # "foreign content" and refuses the build so a stray artifact never rides along.
@@ -196,7 +215,44 @@ def _policy_sha256(root: Path) -> str:
     return sha256_hex(_policy_path(root).read_bytes())
 
 
+def _is_historical(root: Path) -> bool:
+    """Has the tree's active version moved past the frozen release ``VERSION``?
+
+    Everything under ``release/v1.1.0/`` and ``release/private/v1.1.0/`` is a record *of release
+    v1.1.0*. While the tree still is v1.1.0 those records are statements about the live tree and are
+    verified by rebuilding them from it. Once the active version moves on, the live tree is a
+    different tree and the live ``uv.lock`` a different lock; a rebuild then describes no release
+    that ever existed, so the records are verified against the committed v1.1.0 evidence instead.
+    """
+    return _active_version(root) != VERSION
+
+
+def _frozen_sbom_bytes(root: Path) -> bytes:
+    """The committed v1.1.0 SBOM — the bill of materials release v1.1.0 actually shipped."""
+    return (root / EVIDENCE_SBOM_RELPATH).read_bytes()
+
+
 def _sbom_bytes(root: Path) -> bytes:
+    """The bytes of the v1.1.0 payload's ``sbom.cdx.json`` member.
+
+    At ``VERSION`` this is a live build from ``uv.lock`` — that is exactly how the committed
+    artifact was produced, and the check is unchanged. Past ``VERSION`` the live lock is a later
+    tree's lock, so declaring one dependency would make this rebuild differ from the member hash the
+    frozen payload manifest registered, reporting drift in a *frozen* artifact that nothing may
+    reissue (``research/v2ab/stack_freeze_table.json`` records both files as
+    ``"immutability": "immutable"``). So past ``VERSION`` the member is taken from the committed
+    frozen record instead of rebuilt.
+
+    That is a change of *what* the comparison is against, not of how exact it is. The two are
+    byte-identical today (sha256 7fd0396a…) and are held that way from both ends: the frozen payload
+    manifest pins this member's SHA-256 and the stack freeze table pins the frozen file's bytes, so
+    the two records must agree byte-for-byte or :func:`check` fails. It also *adds* coverage — a
+    tampered ``release/v1.1.0/sbom.cdx.json`` used to be invisible here and now fails closed — while
+    live-lock dependency coverage keeps being carried by the live private SBOM at
+    ``governance/v2c/commercial/sbom.cdx.json``, which follows ``uv.lock`` by design.
+    """
+    if _is_historical(root):
+        return _frozen_sbom_bytes(root)
     return canonical_json_bytes(_evidence.build_sbom(root))
 
 
@@ -229,6 +285,47 @@ def _locked_versions(root: Path, names: tuple[str, ...]) -> dict[str, str]:
     missing = wanted - set(out)
     if missing:  # pragma: no cover - lockfile always carries the runtime deps
         raise PrivateReleaseError(f"uv.lock is missing locked versions for {sorted(missing)}")
+    return out
+
+
+def _release_locked_versions(root: Path, names: tuple[str, ...]) -> dict[str, str]:
+    """The versions the v1.1.0 deliverables pin ``names`` to.
+
+    At ``VERSION`` this is the live ``uv.lock`` — unchanged. Past ``VERSION`` the live lock belongs
+    to a later tree, and both artifacts that embed these versions are frozen: the install contract
+    is committed under ``release/private/v1.1.0/`` and the install guide's hash is registered in the
+    frozen payload manifest, and the stack freeze table records both as ``"immutability":
+    "immutable"``. Upgrading numpy would otherwise report them stale and send an operator to
+    ``write-manifests``, which reissues bytes that table says cannot move.
+
+    So past ``VERSION`` the pins are read from the committed record of the v1.1.0 environment: the
+    ``components[]`` of the frozen v1.1.0 SBOM. Both artifacts still have to reproduce *byte-for-
+    byte*; only the source of these three version strings changes, and that source is itself frozen,
+    byte-pinned by the freeze table and the Fable 5 inventory, and identity-checked by
+    ``tools/release_evidence.py --check``. Nothing here reads the live lock, so nothing here can be
+    falsified by editing it.
+    """
+    if not _is_historical(root):
+        return _locked_versions(root, names)
+    sbom = require_mapping(
+        strict_load_canonical(_frozen_sbom_bytes(root), EVIDENCE_SBOM_RELPATH), "sbom"
+    )
+    wanted = set(names)
+    out: dict[str, str] = {}
+    for component in require_list(sbom.get("components"), "sbom.components"):
+        entry = require_mapping(component, "sbom.components[]")
+        name = require_str(entry.get("name"), "sbom.components[].name")
+        if name in wanted:
+            if name in out:
+                raise PrivateReleaseError(
+                    f"{EVIDENCE_SBOM_RELPATH} records a duplicate component identity for {name!r}"
+                )
+            out[name] = require_str(entry.get("version"), f"sbom.components[{name}].version")
+    missing = wanted - set(out)
+    if missing:
+        raise PrivateReleaseError(
+            f"{EVIDENCE_SBOM_RELPATH} records no locked version for {sorted(missing)}"
+        )
     return out
 
 
@@ -278,8 +375,12 @@ def build_policy() -> dict[str, Any]:
 
 
 def build_install_contract(root: Path) -> dict[str, Any]:
-    """The two authorized private install channels + the pinned runtime dependency set."""
-    locked = _locked_versions(root, RUNTIME_DEP_NAMES)
+    """The two authorized private install channels + the pinned runtime dependency set.
+
+    The pinned versions are the ones *release v1.1.0* was locked against — the live lock at
+    ``VERSION``, the frozen v1.1.0 record past it (see :func:`_release_locked_versions`).
+    """
+    locked = _release_locked_versions(root, RUNTIME_DEP_NAMES)
     specifier_of = {
         dep.split(">=")[0].split("==")[0].strip(): dep for dep in _runtime_dependencies(root)
     }
@@ -385,8 +486,13 @@ def build_payload_manifest(root: Path, member_hashes: Mapping[str, str]) -> dict
 
 
 def render_install_md(root: Path) -> bytes:
-    """Deterministic private-install guide (locked dependency versions, no timestamps)."""
-    locked = _locked_versions(root, RUNTIME_DEP_NAMES)
+    """Deterministic private-install guide (locked dependency versions, no timestamps).
+
+    This is a payload member of release v1.1.0 whose SHA-256 the frozen payload manifest registers,
+    so the versions it embeds are release v1.1.0's — the live lock at ``VERSION``, the frozen v1.1.0
+    record past it (see :func:`_release_locked_versions`).
+    """
+    locked = _release_locked_versions(root, RUNTIME_DEP_NAMES)
     deps = "\n".join(f"   - {name}=={locked[name]}" for name in RUNTIME_DEP_NAMES)
     text = f"""# Private install guide — eth-research {VERSION}
 
@@ -1006,7 +1112,10 @@ def check(repo_root: str | Path) -> list[str]:
     except (CanonicalError, OSError) as exc:
         return [f"{POLICY_NAME} invalid: {exc}"]
 
-    # install contract must reproduce byte-for-byte from the current tree.
+    # install contract must reproduce byte-for-byte. Its only lock-derived content is the three
+    # pinned runtime versions, which past the frozen VERSION are read from the committed v1.1.0
+    # record rather than the live lock (_release_locked_versions); everything else is a function of
+    # the frozen constants and the tracked pyproject specifiers, and still has to reproduce exactly.
     contract_path = root / PRIVATE_RELDIR / CONTRACT_NAME
     try:
         contract_raw = contract_path.read_bytes()
@@ -1042,7 +1151,7 @@ def check(repo_root: str | Path) -> list[str]:
     # from (a bumped __version__, added V2 modules); validate the recorded anchors structurally and
     # confirm the manifest is version-stamped VERSION rather than requiring the diverged tree to
     # reproduce them. The governed digest and ledgers above are version-independent and always live.
-    if _active_version(root) == VERSION:
+    if not _is_historical(root):
         source = _source_distribution(root)
         if manifest.get("source_tree_digest") != source["tree_digest"]:
             problems.append("manifest source_tree_digest does not reproduce")
@@ -1067,7 +1176,13 @@ def check(repo_root: str | Path) -> list[str]:
             continue
         member_map[name] = str(entry.get("sha256", ""))
 
-    # Build-free members (SBOM, install guide) must reproduce exactly.
+    # Build-free members (SBOM, install guide) must reproduce exactly. Past the frozen VERSION,
+    # "exactly" means against the committed v1.1.0 evidence rather than a rebuild from the live
+    # lock: the payload's SBOM member *is* release/v1.1.0/sbom.cdx.json, and the install guide's
+    # only lock-derived content is the numpy/pandas/pyarrow versions that same record pins. Both
+    # comparisons stay byte-exact — only what they are compared against changes, and what they are
+    # compared against is itself frozen and byte-pinned. A falsified member hash still fails here,
+    # and so now does a falsified release/v1.1.0/sbom.cdx.json.
     if member_map.get(SBOM_NAME) != sha256_hex(_sbom_bytes(root)):
         problems.append("manifest sbom member does not reproduce")
     if member_map.get(INSTALL_NAME) != sha256_hex(render_install_md(root)):

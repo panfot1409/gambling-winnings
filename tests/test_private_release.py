@@ -34,6 +34,7 @@ TOOL_PATH = REPO / "tools" / "private_release.py"
 RELDIR = REPO / "release" / "private" / "v1.1.0"
 POLICY_NAME = "private_distribution_policy.json"
 MANIFEST_NAME = "private_payload_manifest.json"
+CONTRACT_NAME = "private_install_contract.json"
 PAYLOAD_MEMBERS = [
     "PRIVATE_INSTALL.md",
     "SHA256SUMS",
@@ -43,6 +44,17 @@ PAYLOAD_MEMBERS = [
     "provenance.json",
     "sbom.cdx.json",
 ]
+
+FROZEN_SBOM_PATH = REPO / "release" / "v1.1.0" / "sbom.cdx.json"
+#: Byte identities of the frozen v1.1.0 release records this tool verifies against, pinned here as
+#: independent regression anchors. They are the same digests the V2A-V2B stack freeze table
+#: (``research/v2ab/stack_freeze_table.json``) records as ``immutable`` and the Fable 5 system
+#: inventory pins for these paths. No ordinary development change — least of all declaring or
+#: upgrading a dependency — may move any of them; if one of these constants ever needs editing, a
+#: historical release record has been falsified.
+FROZEN_SBOM_SHA256 = "7fd0396afbf4e642d724ea2a90ae3d25d108de5540f472fc1e73eecc11fa2731"
+FROZEN_MANIFEST_SHA256 = "d726eabe845bc92726fc0879ba2ac5f1639fe8f09b9831d79ebb7b209fdcac5b"
+FROZEN_CONTRACT_SHA256 = "b8db651e26ad517381e5e15d2e9c27a05ecf44a0cd6d808ddf6e9d9021b36d51"
 
 
 def _load(name: str, path: Path) -> ModuleType:
@@ -201,11 +213,318 @@ def test_committed_manifest_source_fields_reproduce() -> None:
         assert isinstance(manifest["source_member_count"], int)
         assert manifest["source_member_count"] > 0
     members = {entry["filename"]: entry["sha256"] for entry in manifest["members"]}
+    # Both build-free members still reproduce byte-exactly. What they reproduce *from* is version-
+    # aware: the live ``uv.lock`` at the frozen release version, the committed v1.1.0 evidence past
+    # it. The two are the same bytes today, which the pinned digests below assert outright rather
+    # than leave implied — see test_the_payload_manifest_sbom_member_is_the_frozen_release_sbom.
     assert members["sbom.cdx.json"] == sha256_hex(TOOL._sbom_bytes(REPO))
     assert members["PRIVATE_INSTALL.md"] == sha256_hex(TOOL.render_install_md(REPO))
+    assert members["sbom.cdx.json"] == FROZEN_SBOM_SHA256
+    assert TOOL._release_locked_versions(REPO, TOOL.RUNTIME_DEP_NAMES) == _frozen_sbom_pins()
     # The manifest never records the payload tar's own hash and never lists itself.
     assert MANIFEST_NAME not in members
     assert TOOL.PAYLOAD_NAME not in members
+
+
+# --------------------------------------------------------------------------- #
+# the frozen v1.1.0 private deliverables are historical records of v1.1.0:      #
+# an ordinary dependency change may not mutate or falsely invalidate them       #
+# --------------------------------------------------------------------------- #
+def _frozen_sbom_pins() -> dict[str, str]:
+    """numpy/pandas/pyarrow as the committed v1.1.0 SBOM records them."""
+    doc = json.loads(FROZEN_SBOM_PATH.read_bytes())
+    return {
+        c["name"]: c["version"]
+        for c in doc["components"]
+        if c["name"] in set(TOOL.RUNTIME_DEP_NAMES)
+    }
+
+
+def _mirror(tmp_path: Path) -> Path:
+    """A throwaway repo root ``check`` runs against, so no test ever mutates the real tree.
+
+    Carries exactly what ``check`` reads: the governed ``research/`` artifacts and sealed ledgers,
+    the frozen ``release/`` records, ``pyproject.toml`` (the active version) and ``uv.lock``.
+    """
+    root = tmp_path / "repo"
+    root.mkdir()
+    shutil.copytree(REPO / "research", root / "research")
+    shutil.copytree(REPO / "release", root / "release")
+    shutil.copy2(REPO / "pyproject.toml", root / "pyproject.toml")
+    shutil.copy2(REPO / "uv.lock", root / "uv.lock")
+    return root
+
+
+def _frozen_snapshot(root: Path) -> dict[str, str]:
+    rel = ("release/v1.1.0", "release/private/v1.1.0")
+    return {
+        f"{d}/{p.name}": sha256_hex(p.read_bytes())
+        for d in rel
+        for p in sorted((root / d).iterdir())
+        if p.is_file()
+    }
+
+
+def _declare_a_dependency(root: Path) -> None:
+    """What declaring one registry-sourced dependency does to the lock, and only that."""
+    with (root / "uv.lock").open("a", encoding="utf-8") as fh:
+        fh.write(
+            '\n[[package]]\nname = "nardis-registry-extra"\nversion = "1.4.2"\n'
+            'source = { registry = "https://pypi.org/simple" }\n'
+        )
+
+
+def _upgrade_numpy(root: Path) -> str:
+    """What upgrading a *pinned runtime* dependency does to the lock, and only that.
+
+    Reads the version out of the lock rather than hard-coding it, so this fixture keeps working
+    across exactly the numpy upgrades the historical treatment exists to allow.
+    """
+    lock = root / "uv.lock"
+    current = TOOL._locked_versions(root, ("numpy",))["numpy"]
+    bumped = f"{current}.post1"
+    before = lock.read_text(encoding="utf-8")
+    after = before.replace(
+        f'name = "numpy"\nversion = "{current}"', f'name = "numpy"\nversion = "{bumped}"', 1
+    )
+    assert after != before, "the numpy lock entry is not in the expected shape"
+    lock.write_text(after, encoding="utf-8")
+    return bumped
+
+
+def test_the_payload_manifest_sbom_member_is_the_frozen_release_sbom() -> None:
+    """The byte identity the historical treatment rests on, asserted rather than assumed.
+
+    The ``sbom.cdx.json`` the v1.1.0 payload carried *is* ``release/v1.1.0/sbom.cdx.json``. That is
+    why comparing the frozen payload manifest's member against the committed record instead of
+    against a rebuild from the live lock is a change of what the comparison targets and not a
+    relaxation of it: today the two targets are the same bytes, and both ends are byte-pinned.
+    """
+    frozen = FROZEN_SBOM_PATH.read_bytes()
+    manifest = json.loads((RELDIR / MANIFEST_NAME).read_bytes())
+    members = {entry["filename"]: entry["sha256"] for entry in manifest["members"]}
+    assert sha256_hex(frozen) == FROZEN_SBOM_SHA256
+    assert members["sbom.cdx.json"] == FROZEN_SBOM_SHA256
+    assert sha256_hex((RELDIR / MANIFEST_NAME).read_bytes()) == FROZEN_MANIFEST_SHA256
+    assert sha256_hex((RELDIR / CONTRACT_NAME).read_bytes()) == FROZEN_CONTRACT_SHA256
+    # Past the frozen release version the tool resolves the member to those very bytes.
+    assert TOOL._is_historical(REPO)
+    assert TOOL._sbom_bytes(REPO) == frozen
+
+
+def test_the_install_contract_pins_the_versions_the_frozen_sbom_records() -> None:
+    """The install guide and contract are anchored to a frozen record, not to nothing.
+
+    Their only lock-derived content is numpy/pandas/pyarrow, and past the frozen release version
+    those versions come from the committed v1.1.0 SBOM's ``components[]`` — an artifact the stack
+    freeze table pins byte-exactly and ``tools/release_evidence.py --check`` identity-checks.
+    """
+    pins = _frozen_sbom_pins()
+    assert set(pins) == set(TOOL.RUNTIME_DEP_NAMES)
+    contract = json.loads((RELDIR / CONTRACT_NAME).read_bytes())
+    recorded = {d["name"]: d["locked_version"] for d in contract["required_runtime_dependencies"]}
+    assert recorded == pins
+    assert TOOL._release_locked_versions(REPO, TOOL.RUNTIME_DEP_NAMES) == pins
+    guide = TOOL.render_install_md(REPO)
+    for name, version in pins.items():
+        assert f"{name}=={version}".encode() in guide
+
+
+def test_a_declared_dependency_cannot_invalidate_the_frozen_payload_manifest(
+    tmp_path: Path,
+) -> None:
+    """The regression this treatment exists for, driven through the real ``check``.
+
+    One registry-sourced entry in ``uv.lock`` is enough to change what ``build_sbom`` emits. The
+    frozen payload manifest registered the hash of the SBOM release v1.1.0 shipped, so that
+    difference is not drift in the manifest — and reporting it as drift sends an operator to
+    ``write-manifests``, which reissues bytes the stack freeze table records as immutable.
+    """
+    root = _mirror(tmp_path)
+    before = _frozen_snapshot(root)
+    _declare_a_dependency(root)
+
+    # Not a no-op test: a rebuild from the mutated lock genuinely differs from the frozen record.
+    rebuilt = canonical_json_bytes(TOOL._evidence.build_sbom(root))
+    assert "nardis-registry-extra" in {c["name"] for c in json.loads(rebuilt)["components"]}
+    assert sha256_hex(rebuilt) != FROZEN_SBOM_SHA256
+
+    assert TOOL.check(root) == []
+    assert _frozen_snapshot(root) == before
+    assert before["release/v1.1.0/sbom.cdx.json"] == FROZEN_SBOM_SHA256
+    assert before[f"release/private/v1.1.0/{MANIFEST_NAME}"] == FROZEN_MANIFEST_SHA256
+
+
+def test_a_runtime_dependency_upgrade_cannot_invalidate_the_frozen_payload_manifest(
+    tmp_path: Path,
+) -> None:
+    """The same for the install contract and install guide, whose lock coupling is a version bump.
+
+    Both embed the locked numpy/pandas/pyarrow versions, so upgrading one used to report the two
+    frozen artifacts stale. They record release v1.1.0's pins; a later tree's pins are a different
+    release's fact and belong to the live inventories that own the current lock.
+    """
+    root = _mirror(tmp_path)
+    before = _frozen_snapshot(root)
+    bumped = _upgrade_numpy(root)
+
+    # Not a no-op test: the live lock really moved, and only the frozen record held still.
+    assert TOOL._locked_versions(root, TOOL.RUNTIME_DEP_NAMES)["numpy"] == bumped
+    assert TOOL._release_locked_versions(root, TOOL.RUNTIME_DEP_NAMES) == _frozen_sbom_pins()
+
+    assert TOOL.check(root) == []
+    assert _frozen_snapshot(root) == before
+    assert before[f"release/private/v1.1.0/{CONTRACT_NAME}"] == FROZEN_CONTRACT_SHA256
+
+
+def test_at_the_frozen_release_version_the_live_lock_is_still_what_reproduces(
+    tmp_path: Path,
+) -> None:
+    """Nothing changed for a tree that *is* v1.1.0 — the strict live-reproduction path is intact.
+
+    Stamping the mirror back to the release version puts every artifact back on the live rebuild,
+    where a mutated lock is real drift and must be reported. (The source-anchor problems this stub
+    also reports are expected: the mirror carries no ``src/``. Only the lock-derived gates are under
+    test here.)
+    """
+    root = _mirror(tmp_path)
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text(encoding="utf-8").replace(
+            f'version = "{TOOL._active_version(root)}"', f'version = "{TOOL.VERSION}"', 1
+        ),
+        encoding="utf-8",
+    )
+    assert not TOOL._is_historical(root)
+    _declare_a_dependency(root)
+    _upgrade_numpy(root)
+
+    problems = TOOL.check(root)
+
+    assert "manifest sbom member does not reproduce" in problems
+    assert "manifest install-guide member does not reproduce" in problems
+    assert f"{CONTRACT_NAME} is stale; regenerate with `write-manifests`" in problems
+    assert _frozen_snapshot(root)["release/v1.1.0/sbom.cdx.json"] == FROZEN_SBOM_SHA256
+
+
+# --------------------------------------------------------------------------- #
+# ...and the recorded identity is still validated strictly: tampering fails     #
+# --------------------------------------------------------------------------- #
+def _rewrite_manifest_member(root: Path, filename: str, digest: str) -> None:
+    path = root / "release" / "private" / "v1.1.0" / MANIFEST_NAME
+    manifest = json.loads(path.read_bytes())
+    for entry in manifest["members"]:
+        if entry["filename"] == filename:
+            entry["sha256"] = digest
+            break
+    else:  # pragma: no cover - the member is always listed
+        raise AssertionError(f"{filename} is not a registered member")
+    path.write_bytes(canonical_json_bytes(manifest))
+
+
+def test_check_still_fails_on_a_falsified_sbom_member_hash(tmp_path: Path) -> None:
+    """Not rebuilding from the live lock is not the same as not checking."""
+    root = _mirror(tmp_path)
+    _rewrite_manifest_member(root, "sbom.cdx.json", "0" * 64)
+
+    assert "manifest sbom member does not reproduce" in TOOL.check(root)
+
+
+def test_check_still_fails_on_a_falsified_install_guide_member_hash(tmp_path: Path) -> None:
+    root = _mirror(tmp_path)
+    _rewrite_manifest_member(root, "PRIVATE_INSTALL.md", "0" * 64)
+
+    assert "manifest install-guide member does not reproduce" in TOOL.check(root)
+
+
+def test_check_still_fails_on_a_falsified_frozen_sbom(tmp_path: Path) -> None:
+    """Coverage the live-rebuild comparison did not have, and the frozen comparison does.
+
+    The committed ``release/v1.1.0/sbom.cdx.json`` is now the authority this gate reads, so it is
+    also now something this gate can catch being edited: its bytes and the member hash the frozen
+    payload manifest registered have to agree, and neither may be reissued.
+    """
+    root = _mirror(tmp_path)
+    frozen = root / "release" / "v1.1.0" / "sbom.cdx.json"
+    doc = json.loads(frozen.read_bytes())
+    doc["components"].append(
+        {
+            "type": "library",
+            "name": "zzz-smuggled",
+            "version": "1.0.0",
+            "purl": "pkg:pypi/zzz-smuggled@1.0.0",
+        }
+    )
+    frozen.write_bytes(canonical_json_bytes(doc))
+
+    assert "manifest sbom member does not reproduce" in TOOL.check(root)
+
+
+def test_check_still_fails_when_a_falsified_frozen_sbom_moves_a_runtime_pin(
+    tmp_path: Path,
+) -> None:
+    """Falsifying the pin source does not quietly become the new expectation.
+
+    The install contract and the install guide hash are frozen too, so moving numpy's version in
+    the record they are anchored to fails both of them rather than redefining them.
+    """
+    root = _mirror(tmp_path)
+    frozen = root / "release" / "v1.1.0" / "sbom.cdx.json"
+    doc = json.loads(frozen.read_bytes())
+    for component in doc["components"]:
+        if component["name"] == "numpy":
+            component["version"] = "2.5.2"
+            component["purl"] = "pkg:pypi/numpy@2.5.2"
+    frozen.write_bytes(canonical_json_bytes(doc))
+
+    problems = TOOL.check(root)
+
+    assert f"{CONTRACT_NAME} is stale; regenerate with `write-manifests`" in problems
+    assert "manifest install-guide member does not reproduce" in problems
+    assert "manifest sbom member does not reproduce" in problems
+
+
+def test_check_still_fails_on_a_falsified_install_contract_pin(tmp_path: Path) -> None:
+    root = _mirror(tmp_path)
+    path = root / "release" / "private" / "v1.1.0" / CONTRACT_NAME
+    contract = json.loads(path.read_bytes())
+    for entry in contract["required_runtime_dependencies"]:
+        if entry["name"] == "numpy":
+            entry["locked_version"] = "2.5.2"
+    path.write_bytes(canonical_json_bytes(contract))
+
+    assert f"{CONTRACT_NAME} is stale; regenerate with `write-manifests`" in TOOL.check(root)
+
+
+def test_a_frozen_sbom_missing_a_pinned_runtime_dependency_fails_closed(tmp_path: Path) -> None:
+    """The pin lookup refuses rather than defaulting if the record cannot answer."""
+    root = _mirror(tmp_path)
+    frozen = root / "release" / "v1.1.0" / "sbom.cdx.json"
+    doc = json.loads(frozen.read_bytes())
+    doc["components"] = [c for c in doc["components"] if c["name"] != "numpy"]
+    frozen.write_bytes(canonical_json_bytes(doc))
+
+    with pytest.raises(TOOL.PrivateReleaseError, match="no locked version for"):
+        TOOL._release_locked_versions(root, TOOL.RUNTIME_DEP_NAMES)
+
+
+def test_the_frozen_records_stay_byte_pinned_by_the_stack_freeze_table() -> None:
+    """Provenance is not weakened by going historical: the bytes stay pinned, immutably.
+
+    ``research/v2ab/stack_freeze_table.json`` records each of these paths as ``immutable`` and ships
+    no writer. Making the artifacts genuinely immutable is what makes that recorded claim true.
+    """
+    table = json.loads((REPO / "research" / "v2ab" / "stack_freeze_table.json").read_bytes())
+    entries = {e["path"]: e for e in table["entries"]}
+    for relpath, expected in (
+        ("release/v1.1.0/sbom.cdx.json", FROZEN_SBOM_SHA256),
+        (f"release/private/v1.1.0/{MANIFEST_NAME}", FROZEN_MANIFEST_SHA256),
+        (f"release/private/v1.1.0/{CONTRACT_NAME}", FROZEN_CONTRACT_SHA256),
+    ):
+        data = (REPO / relpath).read_bytes()
+        assert entries[relpath]["immutability"] == "immutable"
+        assert entries[relpath]["byte_count"] == len(data)
+        assert entries[relpath]["sha256"] == sha256_hex(data) == expected
 
 
 # --------------------------------------------------------------------------- #
