@@ -1,0 +1,38 @@
+{
+  "determinism": "fixed timestamps; no wall clock, no network, no market data",
+  "kind": "v2f_kill_switch_qualification",
+  "mechanism": "eth_research.shadow.kill_switch.LatchingKillSwitch",
+  "money_at_risk": false,
+  "probe_count": 5,
+  "probes": [
+    {
+      "observed": "require_clear() returned",
+      "probe": "armed_switch_permits"
+    },
+    {
+      "observed": "KillSwitchTripped",
+      "probe": "tripped_switch_blocks"
+    },
+    {
+      "observed": "trip_count=2, first reason preserved",
+      "probe": "latches_and_preserves_first_reason"
+    },
+    {
+      "observed": "FractionalValidationError",
+      "probe": "reset_requires_a_reason"
+    },
+    {
+      "observed": "require_clear() returned",
+      "probe": "explicit_reset_rearms"
+    }
+  ],
+  "properties_qualified": [
+    "armed switch permits",
+    "tripped switch blocks every intent",
+    "latches: a re-trip does not un-latch and does not overwrite the first reason",
+    "reset refuses an empty reason",
+    "explicit reset re-arms"
+  ],
+  "qualified_on": "2026-07-29",
+  "schema_version": 1
+}
