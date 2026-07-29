@@ -330,13 +330,23 @@ def test_the_sealed_ledgers_are_still_byte_empty_after_building_the_candidate() 
 
 # --- 6. the preregistration exists, binds the source, and claims nothing ---------------------
 
-PREREG_PATH = REPO_ROOT / "governance/v2f/adaptive_expert_mixer_v1_preregistration.json"
+#: The original record. Preserved byte-identical; superseded, never edited.
+PREREG_V1_PATH = REPO_ROOT / "governance/v2f/adaptive_expert_mixer_v1_preregistration.json"
+#: The ACTIVE record. v2 supersedes v1 after the pre-freeze semantic red team (V2F-MSF-1/2).
+PREREG_PATH = REPO_ROOT / "governance/v2f/adaptive_expert_mixer_v1_preregistration_v2.json"
 
 
 def _prereg() -> dict[str, object]:
     import json
 
     parsed: dict[str, object] = json.loads(PREREG_PATH.read_text(encoding="utf-8"))
+    return parsed
+
+
+def _prereg_v1() -> dict[str, object]:
+    import json
+
+    parsed: dict[str, object] = json.loads(PREREG_V1_PATH.read_text(encoding="utf-8"))
     return parsed
 
 
@@ -386,3 +396,116 @@ def test_the_preregistration_claims_no_performance() -> None:
     joined = " ".join(str(d) for d in disclaimers)
     assert "never been measured" in joined
     assert "unevaluated, which is a different state" in joined
+
+
+# --- 7. V2F-MSF-1: the preregistered prior holds where it is claimed to hold ------------------
+#
+# Before the fix, run_mixer applied the full Hedge update across the warm-up. trend_signal_at
+# returns 0.0 before its horizon, bitwise identical to cash's hard-coded 0.0, so the two weights
+# moved in lockstep for all 200 bars and the trend expert inherited cash's record for an opinion
+# it never expressed. The vector entering the first tradeable bar sat 0.4983 total-variation from
+# uniform with always_long at exactly 0.000000. These tests fail against that code.
+
+
+def _uniform() -> np.ndarray:
+    return np.full(len(EXPERT_NAMES), 1.0 / len(EXPERT_NAMES))
+
+
+@pytest.mark.parametrize("seed", [7, 19, 101, 2024])
+def test_the_first_tradeable_bar_starts_from_the_preregistered_uniform_prior(seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    closes = 100.0 * np.exp(np.cumsum(rng.normal(0.0002, 0.02, WARMUP_BARS + 300)))
+    entering = np.array(run_mixer(closes)[WARMUP_BARS].weights)
+    assert np.array_equal(entering, _uniform()), (
+        f"weights entering the first tradeable bar are not uniform 1/N: {entering}"
+    )
+
+
+def test_no_expert_is_charged_for_a_bar_in_which_it_had_no_opinion() -> None:
+    """Every warm-up weight vector must still be the prior — nothing is learned from sentinels."""
+    rng = np.random.default_rng(7)
+    closes = 100.0 * np.exp(np.cumsum(rng.normal(0.0002, 0.02, WARMUP_BARS + 300)))
+    for step in run_mixer(closes)[: WARMUP_BARS + 1]:
+        assert np.array_equal(np.array(step.weights), _uniform())
+
+
+def test_control_the_weights_do_move_once_trading_begins() -> None:
+    """The control. Suppressing the update entirely would satisfy every assertion above."""
+    rng = np.random.default_rng(7)
+    closes = 100.0 * np.exp(np.cumsum(rng.normal(0.0002, 0.02, WARMUP_BARS + 300)))
+    final = np.array(run_mixer(closes)[-1].weights)
+    assert not np.array_equal(final, _uniform()), "weights never moved; the mixture learns nothing"
+    assert abs(float(final.sum()) - 1.0) < 1e-12
+
+
+def test_learning_starts_at_the_full_anytime_rate_not_a_decayed_one() -> None:
+    """``hedge_rounds`` counts rounds played, so the first real update uses eta(1), not eta(201).
+
+    Indexing the rate by absolute bar would hand the first genuine round a rate an order of
+    magnitude smaller than the bound prescribes, discarding the early adaptivity it exists for.
+    """
+    assert _eta(1) > 3.0
+    assert _eta(WARMUP_BARS + 1) < 0.3
+
+    rng = np.random.default_rng(7)
+    closes = 100.0 * np.exp(np.cumsum(rng.normal(0.0002, 0.02, WARMUP_BARS + 300)))
+    steps = run_mixer(closes)
+    # One round played between the first and second tradeable bars: the step must be eta(1)-sized,
+    # which for a 0/1 loss means a charged expert loses a factor exp(-eta(1)) before renormalizing.
+    before = np.array(steps[WARMUP_BARS].weights)
+    after = np.array(steps[WARMUP_BARS + 1].weights)
+    ratios = after / before
+    spread = float(ratios.max() / ratios.min())
+    assert spread == pytest.approx(math.exp(_eta(1)), rel=1e-9), (
+        "the first Hedge round did not use the full anytime rate"
+    )
+
+
+# --- 8. the supersession is append-only ------------------------------------------------------
+
+
+def test_the_superseded_record_is_preserved_byte_identical() -> None:
+    """Append-only means the v1 record still exists and still hashes to what v2 says it does."""
+    import hashlib
+
+    supersedes = _prereg()["supersedes"]
+    assert isinstance(supersedes, dict)
+    assert supersedes["relpath"] == "governance/v2f/adaptive_expert_mixer_v1_preregistration.json"
+    actual = hashlib.sha256(PREREG_V1_PATH.read_bytes()).hexdigest()
+    assert actual == supersedes["sha256"], "the superseded record was edited, not superseded"
+
+
+def test_the_superseded_record_still_pins_the_source_it_described() -> None:
+    """v1's pin must now be stale — that staleness is the evidence the code actually changed."""
+    import hashlib
+
+    v1_pin = _prereg_v1()["source_pin_sha256"]
+    assert isinstance(v1_pin, dict)
+    live = hashlib.sha256((REPO_ROOT / "src/eth_research/v2f/mixer.py").read_bytes()).hexdigest()
+    assert v1_pin["src/eth_research/v2f/mixer.py"] != live
+    supersedes = _prereg()["supersedes"]
+    assert isinstance(supersedes, dict)
+    assert supersedes["superseded_source_pin"] == v1_pin["src/eth_research/v2f/mixer.py"]
+
+
+def test_the_supersession_names_both_findings_and_stays_unevaluated() -> None:
+    record = _prereg()
+    corrections = record["corrections_from_v1"]
+    assert isinstance(corrections, list)
+    findings = {str(c["finding"]) for c in corrections}
+    assert findings == {"V2F-MSF-1", "V2F-MSF-2"}
+    assert record["evaluation_status"] == "not_evaluated"
+    assert record["one_shot_spent"] is False
+    assert record["version"] == 2
+
+
+def test_the_superseding_prior_is_weaker_not_stronger() -> None:
+    """A supersession that improved the story would be exactly the abuse this guards against."""
+    prior = str(_prereg()["honest_prior_stated_before_any_result"])
+    assert "WEAKER than v1" in prior
+    assert "No replacement mechanism is claimed" in prior
+    not_claimed = _prereg()["explicitly_not_claimed"]
+    assert isinstance(not_claimed, list)
+    disclaimers = " ".join(str(d) for d in not_claimed)
+    assert "Neither was chosen because it performed better" in disclaimers
+    assert "adversarial-refutation stage has not run" in disclaimers

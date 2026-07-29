@@ -167,6 +167,7 @@ def run_mixer(closes: np.ndarray) -> list[MixerStep]:
     n = len(EXPERT_NAMES)
     weights = np.full(n, 1.0 / n, dtype=float)
     steps: list[MixerStep] = []
+    hedge_rounds = 0
 
     for t in range(closes.shape[0]):
         exposures = _expert_exposures_at(closes[: t + 1])
@@ -182,10 +183,25 @@ def run_mixer(closes: np.ndarray) -> list[MixerStep]:
         )
 
         # Resolve bar t only once bar t+1's close is known, then update for bar t+1.
-        if t + 1 < closes.shape[0]:
+        #
+        # Learning begins when trading begins (V2F-MSF-1). Before WARMUP_BARS an unwarmed expert
+        # returns a sentinel 0.0 that is indistinguishable from a genuine flat opinion, so
+        # updating here charges it for a view it never expressed -- and because 0.0 is bitwise
+        # identical to cash's exposure, the trend expert simply inherited cash's record. Running
+        # the update across the warm-up left the weight vector 0.4983 total-variation from the
+        # preregistered uniform prior at the first tradeable bar, with one expert already at
+        # exactly zero. The prior now holds where it is claimed to hold.
+        #
+        # ``hedge_rounds`` counts rounds actually played, not bars elapsed. The anytime rate
+        # sqrt(8 ln N / t) is derived for t = rounds played; indexing it by absolute bar would
+        # start real learning at eta(201) ~ 0.235 instead of eta(1) ~ 3.330, throwing away the
+        # early-round adaptivity the bound exists to provide. No constant is introduced:
+        # WARMUP_BARS is already the max over expert warm-ups.
+        if t + 1 < closes.shape[0] and t >= WARMUP_BARS:
             realized = float(closes[t + 1] / closes[t] - 1.0)
             losses = _bar_losses(exposures, realized)
-            weights = weights * np.exp(-_eta(t + 1) * losses)
+            hedge_rounds += 1
+            weights = weights * np.exp(-_eta(hedge_rounds) * losses)
             total = float(weights.sum())
             if total <= 0.0 or not math.isfinite(total):
                 raise MixerError("hedge weights collapsed to a non-normalizable state")
@@ -244,7 +260,8 @@ ADAPTIVE_EXPERT_MIXER_SPEC = CandidateSpecification(
     fixed_parameters={
         "experts": list(EXPERT_NAMES),
         "weight_update": "hedge_multiplicative",
-        "learning_rate": "anytime_sqrt_8_ln_N_over_t",
+        "learning_rate": "anytime_sqrt_8_ln_N_over_hedge_rounds_played",
+        "learning_start": "first_tradeable_bar",
         "initial_weights": "uniform",
         "loss": "zero_one_directional_with_flat_bar_neutral",
         "decision_rule": "weighted_majority_strict_half",
