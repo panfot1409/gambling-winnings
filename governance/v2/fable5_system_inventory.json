@@ -118,6 +118,7 @@
     "governance/v2c/qualifications/v2c_offline_operational_qualification_run_001/oq_report.md": "9658ffc1feda560fe6434401ada1bbf0b264921ae3217c8689f391896c7c0c4e",
     "governance/v2c/qualifications/v2c_offline_operational_qualification_run_001/oq_result.json": "739cec5dca07b984d6fb624384e490dcab7722c5341053790d5ba8cd1945b897",
     "governance/v2d/prospective_activation.json": "6f6d7410a05bd21515fb398e73b99aca7ef6dc1574f8b2aa88899827b809d746",
+    "governance/v2f/adaptive_expert_mixer_v1_preregistration.json": "cb7462c7dcd4a70e8d4ba63cd1468abcffcbddaceb7dfc95083182d57f0f1617",
     "governance/v2f/containment.json": "bf805c6bfa2d5421d976b97fd7f9843ad2dccc711eb282b0819880a40e21d587",
     "governance/v2f/repository_visibility.json": "1bf7301617a664725199af597b2e2c053edb7f5128a4b8545a4c7e599795c08c",
     "release/private/v1.1.0/README.md": "44635eaaf44ad252c788e1e463d1c4a5e5b59d592f8931e9ce370b951a3071ab",
@@ -477,6 +478,8 @@
     "src/eth_research/v2e/render.py",
     "src/eth_research/v2e/server.py",
     "src/eth_research/v2e/state.py",
+    "src/eth_research/v2f/__init__.py",
+    "src/eth_research/v2f/mixer.py",
     "src/eth_research/walkforward.py"
   ],
   "public_api": [
@@ -565,8 +568,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "3d083ec0b7c9affd346c7e2c0ac16ba5b3170aa76b8c65ff2d94230ee26b4258",
-  "tracked_file_count": 1054,
+  "surface_digest": "f238aa8881454dca54b40e53fe1318498bbbf216b6799f72b4b48dd542894a5d",
+  "tracked_file_count": 1058,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
