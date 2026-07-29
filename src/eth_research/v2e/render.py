@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import html
 
-from eth_research.v2e.state import REHEARSAL_BANNER, DashboardState
+from eth_research.v2e.state import REHEARSAL_BANNER, CandidatePanel, DashboardState
 
 _CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
 
@@ -54,6 +54,38 @@ def _rows(pairs: list[tuple[str, str]]) -> str:
 def _flag(value: bool, *, good_when: bool) -> str:
     css = "ok" if value is good_when else "blocked"
     return f'<span class="{css}">{"true" if value else "false"}</span>'
+
+
+def _visibility(private_local_only: bool) -> str:
+    """The visibility line, derived rather than asserted.
+
+    This was the literal ``private / local-only``, which the page displayed unconditionally.
+    A dashboard that claims privacy without checking is precisely the surface that would
+    reassure an operator during a containment breach, so the claim now follows the gate.
+    """
+    if private_local_only:
+        return '<span class="ok">private / local-only</span>'
+    return '<span class="blocked">NOT PRIVATE — repository visibility gate does not hold</span>'
+
+
+def _paper_system_summary(candidate: CandidatePanel) -> str:
+    """One-line paper-system summary derived from the candidate panel, not asserted.
+
+    The page previously carried the literal ``blocked — no eligible candidate``. That is a
+    claim about evidence, and it was true only by coincidence: the state builder refuses when
+    an eligible candidate exists, so the literal was never displayed beside a contradicting
+    value. Safety that depends on a guard in another module is not safety this surface can
+    claim, so each branch is now reached from the value it describes.
+
+    Ordered most-severe first: with several true at once the operator must read the strongest.
+    """
+    if candidate.paper_trading_active:
+        return '<span class="blocked">PAPER TRADING ACTIVE</span>'
+    if candidate.paper_activation_authorized:
+        return '<span class="blocked">activation authorized — not yet started</span>'
+    if candidate.eligible_candidate_present:
+        return '<span class="blocked">blocked — eligible candidate, activation unmet</span>'
+    return '<span class="blocked">blocked — no eligible candidate</span>'
 
 
 def render_html(state: DashboardState, *, rehearsal: bool = False) -> str:
@@ -104,7 +136,7 @@ def render_html(state: DashboardState, *, rehearsal: bool = False) -> str:
             [
                 ("Version", _e(s.identity.version)),
                 ("Commit", f"<code>{_e(s.identity.commit)}</code>"),
-                ("Visibility", '<span class="ok">private / local-only</span>'),
+                ("Visibility", _visibility(s.identity.private_local_only)),
                 ("Last refresh (UTC)", _e(s.generated_at)),
             ]
         )
@@ -121,7 +153,7 @@ def render_html(state: DashboardState, *, rehearsal: bool = False) -> str:
                     "Data collection",
                     '<span class="ok">active (review-only, draft proposals)</span>',
                 ),
-                ("Paper system", '<span class="blocked">blocked — no eligible candidate</span>'),
+                ("Paper system", _paper_system_summary(s.candidate)),
                 ("Sell-ready", _flag(s.candidate.sell_ready, good_when=True)),
                 (
                     "Eligible candidate",

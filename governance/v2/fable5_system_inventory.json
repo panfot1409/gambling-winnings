@@ -573,7 +573,7 @@
     }
   },
   "surface_digest": "fc3ef56ce89fb985faaadf75a8aa534e9121a22a8f74eb5772c41e942f855db2",
-  "tracked_file_count": 1064,
+  "tracked_file_count": 1065,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,
