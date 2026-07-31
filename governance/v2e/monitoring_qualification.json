@@ -1,0 +1,38 @@
+{
+  "determinism": "fixed timestamps; no wall clock, no network, no market data",
+  "kind": "v2f_monitoring_qualification",
+  "mechanism": "eth_research.shadow.monitoring",
+  "money_at_risk": false,
+  "probe_count": 5,
+  "probes": [
+    {
+      "observed": "600s->None, 599s->stale_market_data/warning",
+      "probe": "staleness_boundary_is_strict"
+    },
+    {
+      "observed": "10%->None, 11%->drawdown_breach/critical, 0%->None",
+      "probe": "drawdown_boundary_is_strict_and_critical"
+    },
+    {
+      "observed": "risk limits breached: max_gross_exposure, max_turnover",
+      "probe": "risk_breach_names_every_breached_limit"
+    },
+    {
+      "observed": "kill switch tripped: synthetic qualification trip",
+      "probe": "kill_switch_alert_is_critical_and_carries_reason"
+    },
+    {
+      "observed": "4/4 exact",
+      "probe": "alerts_round_trip_through_the_strict_parser"
+    }
+  ],
+  "properties_qualified": [
+    "staleness alerts strictly past the budget, not at it",
+    "drawdown alerts strictly past the limit, not at it, and is critical",
+    "risk breach is silent with nothing breached and names every breached limit",
+    "kill-switch alert is critical and preserves the trip reason",
+    "every alert round-trips through the strict parser unchanged"
+  ],
+  "qualified_on": "2026-07-29",
+  "schema_version": 1
+}

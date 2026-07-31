@@ -1,0 +1,126 @@
+{
+  "candidate_id": "adaptive_expert_mixer_v1",
+  "corrections_from_v1": [
+    {
+      "claim_in_v1": "initial_weights: uniform 1/N, the maximum-entropy prior",
+      "finding": "V2F-MSF-1",
+      "status": "code corrected to match the claim",
+      "what_changed": "The Hedge update is suppressed for every bar before the first tradeable bar -- learning begins when trading begins. hedge_rounds counts rounds actually played rather than bars elapsed, because the anytime rate sqrt(8 ln N / t) is derived for t = rounds played; indexing by absolute bar would start real learning at eta(201) instead of eta(1). No constant is introduced: WARMUP_BARS was already the max over expert warm-ups. Weights entering the first tradeable bar are now exactly uniform 1/N.",
+      "what_was_wrong": "target_positions masked the warm-up OUTPUT but run_mixer ran the full Hedge update across it. trend_signal_at returns 0.0 before its horizon, bitwise identical to cash's hard-coded 0.0, so the two weights moved in lockstep for all 200 warm-up bars and the trend expert carried cash's record for an opinion it never expressed. The weight vector entering the first tradeable bar was 0.4983 total-variation from uniform with always_long at exactly 0.000000, and eta had already decayed 3.3302 -> 0.2355 so a crushed expert could not recover. The uniform prior was true only at bar 0, which is never traded."
+    },
+    {
+      "claim_in_v1": "The cash expert is the only element making the pool strictly richer than any constituent ... Any genuine improvement would have to come from there.",
+      "finding": "V2F-MSF-2",
+      "status": "claim withdrawn and replaced; the loss function is unchanged",
+      "what_changed": "The preregistered mechanism claim only. The 0/1 directional loss is the textbook Hedge loss the regret bound is stated for; replacing it with a magnitude-weighted loss would be a different algorithm needing its own derivation, and selecting that weighting after observing which behaves better on synthetic paths is the parameter-selection-after-viewing-results this project forbids.",
+      "what_was_wrong": "Under the 0/1 directional loss, log(w_cash / w_always_long) is a bar-COUNT race with no magnitude term, so cash gains weight only when down-bars outnumber up-bars. That is not the condition 'holding cash would have been better'. On a negatively skewed path -- frequent small gains, occasional large losses, the defining shape of crypto returns -- the two conditions come apart: a synthetic series with 567 up bars against 332 down bars and a buy-and-hold return of -82.5% drove cash to exactly 0.000000 while the mixture stayed long on 100% of tradeable bars. Two series sharing one sign path, one ending +5.9% and one ending -100%, produced final w_cash/w_always_long agreeing to fourteen significant figures."
+    }
+  ],
+  "degenerate_case_findings": {
+    "all_equal_pool": "identical experts earn identical losses; weights stay exactly uniform",
+    "all_wrong_pool": "charging every expert every round leaves weights exactly uniform. This is the honest demonstration of the RELATIVE guarantee: a uniformly bad pool yields a uniformly weighted bad mixture. Hedge cannot manufacture edge.",
+    "duplicate_bar": "a repeated close is a zero return, so no weight moves",
+    "exact_half_tie": "mixture_weight == 0.5 resolves FLAT via strict '>', deterministically",
+    "hostile_input": "NaN, +/-Inf, zero and negative closes are refused with distinct messages",
+    "note": "\u00a75 lists degenerate cases that must be checked before freeze. All were executed and none found a defect. Recorded as a result rather than as an absence of testing. Regression tests live in tests/test_v2f_mixer_degenerate_cases.py.",
+    "traded_exposure": "over random paths the value reaching the engine takes exactly {0.0, 1.0}; mixture_weight genuinely takes intermediate values, so the distinction is real and not vacuous",
+    "zero_return": "0.0 and -0.0 charge nobody; treating zero as down would hand cash a free win"
+  },
+  "evaluation_status": "not_evaluated",
+  "expert_provenance": {
+    "always_long": "passive benchmark reference, not a rejected candidate",
+    "cash": "new to this candidate; the only expert that can decline to participate",
+    "meanrev_zscore": "v2a_meanrev_zscore_accumulation (research_stage_rejected), parameters unchanged",
+    "single_horizon_sma_gate": "v2a_trend_regime_single_horizon (research_stage_rejected), parameters unchanged"
+  },
+  "experts": [
+    "meanrev_zscore",
+    "always_long",
+    "single_horizon_sma_gate",
+    "cash"
+  ],
+  "explicitly_not_claimed": [
+    "That this candidate has any edge. It has never been measured.",
+    "That it is rejected. It is unevaluated, which is a different state and must not be relabelled.",
+    "Any performance number, on any partition, of any kind.",
+    "That the two corrections below improve the candidate. MSF-1 restores the prior the record already claimed; MSF-2 withdraws a claim. Neither was chosen because it performed better, and neither has been measured against anything.",
+    "That this is the complete set of semantic defects. Nine of thirteen red-team agents died on an account spend limit before reporting, including every refutation agent; the adversarial-refutation stage has not run."
+  ],
+  "family": "online_expert_mixture",
+  "honest_prior_stated_before_any_result": "WEAK, and for a structural reason. Hedge-style mixtures carry a RELATIVE guarantee: bounded regret against the best single expert in hindsight. They do not manufacture edge. Three of the four experts are recorded in research/v2/negative_evidence_index.jsonl as research_stage_rejected, so if the pool is null the mixture's best realistic outcome is roughly as good as the least bad rejected expert, which qualifies under no honest criterion. The prior is now WEAKER than v1 stated. v1 named the cash expert as the one place a genuine improvement could come from; V2F-MSF-2 established that under a 0/1 directional loss cash gains weight only when down-bars outnumber up-bars, which is not the same as cash having been the better choice, and on a negatively skewed series the two come apart completely. The pool is therefore richer than any constituent only in a sense the loss function cannot reward on the return shape this candidate would be pointed at. No replacement mechanism is claimed. Recording this in advance is what stops a later reader from inventing a better story after the fact.",
+  "hypothesis": "Reallocating weight between a fixed pool of experts from their realized past performance beats the buy-and-hold benchmark on a lawful forward partition, where each fixed allocation in that pool did not. This is a claim about the ADAPTATION, not about any expert.",
+  "kind": "v2f_candidate_preregistration",
+  "no_fitted_constants": {
+    "decision_rule": "strictly more than half the weight -- this is what Weighted Majority IS, not a chosen threshold",
+    "expert_parameters": "frozen at their V2A pre-registered values; re-tuning would be new_parameter_selection",
+    "initial_weights": "uniform 1/N, the maximum-entropy prior, holding at the first TRADEABLE bar",
+    "learning_rate": "eta_t = sqrt(8 ln N / t), the standard anytime Hedge rate, derived from the regret bound, with t counting Hedge rounds actually played",
+    "learning_start": "the first tradeable bar; a bar in which an expert has no opinion is not a round",
+    "loss": "0/1 directional, flat bar charges nobody; no clip, scale, or normalization constant",
+    "warmup_bars": 200
+  },
+  "one_shot_spent": false,
+  "open_questions_not_answered_before_this_supersession": [
+    "Cost asymmetry: the 0/1 loss is computed gross, so turnover is invisible to the selector. Recorded in V2F-MSF-2; unchanged and still open.",
+    "An independent second implementation by a different author. The in-module scalar oracle agrees with the vectorized path, but it is not authored independently.",
+    "The adversarial-refutation stage of the \u00a710/\u00a722 agent tree, which has not run."
+  ],
+  "preregistered_on": "2026-07-29",
+  "schema_version": 1,
+  "signal_family": "weighted_majority_hedge",
+  "source_pin_sha256": {
+    "src/eth_research/v2f/mixer.py": "bca4159a621a247d24af67321d5ea2e6c416be0e73f25f11eb87cfaecdfd306d"
+  },
+  "specification_fingerprint": "f6bbcb8d364aa82c6d51fb50990adb32b835ade276a98565978777309ccee788",
+  "supersedes": {
+    "behaviour_identity_proof": {
+      "identical": true,
+      "method": "25 seeded GBM paths of 500 bars each driven through run_mixer; sha256 over every (weights, expert_exposures, mixture_weight, decision) tuple of every step, captured before and after the edit.",
+      "note": "The doc-only claim is proven by execution, not asserted in prose.",
+      "trajectory_sha256_after": "a3fdb82915bf2d9ee0f31a513350546297af6ee745fcae65e467836194383f5c",
+      "trajectory_sha256_before": "a3fdb82915bf2d9ee0f31a513350546297af6ee745fcae65e467836194383f5c"
+    },
+    "chain": [
+      {
+        "relpath": "governance/v2f/adaptive_expert_mixer_v1_preregistration.json",
+        "sha256": "cb7462c7dcd4a70e8d4ba63cd1468abcffcbddaceb7dfc95083182d57f0f1617",
+        "version": 1
+      },
+      {
+        "relpath": "governance/v2f/adaptive_expert_mixer_v1_preregistration_v2.json",
+        "sha256": "a4b7a8d05264630069fcbe1f0141b1cff6f127b4723a9b40fa12319cf22b94fb",
+        "version": 2
+      }
+    ],
+    "fingerprint_deliberately_unchanged": "specification_fingerprint stays f6bbcb8d364aa82c6d51fb50990adb32b835ade276a98565978777309ccee788, identical to v2. That is the evidence, not an oversight: v2 DID change the fingerprint (7608e9c9 -> f6bbcb8d) because MSF-1 changed the algorithm. This record changes no fixed parameter, so a changed fingerprint would falsely claim a new algorithm.",
+    "reason": "Directive \u00a74 requires exactly one frozen interpretation of 'fractional weighted exposure versus binary majority vote', and requires source, canonical JSON, documentation, scalar oracle, fingerprint, tests and dashboard to describe the same algorithm. The module docstring answered both ways: its rule paragraph described the binary majority vote, while its long-only/unlevered argument was stated about mixture_weight being in [0,1], which reads as a convex allocation. Both sentences were true; together they were ambiguous about the one thing an auditor most needs to know.",
+    "relpath": "governance/v2f/adaptive_expert_mixer_v1_preregistration_v2.json",
+    "sha256": "a4b7a8d05264630069fcbe1f0141b1cff6f127b4723a9b40fa12319cf22b94fb",
+    "superseded_record_is_preserved_byte_identical": true,
+    "superseded_source_pin": "82ccdf77c2ca41d3615260cf6a9d575ecc6bf669dfb9c10fba96db47b13bc949",
+    "what_changed": "Documentation only. The docstring now states explicitly that mixture_weight is an internal intermediate that is never traded, that the emitted position is the binary decision, and that long-only/unlevered follows because thresholding a value in [0,1] yields a position in {0,1}."
+  },
+  "supersession_is_lawful_because": [
+    "The candidate is unevaluated and one_shot_spent is false, so no result exists that this change could have been fitted to.",
+    "The v1 record is preserved byte-identical; this is an append-only supersession, not an edit.",
+    "Both changes were derived from the code and from synthetic series, never from a research partition.",
+    "MSF-1 makes the code match a claim v1 already made; it does not introduce a new claim.",
+    "MSF-2 withdraws a claim and states a weaker prior; it does not introduce a new mechanism."
+  ],
+  "version": 3,
+  "what_would_have_to_be_true_to_evaluate": [
+    "A completed third-party market-data rights assessment resolving redistribution.",
+    "An independently accepted containment and remediation review.",
+    "Repository privacy verified through the GitHub API at the time of lift.",
+    "A human recording active=false with lifted_by and lifted_on in governance/v2f/containment.json.",
+    "A NEW prospective partition under its own governance -- the closure's supersession_policy states it does not reopen the legacy partitions.",
+    "A separate human authorization for the evaluation itself, plus a new single-use evaluation ledger.",
+    "The open questions above answered, and the adversarial-refutation stage actually run."
+  ],
+  "why_not_evaluated": [
+    "No lawful, unconsumed, non-sealed research partition exists (docs/V2F_RESEARCH_PARTITION_DETERMINATION.md).",
+    "research/m3d/research_train_exhaustion.json classifies the historical partition exhausted_for_new_candidate_research.",
+    "research/v2/research_partition_closure.json forbids evaluate_new_candidate AND recombine_and_claim_new_trial by name; a mixture over rejected families is precisely the latter.",
+    "governance/v2f/containment.json is active, so no new partition can be acquired."
+  ]
+}

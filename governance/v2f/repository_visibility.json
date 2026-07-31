@@ -6,15 +6,36 @@
   "observed_visibility": "private",
   "observed_allow_forking": true,
   "observed_forks_count": 0,
-  "observed_at": "2026-07-28T11:33:55Z",
-  "observed_by": "V2F-R2 phase 0 live owner-action verification",
-  "observed_via": "GitHub REST API, repository search restricted to repo:panfot1409/gambling-winnings, full (non-minimal) response",
+  "observed_at": "2026-07-31T16:20:00Z",
+  "observed_by": "V2F terminal-completion live preflight, gh CLI 2.95.0 authenticated as panfot1409",
+  "observed_via": "GitHub REST API via `gh api repos/panfot1409/gambling-winnings`, full response, run from the owner's own workstation",
   "note": "This record states what the GitHub API reported, not what any committed policy document, PyPI classifier, README sentence or branch name claims. It is an observation with a timestamp, not a live check: whoever consumes it trusts that the named observer read the API at the stated time. Re-observe and replace this file whenever visibility changes.",
   "supersedes": "the previous derivation, which returned true whenever pyproject.toml contained the PyPI classifier 'Private :: Do Not Upload' — a classifier that governs PyPI uploads and carries no information about GitHub repository visibility. That derivation returned true while this repository was verifiably public.",
+  "exposure_history": [
+    {
+      "window": 1,
+      "observed_visibility": "public",
+      "opened_at": "on or before 2026-07-28T00:00:00Z",
+      "closed_at": "2026-07-28T11:33:55Z",
+      "cause": "pre-existing state discovered by V2F-R phase 0. The repository was public while redistributing third-party Coinbase market data with no committed rights assessment, and a scheduled workflow was adding more of that data weekly without human review.",
+      "note": "Returned to private by the owner the same day. This window is the reason governance/v2f/containment.json exists."
+    },
+    {
+      "window": 2,
+      "observed_visibility": "public",
+      "opened_at": "2026-07-29T22:36Z (approximate; first push with runs created was 22:37:52Z)",
+      "closed_at": "2026-07-31T16:06:02Z",
+      "cause": "the owner set the repository public deliberately, to obtain free GitHub Actions minutes after every workflow run on the private repository began failing at 2026-07-29T04:31Z",
+      "observed_by": "V2F session live API check on 2026-07-29 returned private:false, visibility:public, allow_forking:true",
+      "closed_evidence": "repository updated_at 2026-07-31T16:06:02Z; the 2026-07-31T16:20Z observation recorded above returned private:true with forks_count 0",
+      "outcome": "The exposure achieved nothing it was intended to achieve. Making the repository public did NOT restore GitHub Actions. Runs were created on 642564b and 827fccd, but every job completed in under ten seconds with zero steps and no runner assigned — the same account-level failure that had produced startup_failure while the repository was private. The blocker is account-level and visibility-independent.",
+      "note": "forks_count was 0 at close and no fork event is recorded, but privacy restoration does not recall clones, caches, scrapes or mirrors made during the window. The third-party redistribution-rights question this exposure touches remains OPEN, so containment stays active."
+    }
+  ],
   "prior_observation": {
     "observed_private": false,
     "observed_visibility": "public",
     "observed_at": "2026-07-28T00:00:00Z",
-    "note": "Recorded for the incident timeline. The repository was public when V2F-R phase 0 measured it, and was returned to private by the owner later the same day. Privacy restoration does not recall prior clones, caches, screenshots or forks."
+    "note": "Retained verbatim from the superseded record so the original incident timeline is not lost. The repository was public when V2F-R phase 0 measured it, and was returned to private by the owner later the same day. Privacy restoration does not recall prior clones, caches, screenshots or forks. See exposure_history for the complete two-window record."
   }
 }

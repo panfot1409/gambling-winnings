@@ -29,15 +29,49 @@ _ALL_FALSE = dataclasses.replace(
 )
 
 
+#: The exact live blocker set, pinned so drift in EITHER direction fails loudly.
+#:
+#: Nine of these eleven are one fact wearing nine names — no one-shot has nominated a candidate,
+#: so there is no fingerprint to freeze, no lineage to validate, no protocol to preregister.
+#: ``human_approval_artifact`` is the owner's activation signature, which is supposed to be
+#: absent until the very end. A lawful evaluation that nominates a candidate SHOULD break this
+#: test; updating it is then a deliberate act, which is the point.
+_EXPECTED_BLOCKERS = (
+    "eligible_nominated_candidate",
+    "immutable_candidate_fingerprint",
+    "valid_lineage",
+    "candidate_not_previously_rejected",
+    "paper_protocol_preregistered",
+    "risk_parameters_frozen",
+    "data_feed_configuration_frozen",
+    "cost_model_frozen",
+    "execution_simulator_frozen",
+    "paper_release_source_freeze",
+    "human_approval_artifact",
+)
+
+#: The six that hold today. ``kill_switch_qualified`` and ``monitoring_qualified`` joined this
+#: set when ``eth_research.v2f.qualification`` recorded their probe evidence; before that they
+#: were the only implementation-controlled blockers left.
+_EXPECTED_SATISFIED = (
+    "fable5_acceptance",
+    "no_unresolved_class_abd_defect",
+    "kill_switch_qualified",
+    "monitoring_qualified",
+    "sealed_ledgers_intact",
+    "repository_private",
+)
+
+
 class TestDerivation:
     def test_real_repo_rests_disabled_with_exact_blockers(self) -> None:
         requirements = derive_requirements(REPO_ROOT)
         state, blocking = derive_resting_state(requirements)
         assert state == "disabled"
-        assert "eligible_nominated_candidate" in blocking
-        assert "human_approval_artifact" in blocking
-        assert "kill_switch_qualified" in blocking
-        assert "monitoring_qualified" in blocking
+        assert set(blocking) == set(_EXPECTED_BLOCKERS)
+        for name in _EXPECTED_SATISFIED:
+            assert getattr(requirements, name) is True, f"{name} regressed to False"
+            assert name not in blocking
         # The two invariants that DO hold today:
         assert requirements.sealed_ledgers_intact is True
         # repository_private still derives True — but for a different and honest

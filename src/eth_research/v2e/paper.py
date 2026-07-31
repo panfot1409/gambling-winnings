@@ -172,17 +172,75 @@ _STAGE_PREREQUISITES: dict[str, tuple[str, ...]] = {
 }
 
 
+#: The stages, in order. Named separately so an emptied or reordered table is detectable
+#: rather than silently obeyed.
+_REQUIRED_STAGES: tuple[str, ...] = ("eligible", "frozen", "approved")
+
+#: Requirements that NO stage names, and which therefore reach the reported state only through
+#: the ``all_satisfied`` check at the end of :func:`derive_resting_state`.
+#:
+#: This gap predates the V2F-EC-003 repair and is the more serious half of it. The stage table
+#: covers 11 of the 17 requirements; before the final check existed, ``derive_resting_state``
+#: reported ``"approved"`` whenever those 11 held — **including with the repository public and
+#: the sealed ledgers broken**, because ``repository_private`` and ``sealed_ledgers_intact`` are
+#: in this list. Authorization was never affected (``request_activation_token`` requires all 17
+#: via the dataclass's own fields), but the reported state is what a human reads before
+#: approving, and it could read "approved" while two safety properties were false.
+#:
+#: Named explicitly rather than computed, so that moving a requirement into a stage — or adding
+#: an eighteenth requirement and forgetting it — is a test failure rather than a silent change.
+_STAGE_UNCOVERED_REQUIREMENTS: frozenset[str] = frozenset(
+    {
+        "fable5_acceptance",
+        "no_unresolved_class_abd_defect",
+        "kill_switch_qualified",
+        "monitoring_qualified",
+        "sealed_ledgers_intact",
+        "repository_private",
+    }
+)
+
+
 def _stage_satisfied(stage: str, requirements: PaperActivationRequirements) -> bool:
-    return all(getattr(requirements, name) is True for name in _STAGE_PREREQUISITES[stage])
+    """Is every prerequisite of ``stage`` met?
+
+    ``all(())`` is ``True``, so reducing over ``_STAGE_PREREQUISITES[stage]`` made that
+    rebindable dict the authority on what a stage requires. Emptying it reported the resting
+    state as ``"approved"`` while all seventeen requirements were ``False`` and all seventeen
+    were still listed as blockers — a state contradicting its own evidence, the same shape as
+    V2F-EC-001. Each condition below is named and checked on its own.
+    """
+    prerequisites = _STAGE_PREREQUISITES.get(stage)
+    if not prerequisites:
+        # An unknown stage, or a stage that requires nothing, satisfies nothing.
+        return False
+    field_names = {f.name for f in fields(PaperActivationRequirements)}
+    if not set(prerequisites) <= field_names:
+        return False
+    return all(getattr(requirements, name) is True for name in prerequisites)
 
 
 def derive_resting_state(requirements: PaperActivationRequirements) -> tuple[str, tuple[str, ...]]:
-    """Map requirements to the lifecycle resting state (never ``active``) + blockers."""
+    """Map requirements to the lifecycle resting state (never ``active``) + blockers.
+
+    This is a *reporting* function — authorization lives in :func:`request_activation_token` and
+    :func:`transition`, both of which reduce over the dataclass's own fields via
+    ``all_satisfied`` and so cannot be widened by editing a constant. But a human deciding
+    whether to approve reads this state, so a state that disagrees with its own blocker list
+    would be actively misleading. The final check below ties the two together: the top stage is
+    unreachable whenever anything is unmet, whatever the stage table says.
+    """
+    if set(_STAGE_PREREQUISITES) != set(_REQUIRED_STAGES):
+        return "disabled", requirements.unmet
     if not _stage_satisfied("eligible", requirements):
         return "disabled", requirements.unmet
     if not _stage_satisfied("frozen", requirements):
         return "eligible", requirements.unmet
     if not _stage_satisfied("approved", requirements):
+        return "frozen", requirements.unmet
+    if not requirements.all_satisfied:
+        # Reporting must never outrun authorization: if anything is unmet, "approved" is a lie
+        # regardless of how the stage table is arranged.
         return "frozen", requirements.unmet
     return "approved", requirements.unmet
 

@@ -37,6 +37,51 @@ def copy_lockfiles(dst: Path) -> Path:
     return dst
 
 
+#: Every interpreter-observable field that must be compared exactly.
+IDENTITY_FIELDS: tuple[str, ...] = (
+    "python_version",
+    "python_implementation",
+    "python_cache_tag",
+    "os_family",
+    "machine",
+    "package_version",
+    "numpy_version",
+    "pandas_version",
+    "pyarrow_version",
+)
+
+#: The identity fields ``verify_runtime_snapshot`` compares. It deliberately ignores
+#: ``package_version`` so a later package over the same frozen runtime still verifies.
+SNAPSHOT_FIELDS: tuple[str, ...] = tuple(f for f in IDENTITY_FIELDS if f != "package_version")
+
+
+def differing(field: str) -> str:
+    """A value for ``field`` that cannot equal this host's value, on any host.
+
+    These parametrizations used to hard-code the "wrong" value — ``os_family="Darwin"``,
+    ``machine="arm64"``, ``python_version="3.11.9"``. That works only until the suite runs on
+    a host where the hard-coded wrong value is the *right* one. On an arm64 Mac,
+    ``os_family="Darwin"`` and ``machine="arm64"`` are what ``current_runtime_snapshot()``
+    already reports, so replacing the field changed nothing, the guard correctly saw no
+    mismatch, and four tests failed while the code under test was behaving perfectly.
+
+    A test whose outcome depends on which machine it runs on gives false assurance in one
+    direction or the other, so the wrong value is now derived from the live one.
+
+    The derived value must stay *shape-valid*, because some fields are validated on
+    construction — ``python_version`` must be an exact ``X.Y.Z``, so a plain suffix raises
+    ``ValueError`` before the identity comparison under test is ever reached. Version-shaped
+    values therefore get their last component bumped, which is unequal by construction while
+    remaining a legal version; everything else gets a suffix.
+    """
+    live = str(getattr(current_runtime_snapshot(), field))
+    parts = live.split(".")
+    if len(parts) >= 2 and all(p.isdigit() for p in parts):
+        parts[-1] = str(int(parts[-1]) + 1)
+        return ".".join(parts)
+    return f"{live}-not-the-authoritative-runtime"
+
+
 class TestRuntimeContractRoundTrip:
     def test_valid_contract_round_trips_and_verifies(self) -> None:
         contract = make_contract()
@@ -56,23 +101,10 @@ class TestRuntimeContractRoundTrip:
 class TestRuntimeIdentityMismatches:
     """Each interpreter-observable field must match exactly."""
 
-    @pytest.mark.parametrize(
-        ("field", "bad"),
-        [
-            ("python_version", "3.11.9"),
-            ("python_implementation", "PyPy"),
-            ("python_cache_tag", "pypy37"),
-            ("os_family", "Darwin"),
-            ("machine", "arm64"),
-            ("package_version", "0.0.1"),
-            ("numpy_version", "1.26.4"),
-            ("pandas_version", "2.2.2"),
-            ("pyarrow_version", "15.0.0"),
-        ],
-    )
-    def test_mismatched_field_is_rejected(self, field: str, bad: str) -> None:
+    @pytest.mark.parametrize("field", IDENTITY_FIELDS)
+    def test_mismatched_field_is_rejected(self, field: str) -> None:
         contract = make_contract()
-        wrong = dataclasses.replace(current_runtime_snapshot(), **{field: bad})
+        wrong = dataclasses.replace(current_runtime_snapshot(), **{field: differing(field)})
         with pytest.raises(RuntimeVerificationError, match=f"runtime mismatch on {field}"):
             verify_runtime_contract(contract, repo_root=REPO_ROOT, snapshot=wrong)
 
@@ -162,12 +194,15 @@ class TestStrictJSONParsing:
 
     def test_duplicate_key_is_rejected(self) -> None:
         raw = make_contract().to_json_bytes().decode("utf-8")
-        # inject a duplicate "machine" key that json.dumps could never emit
-        dup = raw.replace(
-            '  "machine": "x86_64",',
-            '  "machine": "x86_64",\n  "machine": "aarch64",',
-            1,
-        )
+        # Inject a duplicate "machine" key that json.dumps could never emit. The line is
+        # rebuilt from the value this host actually reports: it used to be spelled with a
+        # literal "x86_64", so on an arm64 host str.replace matched nothing and the test
+        # failed at its own setup. That it failed rather than passing vacuously is down to
+        # the `dup != raw` assertion below, which is why it stays.
+        machine = current_runtime_snapshot().machine
+        original = f'  "machine": "{machine}",'
+        assert original in raw, f"contract JSON no longer contains {original!r}"
+        dup = raw.replace(original, f'{original}\n  "machine": "{machine}-duplicate",', 1)
         assert dup != raw
         with pytest.raises(ValueError, match="duplicate JSON object key"):
             RuntimeContract.from_json_bytes(dup.encode("utf-8"))
@@ -208,22 +243,10 @@ class TestRuntimeSnapshotVerification:
         contract = dataclasses.replace(make_contract(), package_version="9.9.9")
         verify_runtime_snapshot(contract)
 
-    @pytest.mark.parametrize(
-        ("field", "bad"),
-        [
-            ("python_version", "3.11.9"),
-            ("python_implementation", "PyPy"),
-            ("python_cache_tag", "pypy37"),
-            ("os_family", "Darwin"),
-            ("machine", "arm64"),
-            ("numpy_version", "1.26.4"),
-            ("pandas_version", "2.2.2"),
-            ("pyarrow_version", "15.0.0"),
-        ],
-    )
-    def test_snapshot_rejects_interpreter_mismatch(self, field: str, bad: str) -> None:
+    @pytest.mark.parametrize("field", SNAPSHOT_FIELDS)
+    def test_snapshot_rejects_interpreter_mismatch(self, field: str) -> None:
         contract = make_contract()
-        wrong = dataclasses.replace(current_runtime_snapshot(), **{field: bad})
+        wrong = dataclasses.replace(current_runtime_snapshot(), **{field: differing(field)})
         with pytest.raises(RuntimeVerificationError, match=f"runtime mismatch on {field}"):
             verify_runtime_snapshot(contract, snapshot=wrong)
 

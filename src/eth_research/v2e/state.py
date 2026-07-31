@@ -621,7 +621,15 @@ def build_dashboard_state(
             repository=AUTHORIZED_REPOSITORY,
             version=_package_version(),
             commit=_read_git_commit(root),
-            private_local_only=True,
+            # Derived, never asserted. This was a literal ``True``, which is the same shape as
+            # the defect V2F already corrected once: repository_private read a PyPI classifier
+            # and returned True while the repository was verifiably public. A dashboard that
+            # claims privacy without checking is the exact surface that would reassure an
+            # operator during a containment breach, so it now reads the gate.
+            #
+            # Deliberately reported rather than refused. If visibility regressed, the operator
+            # needs to SEE it; a dashboard that vanished would hide the one fact that matters.
+            private_local_only=readiness.gates.get("repository_private") is True,
         ),
         cohort=cohort,
         proposal=proposal,

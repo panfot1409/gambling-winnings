@@ -1,0 +1,56 @@
+{
+  "candidate_id": "adaptive_expert_mixer_v1",
+  "evaluation_status": "not_evaluated",
+  "expert_provenance": {
+    "always_long": "passive benchmark reference, not a rejected candidate",
+    "cash": "new to this candidate; the only expert that can decline to participate",
+    "meanrev_zscore": "v2a_meanrev_zscore_accumulation (research_stage_rejected), parameters unchanged",
+    "single_horizon_sma_gate": "v2a_trend_regime_single_horizon (research_stage_rejected), parameters unchanged"
+  },
+  "experts": [
+    "meanrev_zscore",
+    "always_long",
+    "single_horizon_sma_gate",
+    "cash"
+  ],
+  "explicitly_not_claimed": [
+    "That this candidate has any edge. It has never been measured.",
+    "That it is rejected. It is unevaluated, which is a different state and must not be relabelled.",
+    "Any performance number, on any partition, of any kind."
+  ],
+  "family": "online_expert_mixture",
+  "honest_prior_stated_before_any_result": "WEAK, and for a structural reason. Hedge-style mixtures carry a RELATIVE guarantee: bounded regret against the best single expert in hindsight. They do not manufacture edge. Three of the four experts are recorded in research/v2/negative_evidence_index.jsonl as research_stage_rejected, so if the pool is null the mixture's best realistic outcome is roughly as good as the least bad rejected expert, which qualifies under no honest criterion. The cash expert is the only element making the pool strictly richer than any constituent -- a mixture can decline to participate, which none of the three inherited experts can express. Any genuine improvement would have to come from there. Recording this in advance is what stops a later reader from inventing a better story after the fact.",
+  "hypothesis": "Reallocating weight between a fixed pool of experts from their realized past performance beats the buy-and-hold benchmark on a lawful forward partition, where each fixed allocation in that pool did not. This is a claim about the ADAPTATION, not about any expert.",
+  "kind": "v2f_candidate_preregistration",
+  "no_fitted_constants": {
+    "decision_rule": "strictly more than half the weight -- this is what Weighted Majority IS, not a chosen threshold",
+    "expert_parameters": "frozen at their V2A pre-registered values; re-tuning would be new_parameter_selection",
+    "initial_weights": "uniform 1/N, the maximum-entropy prior",
+    "learning_rate": "eta_t = sqrt(8 ln N / t), the standard anytime Hedge rate, derived from the regret bound",
+    "loss": "0/1 directional, flat bar charges nobody; no clip, scale, or normalization constant",
+    "warmup_bars": 200
+  },
+  "one_shot_spent": false,
+  "preregistered_on": "2026-07-29",
+  "schema_version": 1,
+  "signal_family": "weighted_majority_hedge",
+  "source_pin_sha256": {
+    "src/eth_research/v2f/mixer.py": "fc7eabd565c20143850d14acb954bbb8744c82f72e4be4c5868f54c4342940f6"
+  },
+  "specification_fingerprint": "7608e9c9b7c99ae4dbff9ae6fb77efa94afb687c888d92381817aed28caa69af",
+  "structural_safety": "Weights are non-negative and sum to one and expert exposures are in {0,1}, so the mixture weight is in [0,1] by arithmetic. Shorting and leverage are unrepresentable here, not rejected by a check.",
+  "what_would_have_to_be_true_to_evaluate": [
+    "A completed third-party market-data rights assessment resolving redistribution.",
+    "An independently accepted containment and remediation review.",
+    "Repository privacy verified through the GitHub API at the time of lift.",
+    "A human recording active=false with lifted_by and lifted_on in governance/v2f/containment.json.",
+    "A NEW prospective partition under its own governance -- the closure's supersession_policy states it does not reopen the legacy partitions.",
+    "A separate human authorization for the evaluation itself, plus a new single-use evaluation ledger."
+  ],
+  "why_not_evaluated": [
+    "No lawful, unconsumed, non-sealed research partition exists (docs/V2F_RESEARCH_PARTITION_DETERMINATION.md).",
+    "research/m3d/research_train_exhaustion.json classifies the historical partition exhausted_for_new_candidate_research.",
+    "research/v2/research_partition_closure.json forbids evaluate_new_candidate AND recombine_and_claim_new_trial by name; a mixture over rejected families is precisely the latter.",
+    "governance/v2f/containment.json is active, so no new partition can be acquired."
+  ]
+}
