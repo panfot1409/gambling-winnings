@@ -123,6 +123,7 @@
     "governance/v2e/monitoring_qualification.json": "7deb22a472bb168b65b60142aef302bec309da8ed8e4d1c2cbf912a7864a6ddc",
     "governance/v2f/adaptive_expert_mixer_v1_preregistration.json": "cb7462c7dcd4a70e8d4ba63cd1468abcffcbddaceb7dfc95083182d57f0f1617",
     "governance/v2f/adaptive_expert_mixer_v1_preregistration_v2.json": "a4b7a8d05264630069fcbe1f0141b1cff6f127b4723a9b40fa12319cf22b94fb",
+    "governance/v2f/adaptive_expert_mixer_v1_preregistration_v3.json": "92172e153621cb46b79d684a403ed35e68b6f835511bb7f60615ec0702d29005",
     "governance/v2f/containment.json": "bf805c6bfa2d5421d976b97fd7f9843ad2dccc711eb282b0819880a40e21d587",
     "governance/v2f/repository_visibility.json": "512c8e99e45cc7b14de82196d46fb6b46b29686f3844da2ccc3c9ba65c51acc3",
     "release/private/v1.1.0/README.md": "44635eaaf44ad252c788e1e463d1c4a5e5b59d592f8931e9ce370b951a3071ab",
@@ -573,8 +574,8 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "surface_digest": "f10d4f792443d0942ac3f4df5421ef0ced7c78053fcafb8fc4195b17f16abdce",
-  "tracked_file_count": 1069,
+  "surface_digest": "6ba4d75e6c4b33c311809db508b49c536ff5361d9d53882d53543aa004df6e5c",
+  "tracked_file_count": 1071,
   "workflows": {
     "ci.yml": {
       "declares_write_permission": false,

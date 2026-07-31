@@ -19,7 +19,7 @@
     "governance/v2/fable5_audit_manifest.json": "ab655c8a1e65eb11d6dedb91dee5e3206974c35e0d946226222ade8c4afaa7f1",
     "governance/v2/fable5_findings.json": "66cb5f3532bebd8c1ef70ae2fac9536e08fdf6fbd5e882da96bc94b3b5bdfbc4",
     "governance/v2/fable5_remediation_state.json": "b52fceae56270265971d6d5580c184d172539757a838aa39e316866b85be4001",
-    "governance/v2/fable5_system_inventory.json": "7b741bff20dffa89db6fbdcee6dd7dcb36ce2262944365f556ef10c33ff46655",
+    "governance/v2/fable5_system_inventory.json": "b3274e88a46ea6623efe33d79d2b2bbb82d7340bd6eee21302a44528deadc686",
     "governance/v2/paper_readiness_state.json": "972278500259782b8a8ddaa2540dd308f1f6b8d6fee26a1a12ab0858e94e1971"
   },
   "frozen_source_sha256": {

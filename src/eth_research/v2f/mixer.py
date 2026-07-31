@@ -46,11 +46,27 @@ replacement after viewing results. This design has nothing to tune:
 * The three inherited experts keep their V2A parameters **exactly**. Re-tuning them here would
   be ``new_parameter_selection``, a named prohibition in the research-train exhaustion decision.
 
+What is actually traded: a BINARY decision, not a convex mixture
+----------------------------------------------------------------
+This paragraph exists because the two statements below are both true and are easy to confuse,
+and confusing them would mean auditing a different strategy than the one that runs:
+
+* ``mixture_weight = weights @ exposures`` is continuous in ``[0, 1]``. It is an **internal
+  intermediate**. It is never traded and never reaches the engine.
+* ``decision = 1.0 if mixture_weight > 0.5 else 0.0`` is what ``target_positions`` emits and
+  therefore the only thing that is ever held. It is **binary**.
+
+So the candidate is a Weighted Majority *vote*, not a fractional convex allocation. At exactly
+``0.5`` the strict ``>`` holds cash — deterministic, and the safe direction.
+``tests/test_v2f_mixer_degenerate_cases.py`` proves the traded value stays inside ``{0, 1}`` by
+execution over random paths, rather than by asserting it here.
+
 Long-only and unlevered by construction
 ---------------------------------------
 Weights are non-negative and sum to one, and expert exposures are in ``{0, 1}``, so the mixture
-weight is in ``[0, 1]`` — no check enforces it, the arithmetic does. Shorting and leverage are
-not rejected here; they are unrepresentable.
+weight is in ``[0, 1]`` — no check enforces it, the arithmetic does. Thresholding a value in
+``[0, 1]`` yields a position in ``{0, 1}``, so the traded exposure is long-only and unlevered for
+the same arithmetic reason. Shorting and leverage are not rejected here; they are unrepresentable.
 """
 
 from __future__ import annotations

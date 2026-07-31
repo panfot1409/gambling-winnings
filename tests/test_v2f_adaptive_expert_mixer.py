@@ -332,8 +332,10 @@ def test_the_sealed_ledgers_are_still_byte_empty_after_building_the_candidate() 
 
 #: The original record. Preserved byte-identical; superseded, never edited.
 PREREG_V1_PATH = REPO_ROOT / "governance/v2f/adaptive_expert_mixer_v1_preregistration.json"
-#: The ACTIVE record. v2 supersedes v1 after the pre-freeze semantic red team (V2F-MSF-1/2).
-PREREG_PATH = REPO_ROOT / "governance/v2f/adaptive_expert_mixer_v1_preregistration_v2.json"
+#: v2 superseded v1 after the pre-freeze semantic red team (V2F-MSF-1/2). Preserved, not edited.
+PREREG_V2_PATH = REPO_ROOT / "governance/v2f/adaptive_expert_mixer_v1_preregistration_v2.json"
+#: The ACTIVE record. v3 supersedes v2 with a proven documentation-only clarification (§4).
+PREREG_PATH = REPO_ROOT / "governance/v2f/adaptive_expert_mixer_v1_preregistration_v3.json"
 
 
 def _prereg() -> dict[str, object]:
@@ -347,6 +349,13 @@ def _prereg_v1() -> dict[str, object]:
     import json
 
     parsed: dict[str, object] = json.loads(PREREG_V1_PATH.read_text(encoding="utf-8"))
+    return parsed
+
+
+def _prereg_v2() -> dict[str, object]:
+    import json
+
+    parsed: dict[str, object] = json.loads(PREREG_V2_PATH.read_text(encoding="utf-8"))
     return parsed
 
 
@@ -470,8 +479,8 @@ def test_the_superseded_record_is_preserved_byte_identical() -> None:
 
     supersedes = _prereg()["supersedes"]
     assert isinstance(supersedes, dict)
-    assert supersedes["relpath"] == "governance/v2f/adaptive_expert_mixer_v1_preregistration.json"
-    actual = hashlib.sha256(PREREG_V1_PATH.read_bytes()).hexdigest()
+    assert supersedes["relpath"] == PREREG_V2_PATH.relative_to(REPO_ROOT).as_posix()
+    actual = hashlib.sha256(PREREG_V2_PATH.read_bytes()).hexdigest()
     assert actual == supersedes["sha256"], "the superseded record was edited, not superseded"
 
 
@@ -483,9 +492,11 @@ def test_the_superseded_record_still_pins_the_source_it_described() -> None:
     assert isinstance(v1_pin, dict)
     live = hashlib.sha256((REPO_ROOT / "src/eth_research/v2f/mixer.py").read_bytes()).hexdigest()
     assert v1_pin["src/eth_research/v2f/mixer.py"] != live
+    v2_pin = _prereg_v2()["source_pin_sha256"]
+    assert isinstance(v2_pin, dict)
     supersedes = _prereg()["supersedes"]
     assert isinstance(supersedes, dict)
-    assert supersedes["superseded_source_pin"] == v1_pin["src/eth_research/v2f/mixer.py"]
+    assert supersedes["superseded_source_pin"] == v2_pin["src/eth_research/v2f/mixer.py"]
 
 
 def test_the_supersession_names_both_findings_and_stays_unevaluated() -> None:
@@ -496,7 +507,10 @@ def test_the_supersession_names_both_findings_and_stays_unevaluated() -> None:
     assert findings == {"V2F-MSF-1", "V2F-MSF-2"}
     assert record["evaluation_status"] == "not_evaluated"
     assert record["one_shot_spent"] is False
-    assert record["version"] == 2
+    # The active record's version advances as the append-only chain grows; what must not
+    # change is that it still carries both findings and still reports the candidate unevaluated.
+    assert isinstance(record["version"], int)
+    assert record["version"] >= 2
 
 
 def test_the_superseding_prior_is_weaker_not_stronger() -> None:
@@ -509,3 +523,47 @@ def test_the_superseding_prior_is_weaker_not_stronger() -> None:
     disclaimers = " ".join(str(d) for d in not_claimed)
     assert "Neither was chosen because it performed better" in disclaimers
     assert "adversarial-refutation stage has not run" in disclaimers
+
+
+# --- 9. the v3 supersession is documentation-only, and says so provably ----------------------
+
+
+def test_the_v3_supersession_did_not_change_the_specification_fingerprint() -> None:
+    """A doc-only supersession that moved the fingerprint would be claiming a new algorithm.
+
+    The contrast is the evidence: v2 DID move it (7608e9c9 -> f6bbcb8d) because MSF-1 changed
+    the update rule. v3 must not, because it changed only prose.
+    """
+    assert _prereg()["specification_fingerprint"] == _prereg_v2()["specification_fingerprint"]
+    assert _prereg()["specification_fingerprint"] == ADAPTIVE_EXPERT_MIXER_SPEC.fingerprint()
+    assert _prereg_v2()["specification_fingerprint"] != _prereg_v1()["specification_fingerprint"]
+
+
+def test_the_v3_behaviour_identity_proof_still_holds() -> None:
+    """Re-derive the recorded trajectory hash rather than trusting the number in the file."""
+    import hashlib
+
+    proof = _prereg()["supersedes"]["behaviour_identity_proof"]  # type: ignore[index]
+    digest = hashlib.sha256()
+    for seed in range(25):
+        rng = np.random.default_rng(seed)
+        closes = 100.0 * np.exp(np.cumsum(rng.normal(0.0002, 0.02, 500)))
+        for step in run_mixer(closes):
+            digest.update(
+                repr(
+                    (step.weights, step.expert_exposures, step.mixture_weight, step.decision)
+                ).encode()
+            )
+    assert digest.hexdigest() == proof["trajectory_sha256_after"]
+    assert proof["trajectory_sha256_before"] == proof["trajectory_sha256_after"]
+
+
+def test_the_whole_supersession_chain_is_preserved_byte_identical() -> None:
+    """Append-only across all three records, each pinned by the next."""
+    import hashlib
+
+    chain = _prereg()["supersedes"]["chain"]  # type: ignore[index]
+    assert [entry["version"] for entry in chain] == [1, 2]
+    for entry in chain:
+        actual = hashlib.sha256((REPO_ROOT / entry["relpath"]).read_bytes()).hexdigest()
+        assert actual == entry["sha256"], f"{entry['relpath']} was edited, not superseded"
